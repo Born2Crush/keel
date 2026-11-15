@@ -1,0 +1,90 @@
+"""Auto-detect's choices (framegen.autodetect.recommend) for made-up PCs. No GPU needed."""
+from framegen.autodetect import Display, recommend
+from framegen.settings import BY_KEY, SPECS
+
+DEFAULTS = {s.key: s.default for s in SPECS}
+
+
+def timing(full: float, half: float, full_engine: str = "trt", estimated: bool = False) -> dict:
+    return {"full": {"ms": full, "engine": full_engine, "estimated": estimated},
+            "half": {"ms": half, "engine": "torch", "estimated": False}}
+
+
+THIS_PC = timing(9.3, 6.8)  # RTX 4070 Ti SUPER, what the test measures there
+UW120 = Display(3440, 1440, 120, 120)
+
+
+def pick(t=THIS_PC, display=UW120, current=None, **kw) -> dict:
+    r = recommend({**DEFAULTS, **(current or {})}, t, display, trt=True, **kw)
+    for k, v in r["settings"].items():
+        assert v in BY_KEY[k].choices
+        assert r["reasons"][k]
+    return r
+
+
+def test_tested_card_gets_the_mode_it_was_tuned_for():
+    r = pick()
+    assert r["settings"] == {"hz": 90, "motion": "auto", "engine": "auto", "scaler": "fsr"}
+    assert "120 fps would only fit with half motion detail" in r["reasons"]["hz"]
+
+
+def test_display_caps_the_frame_rate():
+    assert pick(display=Display(2560, 1440, 60, 60))["settings"]["hz"] == 60
+    assert pick(display=Display(2560, 1440, 100, 100))["settings"]["hz"] == 90
+    assert pick(t=timing(5.0, 3.5), display=Display(2560, 1440, 119, 119))["settings"]["hz"] == 120  # 119.88 Hz
+
+
+def test_display_set_below_what_it_can_do_gets_a_note():
+    r = pick(display=Display(2560, 1440, 60, 144))
+    assert r["settings"]["hz"] == 60
+    assert any("can run at 144 Hz" in n for n in r["notes"])
+
+
+def test_fast_card_keeps_full_detail_at_120():
+    r = pick(t=timing(5.0, 3.5), display=Display(2560, 1440, 144, 144))
+    assert r["settings"]["hz"] == 120 and r["settings"]["motion"] == "full"
+    assert any("G-Sync" in n for n in r["notes"])  # 120 into 144 Hz
+
+
+def test_slower_cards_step_down():
+    mid = pick(t=timing(12.0, 8.5), display=Display(2560, 1440, 144, 144))["settings"]
+    assert (mid["hz"], mid["motion"]) == (90, "half")
+    slow = pick(t=timing(20.0, 13.0), display=Display(2560, 1440, 144, 144))
+    assert (slow["settings"]["hz"], slow["settings"]["motion"]) == (60, "half")
+    too_slow = pick(t=timing(40.0, 30.0))
+    assert too_slow["settings"]["hz"] == 60 and "Even 60 fps is tight" in too_slow["reasons"]["hz"]
+
+
+def test_laptop_leaves_more_room():
+    t = timing(8.9, 6.6)  # fits 90 fps on a desktop card, not with a laptop's margin
+    assert pick(t=t)["settings"]["hz"] == 90
+    r = pick(t=t, gpu="NVIDIA GeForce RTX 4080 Laptop GPU")
+    assert (r["settings"]["hz"], r["settings"]["motion"]) == (90, "half")
+    assert any("Laptop" in n for n in r["notes"])
+
+
+def test_rtx_vsr_kept_only_where_it_fits():
+    r = pick(current={"scaler": "vsr"})  # 90 fps leaves ~0.7 ms: not enough (in testing it cost a quarter of the frames)
+    assert r["settings"]["scaler"] == "fsr" and "vsr_quality" not in r["settings"]
+    r = pick(current={"scaler": "vsr"}, display=Display(2560, 1440, 60, 60))
+    assert r["settings"]["scaler"] == "vsr" and r["settings"]["vsr_quality"] == 4
+    r = pick(current={"scaler": "vsr"}, display=Display(2560, 1440, 60, 60), vsr="RTX Video SDK not set up")
+    assert r["settings"]["scaler"] == "fsr" and "isn't set up" in r["reasons"]["scaler"]
+
+
+def test_fsr_is_never_swapped_for_vsr():
+    assert pick(t=timing(3.0, 2.0), display=Display(2560, 1440, 60, 60))["settings"]["scaler"] == "fsr"
+
+
+def test_without_tensorrt_or_display():
+    r = recommend(DEFAULTS, timing(10.4, 6.8, "torch"), None, trt=False)
+    assert r["settings"]["hz"] == 60 and r["settings"]["engine"] == "auto"
+    assert "TensorRT isn't installed" in r["reasons"]["engine"]
+    assert any("assumes 60 Hz" in n for n in r["notes"])
+    r = pick(t=timing(9.3, 6.8, estimated=True))
+    assert any("estimated" in n for n in r["notes"])
+
+
+def test_busy_card_note():
+    assert any("busy" in n for n in pick(busy=85)["notes"])
+    assert not any("busy" in n for n in pick(busy=3)["notes"])

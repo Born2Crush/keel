@@ -1,0 +1,224 @@
+"""Capture cards (framegen.capture): reading DirectShow's listings, picking a format, converting raw frames, and the
+whole source with a raw video file standing in for a card. CPU only: no card, no GPU."""
+
+import cv2
+import numpy as np
+import pytest
+import torch
+
+from framegen import capture as c
+
+# FFmpeg 5+ (each device tagged with its type), as PyAV's log gives it
+DEVICES_NEW = '''[dshow @ 0000020a] "USB3.0 Capture" (video)
+[dshow @ 0000020a]   Alternative name "@device_pnp_\\\\?\\usb#vid_345f&pid_2130&mi_00#7&1b2&0&0000#{65e8773d}\\global"
+[dshow @ 0000020a] "Game Capture HD60 X" (video)
+[dshow @ 0000020a]   Alternative name "@device_pnp_\\\\?\\usb#vid_0fd9&pid_0082"
+[dshow @ 0000020a] "Virtual Camera" (none)
+[dshow @ 0000020a]   Alternative name "@device_sw_{860BB310}"
+[dshow @ 0000020a] "Digital Audio Interface (USB3.0 Capture)" (audio)
+[dshow @ 0000020a]   Alternative name "@device_cm_{33D9A762}\\wave_{1}"
+'''
+# FFmpeg 4 (headings instead of tags)
+DEVICES_OLD = '''[dshow @ 00000001] DirectShow video devices (some may be both video and audio devices)
+[dshow @ 00000001]  "USB Video"
+[dshow @ 00000001]     Alternative name "@device_pnp_x"
+[dshow @ 00000001] DirectShow audio devices
+[dshow @ 00000001]  "Line In (USB Audio)"
+[dshow @ 00000001]     Alternative name "@device_cm_y"
+'''
+# -list_options for an MS2130-style stick: YUY2 and MJPEG at 1080p, NV12 only at 4K30, colour info on some lines
+OPTIONS = '''DirectShow video device options (from video devices)
+ Pin "Capture" (alternative pin name "0")
+  pixel_format=yuyv422  min s=1920x1080 fps=60 max s=1920x1080 fps=60 (tv, bt709/bt709/bt709, topleft)
+  pixel_format=yuyv422  min s=1920x1080 fps=30 max s=1920x1080 fps=30
+  pixel_format=yuyv422  min s=1280x720 fps=60 max s=1280x720 fps=60
+  vcodec=mjpeg  min s=1920x1080 fps=60 max s=1920x1080 fps=60
+  vcodec=mjpeg  min s=3840x2160 fps=30 max s=3840x2160 fps=30
+  pixel_format=nv12  min s=3840x2160 fps=30 max s=3840x2160 fps=30 (pc, unknown/unknown/unknown, left)
+  unknown compression type 0x3231564E  min s=640x480 fps=30 max s=640x480 fps=30
+'''
+
+
+def test_devices_from_either_ffmpeg_format():
+    new = c.parse_devices(DEVICES_NEW)
+    assert [(d.name, d.kind) for d in new] == [("USB3.0 Capture", "video"), ("Game Capture HD60 X", "video"),
+                                               ("Virtual Camera", "unknown"),
+                                               ("Digital Audio Interface (USB3.0 Capture)", "audio")]
+    assert new[0].alt.startswith("@device_pnp_")
+    old = c.parse_devices(DEVICES_OLD)
+    assert [(d.name, d.kind) for d in old] == [("USB Video", "video"), ("Line In (USB Audio)", "audio")]
+
+
+def test_modes_are_read_with_their_colour_info():
+    modes = c.parse_modes(OPTIONS)
+    assert len(modes) == 6  # the unknown compression type is skipped
+    first = modes[0]
+    assert (first.fmt, first.raw, first.w, first.h, first.fps_max, first.range, first.space) == \
+        ("yuyv422", True, 1920, 1080, 60.0, "tv", "bt709")
+    assert modes[3] == c.Mode("mjpeg", False, 1920, 1080, 60.0, 60.0)
+    assert modes[5].range == "pc" and modes[5].space == ""
+
+
+def test_pick_prefers_raw_at_the_size_and_rate_asked_for():
+    modes = c.parse_modes(OPTIONS)
+    best, note = c.pick_mode(modes)
+    assert (best.fmt, best.w, best.fps_max) == ("yuyv422", 1920, 60.0) and note == ""
+    # NV12 beats YUY2 at the same size and rate
+    nv12 = c.Mode("nv12", True, 1920, 1080, 60, 60)
+    assert c.pick_mode(modes + [nv12])[0] == nv12
+    # only MJPEG reaches 60 at 1080p: it's used, with a warning; a raw 30 fps mode isn't preferred over it
+    no_raw60 = [m for m in modes if not (m.raw and m.fps_max == 60 and m.w == 1920)]
+    best, note = c.pick_mode(no_raw60)
+    assert best.fmt == "mjpeg" and "compressed" in note
+    # no 1080p at all: the largest size under it
+    best, note = c.pick_mode([m for m in modes if m.w != 1920])
+    assert (best.w, best.h) == (1280, 720) and "1280x720" in note
+    assert c.pick_mode([])[0] is None
+    assert c.pick_mode([c.Mode("h264", False, 1920, 1080, 60, 60)])[0] is None
+
+
+def test_open_options():
+    o = c.open_options(c.Mode("nv12", True, 1920, 1080, 59.94, 59.94))
+    assert o["video_size"] == "1920x1080" and o["pixel_format"] == "nv12" and o["framerate"] == "59.94"
+    assert int(o["rtbufsize"]) == 1920 * 1080 * 3 // 2 * 4
+    assert c.open_options(c.Mode("mjpeg", False, 1920, 1080, 30, 60))["vcodec"] == "mjpeg"
+
+
+# ---- conversion
+def _blocks(h=64, w=96, block=16, seed=1):
+    """An image of flat 16x16 colour blocks: chroma upsampling differences stay at block edges, compared at centres."""
+    rng = np.random.default_rng(seed)
+    small = rng.integers(20, 236, (h // block, w // block, 3), dtype=np.uint8)
+    return cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST), block
+
+
+def _centres(img, block):
+    return img[block // 2::block, block // 2::block]
+
+
+def _to_nv12(bgr):
+    i420 = cv2.cvtColor(bgr, cv2.COLOR_BGR2YUV_I420)  # BT.601 limited, as OpenCV's decoders expect
+    h, w = bgr.shape[:2]
+    y, u, v = i420[:h], i420[h:h + h // 4].reshape(h // 2, w // 2), i420[h + h // 4:].reshape(h // 2, w // 2)
+    return np.concatenate([y.ravel(), np.stack([u, v], -1).ravel()])
+
+
+def _to_422(bgr, order):
+    h, w = bgr.shape[:2]
+    i420 = cv2.cvtColor(bgr, cv2.COLOR_BGR2YUV_I420)
+    y = i420[:h]
+    u = cv2.resize(i420[h:h + h // 4].reshape(h // 2, w // 2), (w // 2, h), interpolation=cv2.INTER_NEAREST)
+    v = cv2.resize(i420[h + h // 4:].reshape(h // 2, w // 2), (w // 2, h), interpolation=cv2.INTER_NEAREST)
+    parts = {"Y0": y[:, 0::2], "Y1": y[:, 1::2], "U": u, "V": v}
+    return np.stack([parts[k] for k in order], -1).ravel()
+
+
+@pytest.mark.parametrize("fmt", ["nv12", "yuyv422", "uyvy422"])
+def test_gpu_conversion_matches_opencv(fmt):
+    bgr, block = _blocks()
+    h, w = bgr.shape[:2]
+    raw = _to_nv12(bgr) if fmt == "nv12" else _to_422(bgr, ["Y0", "U", "Y1", "V"] if fmt == "yuyv422"
+                                                        else ["U", "Y0", "V", "Y1"])
+    ours = c.raw_to_bgr(torch.from_numpy(raw), fmt, w, h, bt709=False, full_range=False).numpy()
+    cv = c.raw_to_bgr_cpu(raw, fmt, w, h)
+    assert ours.shape == (h, w, 3)
+    assert np.abs(_centres(ours, block).astype(int) - _centres(cv, block)).max() <= 2
+    assert np.abs(_centres(ours, block).astype(int) - _centres(bgr, block)).max() <= 4  # back where it started
+
+
+def test_bt709_and_full_range_round_trip():
+    bgr, block = _blocks(seed=2)
+    h, w = bgr.shape[:2]
+    for bt709, full in ((True, False), (True, True), (False, True)):
+        kr, kb = (0.2126, 0.0722) if bt709 else (0.299, 0.114)
+        b, g, r = (bgr[..., i].astype(np.float64) for i in range(3))
+        y = kr * r + (1 - kr - kb) * g + kb * b
+        u, v = (b - y) / (2 * (1 - kb)), (r - y) / (2 * (1 - kr))
+        if full:
+            yq, uq, vq = y, u + 128, v + 128
+        else:
+            yq, uq, vq = 16 + y * 219 / 255, 128 + u * 224 / 255, 128 + v * 224 / 255
+        q = [np.clip(np.round(p), 0, 255).astype(np.uint8) for p in (yq, uq, vq)]
+        raw = np.concatenate([q[0].ravel(), np.stack([q[1][::2, ::2], q[2][::2, ::2]], -1).ravel()])
+        out = c.raw_to_bgr(torch.from_numpy(raw), "nv12", w, h, bt709, full).numpy()
+        assert np.abs(_centres(out, block).astype(int) - _centres(bgr, block)).max() <= 2, (bt709, full)
+
+
+# ---- the source, with a raw file standing in for a card
+def _raw_file(tmp_path, frames, fmt="nv12"):
+    path = tmp_path / f"card.{fmt}"
+    with open(path, "wb") as f:
+        for bgr in frames:
+            f.write((_to_nv12(bgr) if fmt == "nv12" else _to_422(bgr, ["Y0", "U", "Y1", "V"])).tobytes())
+    return str(path)
+
+
+@pytest.mark.parametrize("device", ["cpu", None])
+def test_source_plays_a_raw_file_like_a_card(tmp_path, device):
+    a, block = _blocks(seed=3)
+    b, _ = _blocks(seed=4)
+    h, w = a.shape[:2]
+    path = _raw_file(tmp_path, [a, a, b, b, b, a])
+    src = c.CardSource.raw_file(path, w, h, "nv12", fps=240, device=device, colour=(False, False))
+    assert (src.w, src.h, src.fmt, src.raw, src.info.kind) == (w, h, "nv12", True, "capture")
+    ticks = list(src)
+    src.close()
+    assert [t.index for t in ticks] == list(range(6))
+    assert all(t.t_ready >= t.t_arrival for t in ticks)
+    assert [round(t.t_source * 240) for t in ticks] == list(range(6))  # the "card's" clock, frame by frame
+    frames = [t.frame.numpy() if device else t.frame for t in ticks]
+    for got, want in zip(frames, [a, a, b, b, b, a]):
+        assert np.abs(_centres(got, block).astype(int) - _centres(want, block)).max() <= 4
+    assert np.array_equal(frames[0], frames[1])  # a repeat stays bit-identical through the conversion
+
+
+def test_source_test_mode_and_yuy2(tmp_path):
+    from framegen.sources import TestMode
+    frames = [_blocks(seed=s)[0] for s in range(10, 18)]
+    h, w = frames[0].shape[:2]
+    path = _raw_file(tmp_path, frames, fmt="yuyv422")
+    src = c.CardSource.raw_file(path, w, h, "yuyv422", fps=240, device="cpu", test=TestMode(True))
+    ticks = list(src)
+    src.close()
+    assert len(ticks) == 8  # test mode keeps every tick, repeating every other frame's content
+    assert np.array_equal(ticks[0].frame.numpy(), ticks[1].frame.numpy())
+
+
+def test_a_video_file_stands_in_through_the_raw_path(tmp_path):
+    frames = [_blocks(seed=s)[0] for s in (20, 20, 21)]
+    h, w = frames[0].shape[:2]
+    path = str(tmp_path / "clip.avi")
+    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"MJPG"), 60, (w, h))
+    for f in frames:
+        out.write(f)
+    out.release()
+    src = c.CardSource.video_file(path, device="cpu", colour=(False, False))
+    assert (src.raw, src.fmt, src.decode_to) == (True, "nv12", "nv12")  # decoded, then sent on as NV12
+    ticks = list(src)
+    src.close()
+    assert len(ticks) == 3
+    for t, want in zip(ticks, frames):
+        assert np.abs(t.frame.numpy().astype(int) - want).mean() < 6  # MJPEG and 4:2:0 lose a little
+
+
+def test_mjpeg_falls_back_to_the_cpu_when_the_gpu_cant(tmp_path, monkeypatch, capsys):
+    import av
+    frames = [_blocks(seed=s)[0] for s in (30, 31)]
+    h, w = frames[0].shape[:2]
+    path = str(tmp_path / "card.avi")
+    out = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*"MJPG"), 60, (w, h))
+    for f in frames:
+        out.write(f)
+    out.release()
+    src = c.CardSource(av.open(path), "an MJPEG card", live=False, device="cpu")
+    assert (src.raw, src.fmt) == (False, "mjpeg")
+    src._gpu_jpeg = True  # as on a PC with CUDA, where NVDEC is tried first
+
+    def no_gpu(self):
+        raise RuntimeError("no NVDEC here")
+    monkeypatch.setattr(c.CardSource, "_gpu_decoder", no_gpu)
+    ticks = list(src)
+    src.close()
+    assert len(ticks) == 2 and not src._gpu_jpeg
+    assert "decoding on the CPU instead" in capsys.readouterr().out
+    assert np.abs(ticks[0].frame.numpy().astype(int) - frames[0]).mean() < 6

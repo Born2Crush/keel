@@ -1,0 +1,741 @@
+"""Frames from chiaki-ng (PS5 Remote Play) through its frame tap: see chiaki_tap/frametap.h for the layout.
+
+chiaki-ng, built with the tap and started with CHIAKI_FRAMETAP=1, copies every compressed video frame the PS5
+sends into a shared-memory ring. FrameTap reads that ring; ChiakiSource decodes it into Ticks for the pipeline.
+
+Compared with a capture card, each frame also carries what the stream knows about it:
+  - size: bytes of the compressed frame. After compression a repeated frame isn't an exact copy (the encoder
+    spends its few bytes sharpening the picture), so the image-based duplicate detector calls most repeats
+    new. Size doesn't have that problem: a repeat costs the encoder almost nothing (in tests ~3 KB against
+    ~60 KB for a new frame), so `new_hint` comes from size and the pipeline uses it instead of the image check.
+  - damaged: frames were lost before this one, or it's the PS5's recovery frame after a loss. The pipeline
+    holds instead of interpolating, so a broken frame isn't smeared into the generated one.
+Windows only (named file mapping + named event).
+"""
+
+from __future__ import annotations
+
+import csv
+import ctypes
+import mmap
+import queue
+import struct
+import sys
+import tempfile
+import threading
+import time
+from dataclasses import dataclass
+from pathlib import Path
+
+import numpy as np
+
+from .io import Tick
+from .streamcheck import StreamCheck
+from .sync import CAPTURE_LOCK
+
+NAME = "Local\\chiaki-frametap"
+EVENT_NAME = "Local\\chiaki-frametap-frame"
+MAGIC = 0x50544643  # 'CFTP'
+VERSION = 1
+HEADER = 4096
+SLOT_HEADER = 64
+SLOTS = 32
+SLOT_SIZE = 2 * 1024 * 1024
+TOTAL = HEADER + SLOTS * SLOT_SIZE
+CODECS = {0: "h264", 1: "hevc", 2: "hevc"}  # ChiakiCodec: H264, H265, H265_HDR
+CODEC_NAMES = {0: "H.264", 1: "H.265", 2: "H.265 HDR"}
+DAMAGE_HOLD = 6  # frames held (not interpolated) after a gap in the stream, while the picture repairs itself
+U64_MAX = 2**64 - 1
+FEATURE_PRESS, FEATURE_AUDIO_DELAY, FEATURE_AUDIO_TAP = 1, 2, 4  # header `features` bits (frametap.h)
+# The game's sound, in a mapping of its own (frametap.h, "Sound ring")
+AUDIO_SUFFIX = "-audio"
+AUDIO_MAGIC = 0x41544643  # 'CFTA'
+AUDIO_HEADER, AUDIO_SLOT_HEADER, AUDIO_SLOTS, AUDIO_SLOT_SIZE = 64, 32, 512, 8192
+AUDIO_TOTAL = AUDIO_HEADER + AUDIO_SLOTS * AUDIO_SLOT_SIZE
+BUTTON_OPTIONS, BUTTON_PS = 1 << 12, 1 << 15  # ChiakiControllerButton
+
+if sys.platform == "win32":
+    _k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    _k32.CreateEventW.restype = ctypes.c_void_p
+    _k32.CreateEventW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_wchar_p]
+    _k32.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+    _k32.SetEvent.argtypes = [ctypes.c_void_p]
+    _k32.CloseHandle.argtypes = [ctypes.c_void_p]
+
+
+def qpc() -> int:
+    v = ctypes.c_int64()
+    _k32.QueryPerformanceCounter(ctypes.byref(v))
+    return v.value
+
+
+@dataclass
+class Header:
+    magic: int
+    version: int
+    codec: int
+    width: int
+    height: int
+    max_fps: int
+    write_seq: int
+    session: int
+    qpc_freq: int
+
+    @property
+    def live(self) -> bool:
+        return self.magic == MAGIC
+
+
+@dataclass
+class Packet:
+    seq: int
+    t_arrival: float  # time.perf_counter() timebase
+    data: bytes
+    frames_lost: int
+    recovered: bool
+    truncated: bool
+
+
+class FrameTap:
+    """The shared ring. Either side may create it first; both see the same memory."""
+
+    def __init__(self, name: str = NAME, event_name: str = EVENT_NAME) -> None:
+        if sys.platform != "win32":
+            raise RuntimeError("the chiaki frame tap is Windows-only")
+        self.mm = mmap.mmap(-1, TOTAL, tagname=name)
+        self.event = _k32.CreateEventW(None, 0, 0, event_name)
+
+    def header(self) -> Header:
+        magic, version, _n, _size, codec, w, h, fps = struct.unpack_from("<8I", self.mm, 0)
+        (write_seq,) = struct.unpack_from("<Q", self.mm, 32)
+        (session,) = struct.unpack_from("<I", self.mm, 44)
+        (freq,) = struct.unpack_from("<Q", self.mm, 48)
+        return Header(magic, version, codec, w, h, fps, write_seq, session, freq)
+
+    def request_idr(self) -> None:
+        struct.pack_into("<I", self.mm, 40, 1)
+
+    def heartbeat(self) -> None:
+        struct.pack_into("<Q", self.mm, 56, qpc())
+
+    # The delay test's button presses and the sound delay (frametap.h, offsets 64-91). A chiaki-ng built from an
+    # older patch leaves `features` at 0 and ignores both.
+    def features(self) -> int:
+        return struct.unpack_from("<I", self.mm, 64)[0] if self.header().live else 0
+
+    def press(self, buttons: int, hold_ms: int = 100) -> int:
+        """Ask chiaki-ng to press `buttons` (a ChiakiControllerButton mask) for hold_ms. Returns a token for
+        press_sent()."""
+        (count,) = struct.unpack_from("<I", self.mm, 76)
+        struct.pack_into("<I", self.mm, 72, hold_ms)
+        struct.pack_into("<I", self.mm, 68, buttons)
+        return count
+
+    def press_sent(self, token: int, qpc_freq: int) -> float | None:
+        """When chiaki-ng sent the press to the PS5 (time.perf_counter() timebase), or None if it hasn't yet."""
+        (count,) = struct.unpack_from("<I", self.mm, 76)
+        if count == token or not qpc_freq:
+            return None
+        (q,) = struct.unpack_from("<Q", self.mm, 80)
+        return time.perf_counter() - (qpc() - q) / qpc_freq
+
+    def set_audio_delay(self, ms: int) -> None:
+        struct.pack_into("<I", self.mm, 88, max(0, min(500, int(ms))))
+
+    def wait(self, timeout_s: float) -> None:
+        _k32.WaitForSingleObject(self.event, int(timeout_s * 1000))
+
+    def read(self, seq: int, qpc_freq: int) -> Packet | None:
+        """Copy frame `seq` out of its slot, or None if the writer has already reused the slot."""
+        off = HEADER + (seq % SLOTS) * SLOT_SIZE
+        s0, q, size, lost, rec, flags = struct.unpack_from("<QQIiII", self.mm, off)
+        if s0 != seq:
+            return None
+        data = self.mm[off + SLOT_HEADER: off + SLOT_HEADER + size]
+        if struct.unpack_from("<Q", self.mm, off)[0] != seq:  # rewritten while we copied
+            return None
+        age = (qpc() - q) / qpc_freq if qpc_freq else 0.0
+        return Packet(seq, time.perf_counter() - age, data, lost, bool(rec), bool(flags & 1))
+
+    # Writer side, for tests and the fake PS5 (scripts/frametap_fake.py); chiaki-ng uses frametap.c.
+    def begin(self, codec: int, width: int, height: int, max_fps: int = 60) -> None:
+        struct.pack_into("<I", self.mm, 0, 0)
+        freq = ctypes.c_int64()
+        _k32.QueryPerformanceFrequency(ctypes.byref(freq))
+        struct.pack_into("<7I", self.mm, 4, VERSION, SLOTS, SLOT_SIZE, codec, width, height, max_fps)
+        struct.pack_into("<QI", self.mm, 32, 0, 0)
+        struct.pack_into("<Q", self.mm, 48, freq.value)
+        (session,) = struct.unpack_from("<I", self.mm, 44)
+        struct.pack_into("<I", self.mm, 44, session + 1)
+        struct.pack_into("<I", self.mm, 0, MAGIC)
+
+    def push(self, data: bytes, frames_lost: int = 0, recovered: bool = False) -> None:
+        (seq,) = struct.unpack_from("<Q", self.mm, 32)
+        off = HEADER + (seq % SLOTS) * SLOT_SIZE
+        size = min(len(data), SLOT_SIZE - SLOT_HEADER)
+        struct.pack_into("<Q", self.mm, off, U64_MAX)
+        struct.pack_into("<QIiII", self.mm, off + 8, qpc(), size, frames_lost, int(recovered),
+                         int(size < len(data)))
+        self.mm[off + SLOT_HEADER: off + SLOT_HEADER + size] = data[:size]
+        struct.pack_into("<Q", self.mm, off, seq)
+        struct.pack_into("<Q", self.mm, 32, seq + 1)
+        _k32.SetEvent(self.event)
+
+    def take_idr_request(self) -> bool:
+        (r,) = struct.unpack_from("<I", self.mm, 40)
+        if r:
+            struct.pack_into("<I", self.mm, 40, 0)
+        return bool(r)
+
+    def set_features(self, features: int) -> None:
+        struct.pack_into("<I", self.mm, 64, features)
+
+    def take_press_request(self) -> int:
+        (buttons,) = struct.unpack_from("<I", self.mm, 68)
+        if buttons:
+            struct.pack_into("<I", self.mm, 68, 0)
+        return buttons
+
+    def press_done(self) -> None:
+        """The press went to the (fake) PS5 now."""
+        struct.pack_into("<Q", self.mm, 80, qpc())
+        (count,) = struct.unpack_from("<I", self.mm, 76)
+        struct.pack_into("<I", self.mm, 76, count + 1)
+
+    def audio_delay_ms(self) -> int:
+        return struct.unpack_from("<I", self.mm, 88)[0]
+
+    def end(self) -> None:
+        struct.pack_into("<I", self.mm, 0, 0)
+        _k32.SetEvent(self.event)
+
+    def close(self) -> None:
+        _k32.CloseHandle(self.event)
+        self.mm.close()
+
+
+class AudioTap:
+    """The game's sound from chiaki-ng (frametap.h, "Sound ring"): 16-bit PCM chunks timed by their arrival, for
+    instant replay. A chiaki-ng from before this ring never writes it (its `features` lack FEATURE_AUDIO_TAP)."""
+
+    def __init__(self, name: str = NAME + AUDIO_SUFFIX) -> None:
+        if sys.platform != "win32":
+            raise RuntimeError("the chiaki frame tap is Windows-only")
+        self.mm = mmap.mmap(-1, AUDIO_TOTAL, tagname=name)
+        self.next: int | None = None  # the next chunk to read; None: from wherever the writer is now
+
+    def live(self) -> bool:
+        return struct.unpack_from("<I", self.mm, 0)[0] == AUDIO_MAGIC
+
+    def reset(self, from_start: bool = False) -> None:
+        """Forget the read position (a new stream): the next read starts at the writer's position, or at its first
+        chunk."""
+        self.next = 0 if from_start else None
+
+    def read_new(self) -> list:
+        """Every chunk written since the last call (at most the ring's worth), as framegen.io.Sound."""
+        from .io import Sound
+        magic = struct.unpack_from("<I", self.mm, 0)[0]
+        write_seq, freq = struct.unpack_from("<QQ", self.mm, 24)
+        if magic != AUDIO_MAGIC or not freq:
+            self.next = None
+            return []
+        if self.next is None or self.next > write_seq:  # first read, or the writer started over
+            self.next = write_seq
+        self.next = max(self.next, write_seq - AUDIO_SLOTS + 1)  # fell a whole ring behind: what's left
+        out = []
+        now_q, now_t = qpc(), time.perf_counter()
+        while self.next < write_seq:
+            seq = self.next
+            self.next += 1
+            off = AUDIO_HEADER + (seq % AUDIO_SLOTS) * AUDIO_SLOT_SIZE
+            s0, q, size, rate, channels = struct.unpack_from("<QQIII", self.mm, off)
+            if s0 != seq or size > AUDIO_SLOT_SIZE - AUDIO_SLOT_HEADER:
+                continue
+            data = self.mm[off + AUDIO_SLOT_HEADER: off + AUDIO_SLOT_HEADER + size]
+            if struct.unpack_from("<Q", self.mm, off)[0] != seq:  # rewritten while we copied
+                continue
+            out.append(Sound(now_t - (now_q - q) / freq, data, rate, channels))
+        return out
+
+    # Writer side, for tests and the fake PS5 (scripts/frametap_fake.py); chiaki-ng uses frametap.c.
+    def begin(self, rate: int = 48000, channels: int = 2) -> None:
+        freq = ctypes.c_int64()
+        _k32.QueryPerformanceFrequency(ctypes.byref(freq))
+        struct.pack_into("<I", self.mm, 0, 0)
+        struct.pack_into("<5I", self.mm, 4, 1, AUDIO_SLOTS, AUDIO_SLOT_SIZE, rate, channels)
+        struct.pack_into("<QQ", self.mm, 24, 0, freq.value)
+        struct.pack_into("<I", self.mm, 0, AUDIO_MAGIC)
+
+    def push(self, pcm: bytes, t_qpc: int | None = None) -> None:
+        rate, channels = struct.unpack_from("<II", self.mm, 16)
+        cap = (AUDIO_SLOT_SIZE - AUDIO_SLOT_HEADER) // (2 * channels) * (2 * channels)
+        q0 = qpc() if t_qpc is None else t_qpc
+        (freq,) = struct.unpack_from("<Q", self.mm, 32)
+        for i in range(0, len(pcm), cap):
+            part = pcm[i:i + cap]
+            (seq,) = struct.unpack_from("<Q", self.mm, 24)
+            off = AUDIO_HEADER + (seq % AUDIO_SLOTS) * AUDIO_SLOT_SIZE
+            struct.pack_into("<Q", self.mm, off, U64_MAX)
+            struct.pack_into("<QIII", self.mm, off + 8, q0 + round(i // (2 * channels) * freq / rate), len(part),
+                             rate, channels)
+            self.mm[off + AUDIO_SLOT_HEADER: off + AUDIO_SLOT_HEADER + len(part)] = part
+            struct.pack_into("<Q", self.mm, off, seq)
+            struct.pack_into("<Q", self.mm, 24, seq + 1)
+
+    def end(self) -> None:
+        struct.pack_into("<I", self.mm, 0, 0)
+
+    def close(self) -> None:
+        self.mm.close()
+
+
+def _nal_types(data: bytes, codec: str):
+    """NAL unit types in an Annex-B access unit."""
+    i, n = 0, len(data)
+    while True:
+        i = data.find(b"\x00\x00\x01", i)
+        if i < 0 or i + 3 >= n:
+            return
+        b = data[i + 3]
+        yield (b >> 1) & 0x3F if codec == "hevc" else b & 0x1F
+        i += 3
+
+
+def is_keyframe(data: bytes, codec: str) -> bool:
+    # H.264: IDR slice (5). HEVC: IRAP pictures, BLA/IDR/CRA (16-21).
+    return any((t == 5) if codec == "h264" else (16 <= t <= 21) for t in _nal_types(data, codec))
+
+
+PARAM_NALS = {"hevc": {32, 33, 34}, "h264": {7, 8}}  # VPS/SPS/PPS, SPS/PPS
+
+
+def nal_units(data: bytes, codec: str):
+    """(type, unit with a 3-byte start code) for each NAL unit in an Annex-B access unit."""
+    starts, i = [], 0
+    while (i := data.find(b"\x00\x00\x01", i)) >= 0:
+        starts.append(i)
+        i += 3
+    for k, s in enumerate(starts):
+        if s + 3 >= len(data):
+            return
+        b = data[s + 3]
+        end = starts[k + 1] if k + 1 < len(starts) else len(data)
+        yield ((b >> 1) & 0x3F if codec == "hevc" else b & 0x1F), b"\x00\x00\x01" + data[s + 3:end]
+
+
+def param_sets(data: bytes, codec: str) -> bytes:
+    """The codec header NAL units in an access unit, or b"" if none.
+
+    chiaki-ng sends these once, as a packet of their own at the start of a stream (the PS5 delivers them out of
+    band), so a decoder that missed them can't decode anything until the next stream.
+    """
+    return b"".join(u for t, u in nal_units(data, codec) if t in PARAM_NALS[codec])
+
+
+class SizeRepeatDetector:
+    """New frame or repeat, from compressed size alone.
+
+    A frame is new if it's at least `ratio` of a typical recent new frame (the 75th percentile of the last 16
+    non-keyframe sizes: in a 30 fps game at 60 Hz half the frames are new, so that lands on a new one).
+    Unsure cases lean towards "repeat": that only shows a real frame without a generated one before it,
+    while calling a repeat new makes the scheduler stall a tick. Keyframes are big whatever they contain: if
+    the recent frames alternate new/repeat (a 30 fps game), a keyframe gets the opposite of the frame before
+    it; otherwise it returns None and the pipeline falls back to the image check.
+    """
+
+    def __init__(self, ratio: float = 0.4, window: int = 16) -> None:
+        from collections import deque
+        self.ratio = ratio
+        self.sizes: deque[int] = deque(maxlen=window)
+        self.decisions: deque[bool] = deque(maxlen=6)
+        self.ref: float | None = None  # the last update's typical new frame size (None: keyframe or warming up)
+        self.big = False  # the last update was treated as a keyframe for its size
+
+    def update(self, size: int, keyframe: bool) -> bool | None:
+        # The PS5's refresh frames are ordinary slices by NAL type, but far bigger than anything recent.
+        self.big = not keyframe and len(self.sizes) >= 8 and size > 4 * float(np.percentile(self.sizes, 75))
+        self.ref = None
+        if keyframe or self.big:
+            d = list(self.decisions)
+            alternating = len(d) >= 4 and all(a != b for a, b in zip(d, d[1:]))
+            decision = (not d[-1]) if alternating else None
+        else:
+            self.sizes.append(size)
+            if len(self.sizes) >= 4:
+                self.ref = float(np.percentile(self.sizes, 75))
+            decision = (size >= self.ratio * self.ref) if self.ref is not None else None
+        if decision is not None:
+            self.decisions.append(decision)
+        return decision
+
+
+def cuda_frame_to_bgr(fr):
+    """A decoded NVDEC frame (NV12, still on the GPU) -> HxWx3 uint8 BGR CUDA tensor, without leaving the GPU.
+
+    Matches FFmpeg's CPU conversion: BT.709 when the stream says so, else BT.601; limited range unless tagged full.
+    Runs on PyTorch's default stream, which is also where FFmpeg copied the frame out, so no extra sync is needed.
+    """
+    import torch
+    import torch.nn.functional as F
+    if fr.format.name != "cuda":  # the decoder fell back to software for this stream
+        return torch.from_numpy(fr.to_ndarray(format="bgr24")).cuda()
+    y = torch.from_dlpack(fr.planes[0].__dlpack__())   # H x W
+    uv = torch.from_dlpack(fr.planes[1].__dlpack__())  # H/2 x W/2 x 2
+    kr, kb = (0.2126, 0.0722) if fr.colorspace == 1 else (0.299, 0.114)
+    kg = 1.0 - kr - kb
+    ys, yo, cs = (1.0, 0.0, 1.0) if fr.color_range == 2 else (255 / 219, 16.0, 255 / 224)
+    lum = (y.float() - yo) * ys
+    c = F.interpolate(uv.permute(2, 0, 1).unsqueeze(0).float() - 128.0, size=y.shape, mode="bilinear",
+                      align_corners=False)[0] * cs
+    u, v = c[0], c[1]
+    b = lum + 2 * (1 - kb) * u
+    g = lum - (2 * kb * (1 - kb) / kg) * u - (2 * kr * (1 - kr) / kg) * v
+    r = lum + 2 * (1 - kr) * v
+    return torch.stack([b, g, r], -1).clamp_(0, 255).round_().to(torch.uint8)
+
+
+class ChiakiSource:
+    """Decoded frames from the tap, as Ticks. Waits for chiaki-ng to start streaming.
+
+    Joins the live stream (never replays old frames) and asks the PS5 for a keyframe whenever it can't decode:
+    at start, after falling more than the ring's 32 frames behind, or after a decode error.
+    """
+
+    def __init__(self, decoder: str = "sw", wait_s: float = 120.0, log_path: str | None = None,
+                 tap_name: str = NAME, test=None) -> None:
+        """test: a framegen.sources.TestMode ("Simulate a 30 fps game"), applied as frames are decoded, before
+        the queue, so a frame dropped from a full queue never shifts which frames it keeps."""
+        from .sources import source_info
+        self.tap = FrameTap(tap_name, tap_name + "-frame")
+        self.sound = AudioTap(tap_name + AUDIO_SUFFIX)  # the game's sound, for instant replay
+        self._sound_session: int | None = None
+        self.test = test
+        self._last_idr = 0.0
+        self._header_file = Path(tempfile.gettempdir()) / (tap_name.split("\\")[-1] + "-header.bin")
+        self.decoder_kind = decoder
+        t_end = time.perf_counter() + wait_s
+        printed = False
+        while not (h := self.tap.header()).live:
+            if not printed:
+                print("[chiaki] waiting for chiaki-ng to start a stream (run it with CHIAKI_FRAMETAP=1)...")
+                printed = True
+            if time.perf_counter() > t_end:
+                raise TimeoutError("no chiaki-ng stream on the frame tap")
+            self.tap.wait(0.25)
+        self.w, self.h, self.codec_id = h.width, h.height, h.codec
+        self.info = source_info("chiaki", hz=float(h.max_fps))
+        print(f"[chiaki] stream: {CODEC_NAMES.get(h.codec, h.codec)} {h.width}x{h.height}, up to {h.max_fps} fps")
+        if h.max_fps < 60:
+            print("[chiaki] WARNING: the stream is set to 30 fps. Set chiaki-ng's frame rate to 60 so the "
+                  "pipeline sees the PS5's 60 Hz output (it expects repeats, not every other frame missing).")
+        if h.codec == 2:
+            print("[chiaki] WARNING: HDR stream; the pipeline is 8-bit SDR, colours will be off. Turn HDR off.")
+        self.q: queue.Queue = queue.Queue(maxsize=3)
+        self.dropped = 0  # decoded frames dropped because the pipeline fell behind
+        self.skipped = 0  # stream frames never decoded (ring overrun or waiting for a keyframe)
+        self.idr_requests = 0
+        self.check = StreamCheck()  # how well the size check read this game: reported when the session ends
+        self._stop = False
+        self._log = None
+        if log_path:
+            f = open(log_path, "w", newline="")
+            self._log = (f, csv.writer(f))
+            self._log[1].writerow(["tick", "seq", "t_arrival_ms", "size", "frames_lost", "recovered", "keyframe",
+                                   "decode_ms", "queue_ms", "size_says_new", "image_says_new", "max_diff",
+                                   "mean_diff", "action", "proc_ms"])
+        self._t0 = time.perf_counter()
+        self._beat = self._t0  # when the reader's loop last went round (why() says if it stopped)
+        self._no_header = False  # joined a running stream whose codec header went past, and none was saved
+        self._ring = (-1, self._t0)  # why(): the ring's write count when it last moved, and when
+        # The reader starts right away, not when the pipeline is ready: a new stream's first packet is its codec
+        # header, and the ring only holds half a second. But until the pipeline asks for frames (self._go: its loop
+        # has started) it only watches for that header, with no GPU work, so the decoder never starts up on the GPU
+        # alongside the pipeline's own set-up (TensorRT, VFG, the window's GPU sharing). Frames decoded then would
+        # be dropped anyway. hold() stops it decoding again while the pipeline restarts.
+        self._go = threading.Event()
+        self._thread = threading.Thread(target=self._reader, daemon=True)
+        self._thread.start()
+
+    def _new_decoder(self, codec: str):
+        import av
+        from av.codec.hwaccel import HWAccel
+        if self.decoder_kind == "sw":
+            ctx = av.CodecContext.create(codec, "r")
+            ctx.thread_type = "SLICE"  # frame threading would delay output by a frame per thread
+        elif self.decoder_kind == "cuda":
+            # NVDEC, and the frames stay on the GPU (handed to PyTorch through DLPack). current_ctx: decode in
+            # PyTorch's context, made current on this thread in _reader. FFmpeg's default would be a second context,
+            # which takes turns on the GPU with RIFE; primary_ctx refuses because PyTorch set it up differently.
+            ctx = av.CodecContext.create(codec, "r", hwaccel=HWAccel(
+                "cuda", options={"primary_ctx": "0", "current_ctx": "1"}, is_hw_owned=True))
+        else:
+            ctx = av.CodecContext.create(codec, "r", hwaccel=HWAccel(self.decoder_kind))
+        ctx.flags |= av.codec.context.Flags.low_delay
+        return ctx
+
+    def _reader(self) -> None:
+        import av
+
+        from .winutil import boost_thread
+        boost_thread()  # the decoder thread feeds every frame, so it gets the same treatment as the pipeline's
+        on_gpu = False      # PyTorch's CUDA context made current on this thread, for NVDEC (once going)
+        session, seq, dec, codec = None, 0, None, None
+        params = b""        # this stream's codec header, once seen
+        pending = b""       # the header, still to go into the decoder (with the next picture: not every decoder
+        #                     takes it on its own)
+        decoded = False     # a picture has come out of this stream
+        damaged_left = 0    # frames still treated as damaged after a gap
+        errors = 0          # decode errors in a row
+        passed = False      # frames went by undecoded (joined late, the pipeline not ready yet, or held)
+        held = -1           # the frame the reader waits at for the pipeline to be ready (see below)
+        late = False
+        t_join, told = 0.0, False
+        sizes = SizeRepeatDetector()
+        while not self._stop:
+            self._beat = time.perf_counter()
+            h = self.tap.header()
+            if not h.live:
+                if decoded:  # the stream we were showing ended
+                    print("[chiaki] stream ended")
+                    self.q.put(None)
+                    return
+                self.tap.wait(0.25)  # not started yet, or being reconnected
+                continue
+            if h.session != session:  # a new stream
+                session, codec = h.session, CODECS.get(h.codec, "h264")
+                if (h.width, h.height) != (self.w, self.h):
+                    print(f"[chiaki] stream size changed to {h.width}x{h.height}; restart run.py", file=sys.stderr)
+                    self.q.put(None)
+                    return
+                dec, params, pending, decoded, damaged_left, errors, held = None, b"", b"", False, 0, 0, -1
+                sizes = SizeRepeatDetector()
+                # Read it from its first packet (the codec header) while that's still in the ring.
+                seq = 0 if h.write_seq <= SLOTS - 4 else h.write_seq
+                late = passed = seq > 0
+                if late:  # joining a running stream: an earlier run.py may have saved its header
+                    params = self._load_header(session, h.codec)
+                    if params:
+                        print("[chiaki] joined a running stream, using its saved codec header")
+                    else:
+                        self._ask_idr()
+                self._no_header = late and not params
+                t_join, told = time.perf_counter(), False
+            going = self._go.is_set()
+            if going and dec is None:
+                if self.decoder_kind == "cuda" and not on_gpu:
+                    import torch
+                    torch.zeros(1, device="cuda")  # PyTorch's CUDA context, current on this thread for the decoder
+                    on_gpu = True
+                dec, pending = self._new_decoder(codec), params
+            if going and passed and params:
+                # Frames went by undecoded: ask the PS5 for a refresh frame and hold what comes out until the
+                # picture is whole again.
+                passed, damaged_left = False, 60
+                self._ask_idr()
+            if late and not params and not told and time.perf_counter() - t_join > 3:
+                print("[chiaki] this stream was already running, so its codec header went past before the pipeline "
+                      "started. In chiaki-ng press Ctrl+O, click the x to end the stream, then connect again: the "
+                      "pipeline picks up the new stream from its start.")
+                told = True
+            if h.write_seq == seq:
+                self.tap.heartbeat()
+                self.tap.wait(0.1)
+                continue
+            if h.write_seq - seq > SLOTS - 4:  # fell behind: the oldest slots are being overwritten
+                if going:
+                    self.skipped += h.write_seq - seq
+                    damaged_left = DAMAGE_HOLD
+                    self._ask_idr()
+                else:
+                    passed = True
+                seq = h.write_seq
+                continue
+            if not going and seq == held:  # at the stream's first picture, waiting for the pipeline (see below)
+                self.tap.heartbeat()
+                self.tap.wait(0.1)
+                continue
+            p = self.tap.read(seq, h.qpc_freq)
+            seq += 1
+            if p is None:
+                if going:
+                    self.skipped += 1
+                    damaged_left = DAMAGE_HOLD
+                    self._ask_idr()
+                else:
+                    passed = True
+                continue
+            ps = param_sets(p.data, codec)
+            if ps:
+                if ps != params:
+                    self._save_header(session, h.codec, ps)
+                params, self._no_header = ps, False
+                if all(t in PARAM_NALS[codec] for t, _ in nal_units(p.data, codec)):  # the header on its own
+                    pending = ps
+                    continue
+            elif not params:  # nothing is decodable without the header
+                if going:
+                    self.skipped += 1
+                continue
+            if not going:  # the pipeline isn't ready: only the header was wanted
+                if not passed:
+                    # A picture: leave it in the ring, which holds half a second, and start decoding there once the
+                    # pipeline is ready, as if it had been all along. If it takes longer, the ring moves on (passed)
+                    # and the PS5 is asked for a refresh frame instead.
+                    seq = held = p.seq
+                continue
+            key = is_keyframe(p.data, codec)
+            t = time.perf_counter()
+            try:
+                with CAPTURE_LOCK:  # no GPU decoding while the pipeline captures its CUDA graphs (startup only)
+                    frames = dec.decode(av.Packet(pending + p.data if pending else p.data))
+                    images = [self._image(fr) for fr in frames]
+                pending, errors = b"", 0
+            except av.error.FFmpegError as e:
+                # Keep the decoder (it holds the header and reference frames) and hold the next few frames; the
+                # PS5 answers a keyframe request with a refresh frame.
+                print(f"[chiaki] decode error at frame {p.seq}: {e}", file=sys.stderr)
+                damaged_left, errors = DAMAGE_HOLD, errors + 1
+                if errors >= 30:  # stuck: start a decoder afresh from the saved header
+                    dec, errors, pending = self._new_decoder(codec), 0, params
+                self._ask_idr()
+                continue
+            if not frames:  # (a decoder that holds a frame back)
+                continue
+            decoded = True
+            new_hint = sizes.update(len(p.data), key)
+            damaged = bool(p.frames_lost > 0 or p.recovered or p.truncated or damaged_left > 0)
+            for img in images:
+                decode_ms = (time.perf_counter() - t) * 1000
+                # Ready = arrival + decode time: what the pipeline's "behind" check has always measured from.
+                tick = Tick(img, p.t_arrival, 0, new_hint=new_hint, damaged=damaged,
+                            t_ready=p.t_arrival + decode_ms / 1000,
+                            extra={"seq": p.seq, "size": len(p.data), "frames_lost": p.frames_lost,
+                                   "recovered": p.recovered, "keyframe": key, "decode_ms": decode_ms,
+                                   # for the stream check: test mode replaces new_hint, these stay as the stream said
+                                   "size_new": new_hint, "size_ref": sizes.ref, "big": sizes.big})
+                if self.test is not None and (tick := self.test(tick)) is None:
+                    continue
+                try:
+                    self.q.put_nowait(tick)
+                except queue.Full:
+                    self.q.get_nowait()
+                    self.dropped += 1
+                    self.q.put_nowait(tick)
+            damaged_left = max(0, damaged_left - 1)
+
+    def _image(self, fr):
+        return cuda_frame_to_bgr(fr) if self.decoder_kind == "cuda" else fr.to_ndarray(format="bgr24")
+
+    def _ask_idr(self) -> None:
+        now = time.perf_counter()
+        if now - self._last_idr < 0.5:  # chiaki-ng re-asks by itself; don't flood the PS5
+            return
+        self._last_idr = now
+        self.tap.request_idr()
+        self.idr_requests += 1
+
+    def _save_header(self, session: int, codec: int, params: bytes) -> None:
+        try:
+            self._header_file.write_bytes(struct.pack("<II", session, codec) + params)
+        except OSError:
+            pass
+
+    def _load_header(self, session: int, codec: int) -> bytes:
+        """The codec header an earlier run.py saved for this same stream, if any."""
+        try:
+            b = self._header_file.read_bytes()
+        except OSError:
+            return b""
+        return b[8:] if len(b) > 8 and struct.unpack_from("<II", b) == (session, codec) else b""
+
+    # The delay test and the sound delay go through chiaki-ng (frametap.h). Both need a chiaki-ng from this version
+    # of the patch; can_press()/can_delay_audio() say whether the one streaming is.
+    def can_press(self) -> bool:
+        return bool(self.tap.features() & FEATURE_PRESS)
+
+    def can_delay_audio(self) -> bool:
+        return bool(self.tap.features() & FEATURE_AUDIO_DELAY)
+
+    def press(self, buttons: int, hold_ms: int = 100) -> int:
+        return self.tap.press(buttons, hold_ms)
+
+    def press_sent(self, token: int) -> float | None:
+        return self.tap.press_sent(token, self.tap.header().qpc_freq)
+
+    def set_audio_delay(self, ms: float) -> None:
+        self.tap.set_audio_delay(round(ms))
+
+    # Instant replay's sound: chiaki-ng copies the game's sound into a ring of its own (a chiaki-ng from before that
+    # leaves it empty, and replays are silent).
+    def has_sound(self) -> bool:
+        return bool(self.tap.features() & FEATURE_AUDIO_TAP) and self.sound.live()
+
+    def read_sound(self) -> list:
+        """The game's sound that arrived since the last call (framegen.io.Sound chunks); [] if there's none."""
+        h = self.tap.header()
+        if not h.live:
+            return []
+        if h.session != self._sound_session:  # a new stream: start from its current sound
+            self._sound_session = h.session
+            self.sound.reset()
+        return self.sound.read_new()
+
+    def hold(self, on: bool) -> None:
+        """Stop decoding while the pipeline restarts (on), and start again from a fresh frame (off)."""
+        if on:
+            self._go.clear()
+            return
+        while True:  # frames from before the restart are stale by now
+            try:
+                self.q.get_nowait()
+            except queue.Empty:
+                break
+        self._go.set()
+
+    def why(self) -> str:
+        """What the ring says about a wait for frames: a hint under the window's "No picture" note ("" if none)."""
+        now = time.perf_counter()
+        h = self.tap.header()
+        if h.write_seq != self._ring[0]:
+            self._ring = (h.write_seq, now)
+        if not h.live:
+            return "chiaki-ng isn't streaming. Connect to the PS5 in chiaki-ng (or wait while it reconnects)"
+        if now - self._beat > 3:
+            return "SmoovPlay's video decoder has stopped. Press Q, then Play again"
+        if now - self._ring[1] > 1:
+            return "chiaki-ng isn't sending any frames. Is its stream still running?"
+        if self._no_header:
+            return ("This stream started before SmoovPlay, so its start is missing.\n"
+                    "In chiaki-ng press Ctrl+O, click the x to end the stream, then connect again")
+        return ""
+
+    def __iter__(self):
+        self.dropped = 0  # frames dropped while RIFE was loading don't count
+        self._go.set()  # the pipeline is ready: start decoding
+        from .io import queue_ticks
+        yield from queue_ticks(self.q, "the PS5", self.why)
+
+    def log_tick(self, tick: Tick, diff, action, proc_ms: float, t_start: float) -> None:
+        """Per-tick CSV row: stream facts next to the pipeline's decisions, for tuning after a real session."""
+        self.check.add_tick(tick, diff)
+        if self._log is None:
+            return
+        e = tick.extra
+        hint = tick.new_hint
+        self._log[1].writerow([tick.index, e.get("seq"), f"{(tick.t_arrival - self._t0) * 1000:.2f}", e.get("size"),
+                               e.get("frames_lost"), int(bool(e.get("recovered"))), int(bool(e.get("keyframe"))),
+                               f"{e.get('decode_ms', 0):.2f}", f"{(t_start - tick.t_arrival) * 1000:.2f}",
+                               "" if hint is None else int(hint), int(diff.is_new), f"{diff.max_diff:.2f}",
+                               f"{diff.mean_diff:.3f}", action.value, f"{proc_ms:.2f}"])
+
+    def close(self) -> None:
+        self._stop = True
+        if self._log is not None:
+            self._log[0].close()
+        try:
+            self.sound.close()
+        except (BufferError, ValueError):  # still being read: it goes with the process
+            pass
+        print(f"[chiaki] decoded frames dropped: {self.dropped}, stream frames skipped: {self.skipped}, "
+              f"keyframe requests: {self.idr_requests}")

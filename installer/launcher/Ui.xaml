@@ -1,0 +1,1762 @@
+<!-- The SmoovPlay window: setup (PC check, folder, install, done) and the launcher (play, PS5 guide, PC check, settings, help).
+     Loaded at run time by Ui.cs (XamlReader, no code-behind); lists such as the check cards are built in Ui.cs. -->
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="SmoovPlay" Width="1036" Height="700" MinWidth="980" MinHeight="660" WindowStyle="None" AllowsTransparency="True"
+        Background="#01000000" ResizeMode="CanResize" WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI Variable Text, Segoe UI" FontSize="13" Foreground="#F3F5F9"
+        UseLayoutRounding="True" SnapsToDevicePixels="True" TextOptions.TextFormattingMode="Display">
+  <!-- Resizing from the edges (Ui.cs, WireSize). The margin round the window, where the shadow is, is 1/255 opaque
+       (the window's Background) rather than clear, or the pointer would fall through it to the window behind. -->
+  <WindowChrome.WindowChrome>
+    <WindowChrome CaptionHeight="0" ResizeBorderThickness="22" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/>
+  </WindowChrome.WindowChrome>
+  <Window.Resources>
+    <FontFamily x:Key="Icons">Segoe Fluent Icons, Segoe MDL2 Assets</FontFamily>
+    <FontFamily x:Key="Display">Segoe UI Variable Display, Segoe UI</FontFamily>
+    <FontFamily x:Key="Mono">Cascadia Mono, Consolas</FontFamily>
+    <SolidColorBrush x:Key="Bg" Color="#0E1014"/>
+    <SolidColorBrush x:Key="CardBg" Color="#161A21"/>
+    <SolidColorBrush x:Key="CardHover" Color="#1B2029"/>
+    <SolidColorBrush x:Key="Line" Color="#222833"/>
+    <SolidColorBrush x:Key="Line2" Color="#2D3440"/>
+    <SolidColorBrush x:Key="Text" Color="#F3F5F9"/>
+    <SolidColorBrush x:Key="Text2" Color="#A9B1BF"/>
+    <SolidColorBrush x:Key="Muted" Color="#6F788A"/>
+    <SolidColorBrush x:Key="Accent" Color="#FFB02E"/>
+    <SolidColorBrush x:Key="Ink" Color="#1A1206"/>
+    <SolidColorBrush x:Key="Good" Color="#3DDC8E"/>
+    <SolidColorBrush x:Key="Warn" Color="#FFC24B"/>
+    <SolidColorBrush x:Key="Bad" Color="#FF6464"/>
+    <LinearGradientBrush x:Key="AccentGrad" StartPoint="0,0" EndPoint="1,1">
+      <GradientStop Color="#FFCB5C" Offset="0"/>
+      <GradientStop Color="#FF8A1F" Offset="1"/>
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="AccentGradH" StartPoint="0,0" EndPoint="1,0">
+      <GradientStop Color="#FFCB5C" Offset="0"/>
+      <GradientStop Color="#FF8A1F" Offset="1"/>
+    </LinearGradientBrush>
+
+    <!-- text -->
+    <Style x:Key="Overline" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+      <Setter Property="Margin" Value="0,0,0,8"/>
+    </Style>
+    <Style x:Key="H1" TargetType="TextBlock">
+      <Setter Property="FontFamily" Value="{StaticResource Display}"/>
+      <Setter Property="FontSize" Value="28"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="TextOptions.TextFormattingMode" Value="Ideal"/>
+    </Style>
+    <Style x:Key="Sub" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="Foreground" Value="{StaticResource Text2}"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="LineHeight" Value="20"/>
+      <Setter Property="Margin" Value="0,8,0,0"/>
+    </Style>
+    <Style x:Key="Small" TargetType="TextBlock">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="{StaticResource Text2}"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="LineHeight" Value="17"/>
+    </Style>
+    <Style x:Key="Icon" TargetType="TextBlock">
+      <Setter Property="FontFamily" Value="{StaticResource Icons}"/>
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="TextOptions.TextFormattingMode" Value="Ideal"/>
+    </Style>
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="{StaticResource CardBg}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Padding" Value="16"/>
+    </Style>
+
+    <!-- buttons -->
+    <Style x:Key="Primary" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="FontSize" Value="14"/>
+      <Setter Property="Height" Value="44"/>
+      <Setter Property="MinWidth" Value="120"/>
+      <Setter Property="Padding" Value="22,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid x:Name="root" RenderTransformOrigin="0.5,0.5">
+              <Border x:Name="glow" CornerRadius="12" Background="{StaticResource AccentGrad}" Opacity="0" Margin="4,8,4,-2">
+                <Border.Effect><BlurEffect Radius="18"/></Border.Effect>
+              </Border>
+              <Border CornerRadius="11" Background="{StaticResource AccentGrad}"/>
+              <Border CornerRadius="11" BorderThickness="1" BorderBrush="#33FFFFFF"/>
+              <Border x:Name="hl" CornerRadius="11" Background="White" Opacity="0"/>
+              <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="hl" Storyboard.TargetProperty="Opacity" To="0.12" Duration="0:0:0.15"/>
+                      <DoubleAnimation Storyboard.TargetName="glow" Storyboard.TargetProperty="Opacity" To="0.55" Duration="0:0:0.2"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="hl" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.25"/>
+                      <DoubleAnimation Storyboard.TargetName="glow" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.3"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="root" Property="RenderTransform">
+                  <Setter.Value><ScaleTransform ScaleX="0.97" ScaleY="0.97"/></Setter.Value>
+                </Setter>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="root" Property="Opacity" Value="0.35"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="hl" Property="Opacity" Value="0.1"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Secondary" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="Height" Value="44"/>
+      <Setter Property="Padding" Value="18,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid x:Name="root" RenderTransformOrigin="0.5,0.5">
+              <Border x:Name="bg" CornerRadius="11" Background="#1C2129" BorderBrush="{StaticResource Line2}" BorderThickness="1"/>
+              <Border x:Name="hl" CornerRadius="11" Background="White" Opacity="0"/>
+              <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="hl" Property="Opacity" Value="0.05"/>
+                <Setter TargetName="bg" Property="BorderBrush" Value="#3B4452"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="bg" Property="BorderBrush" Value="#FFB02E"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="root" Property="RenderTransform">
+                  <Setter.Value><ScaleTransform ScaleX="0.97" ScaleY="0.97"/></Setter.Value>
+                </Setter>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="root" Property="Opacity" Value="0.35"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Ghost" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Text2}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Height" Value="36"/>
+      <Setter Property="Padding" Value="12,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="9" Background="Transparent">
+              <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#12FFFFFF"/>
+                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#12FFFFFF"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- a small accent action on a card, such as "Install it for me" -->
+    <Style x:Key="Pill" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Height" Value="26"/>
+      <Setter Property="Padding" Value="11,0"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="13" Background="#1FFFB02E" BorderBrush="#55FFB02E" BorderThickness="1">
+              <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#33FFB02E"/>
+                <Setter TargetName="bg" Property="BorderBrush" Value="#FFB02E"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Chrome" TargetType="Button">
+      <Setter Property="Width" Value="40"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Foreground" Value="{StaticResource Text2}"/>
+      <Setter Property="FontFamily" Value="{StaticResource Icons}"/>
+      <Setter Property="FontSize" Value="10"/>
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="8" Background="Transparent">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#16FFFFFF"/>
+                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+              </Trigger>
+              <MultiTrigger>
+                <MultiTrigger.Conditions>
+                  <Condition Property="IsMouseOver" Value="True"/>
+                  <Condition Property="Tag" Value="close"/>
+                </MultiTrigger.Conditions>
+                <Setter TargetName="bg" Property="Background" Value="#E5484D"/>
+                <Setter Property="Foreground" Value="White"/>
+              </MultiTrigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- content only, with a little life on hover (the big Play button, the guide's tick circles) -->
+    <Style x:Key="Bare" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Grid x:Name="root" Background="Transparent" RenderTransformOrigin="0.5,0.5">
+              <Grid.RenderTransform><ScaleTransform/></Grid.RenderTransform>
+              <ContentPresenter/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.04" Duration="0:0:0.18"/>
+                      <DoubleAnimation Storyboard.TargetName="root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.04" Duration="0:0:0.18"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.25"/>
+                      <DoubleAnimation Storyboard.TargetName="root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.25"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="root" Property="Opacity" Value="0.85"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="root" Property="Opacity" Value="0.5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- a whole card that's a button (Help page) -->
+    <Style x:Key="Tile" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Margin" Value="5"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="12" Background="{StaticResource CardBg}" BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="16,14">
+              <ContentPresenter/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource CardHover}"/>
+                <Setter TargetName="bg" Property="BorderBrush" Value="#5CFFB02E"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="bg" Property="BorderBrush" Value="#FFB02E"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="bg" Property="Opacity" Value="0.45"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Nav" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{StaticResource Text2}"/>
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="Height" Value="42"/>
+      <Setter Property="Margin" Value="0,0,0,4"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="GroupName" Value="nav"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Grid Background="Transparent">
+              <Border x:Name="hover" CornerRadius="10" Background="White" Opacity="0"/>
+              <Border x:Name="sel" CornerRadius="10" Opacity="0">
+                <Border.Background>
+                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                    <GradientStop Color="#30FFB02E" Offset="0"/>
+                    <GradientStop Color="#08FFB02E" Offset="1"/>
+                  </LinearGradientBrush>
+                </Border.Background>
+              </Border>
+              <Border x:Name="bar" Width="3" Height="18" CornerRadius="2" HorizontalAlignment="Left" Background="{StaticResource AccentGrad}" Opacity="0"/>
+              <StackPanel Orientation="Horizontal" Margin="14,0,0,0" VerticalAlignment="Center">
+                <TextBlock x:Name="ic" Text="{Binding Tag, RelativeSource={RelativeSource TemplatedParent}}" FontFamily="{StaticResource Icons}"
+                           FontSize="16" Width="20" VerticalAlignment="Center" TextOptions.TextFormattingMode="Ideal"/>
+                <ContentPresenter Margin="12,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="hover" Property="Opacity" Value="0.04"/>
+                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="sel" Property="Opacity" Value="1"/>
+                <Setter TargetName="bar" Property="Opacity" Value="1"/>
+                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+                <Setter Property="FontWeight" Value="SemiBold"/>
+                <Setter TargetName="ic" Property="Foreground" Value="{StaticResource Accent}"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.4"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Switch" TargetType="CheckBox">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="CheckBox">
+            <StackPanel Orientation="Horizontal" Background="Transparent">
+              <Grid Width="40" Height="22">
+                <Border CornerRadius="11" Background="#2A303B"/>
+                <Border x:Name="on" CornerRadius="11" Background="{StaticResource AccentGrad}" Opacity="0"/>
+                <Ellipse x:Name="knob" Width="16" Height="16" Fill="White" HorizontalAlignment="Left" Margin="3,0,0,0">
+                  <Ellipse.RenderTransform><TranslateTransform/></Ellipse.RenderTransform>
+                </Ellipse>
+              </Grid>
+              <ContentPresenter Margin="12,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="18" Duration="0:0:0.18"/>
+                      <DoubleAnimation Storyboard.TargetName="on" Storyboard.TargetProperty="Opacity" To="1" Duration="0:0:0.18"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="knob" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.X)" To="0" Duration="0:0:0.18"/>
+                      <DoubleAnimation Storyboard.TargetName="on" Storyboard.TargetProperty="Opacity" To="0" Duration="0:0:0.18"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- sliders on the Looks page (LooksPage.cs): a thin track, filled up to a round knob -->
+    <Style x:Key="SlideRepeat" TargetType="RepeatButton">
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="IsTabStop" Value="False"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="SlideFill" TargetType="RepeatButton">
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="IsTabStop" Value="False"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RepeatButton">
+            <Grid Background="Transparent">
+              <Border Height="4" CornerRadius="2" Background="{StaticResource AccentGradH}" VerticalAlignment="Center"/>
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="SlideThumb" TargetType="Thumb">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Thumb">
+            <Grid Width="18" Height="18" Background="Transparent">
+              <Ellipse x:Name="knob" Width="14" Height="14" Fill="White"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="knob" Property="Width" Value="16"/>
+                <Setter TargetName="knob" Property="Height" Value="16"/>
+              </Trigger>
+              <Trigger Property="IsDragging" Value="True">
+                <Setter TargetName="knob" Property="Fill" Value="{StaticResource Accent}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="Slide" TargetType="Slider">
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="IsMoveToPointEnabled" Value="True"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Height" Value="22"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Slider">
+            <Grid Background="Transparent">
+              <Border Height="4" CornerRadius="2" Background="#2A303B" VerticalAlignment="Center"/>
+              <Track x:Name="PART_Track">
+                <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource SlideFill}" Command="Slider.DecreaseLarge"/></Track.DecreaseRepeatButton>
+                <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource SlideRepeat}" Command="Slider.IncreaseLarge"/></Track.IncreaseRepeatButton>
+                <Track.Thumb><Thumb Style="{StaticResource SlideThumb}"/></Track.Thumb>
+              </Track>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- dropdowns on the Settings page (SettingsPage.cs fills them): the closed box, its list, and one entry -->
+    <Style x:Key="DropToggle" TargetType="ToggleButton">
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToggleButton">
+            <Border x:Name="bd" CornerRadius="9" Background="#0F1217" BorderBrush="{StaticResource Line2}" BorderThickness="1">
+              <TextBlock x:Name="chev" Style="{StaticResource Icon}" FontSize="10" Text="&#xE70D;" HorizontalAlignment="Right" Margin="0,1,12,0"
+                         Foreground="{StaticResource Text2}" RenderTransformOrigin="0.5,0.5">
+                <TextBlock.RenderTransform><RotateTransform/></TextBlock.RenderTransform>
+              </TextBlock>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="#46505F"/>
+                <Setter TargetName="bd" Property="Background" Value="#131720"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource Accent}"/>
+                <Setter TargetName="chev" Property="RenderTransform"><Setter.Value><RotateTransform Angle="180"/></Setter.Value></Setter>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="Drop" TargetType="ComboBox">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Height" Value="34"/>
+      <Setter Property="Width" Value="230"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="MaxDropDownHeight" Value="320"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBox">
+            <Grid>
+              <ToggleButton Style="{StaticResource DropToggle}" ClickMode="Press"
+                            IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"/>
+              <Border x:Name="focus" CornerRadius="9" BorderBrush="{StaticResource Accent}" BorderThickness="1" Opacity="0" IsHitTestVisible="False"/>
+              <ContentPresenter IsHitTestVisible="False" Margin="13,0,32,0" VerticalAlignment="Center" HorizontalAlignment="Left"
+                                Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"/>
+              <Popup x:Name="PART_Popup" Placement="Bottom" VerticalOffset="4" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade"
+                     IsOpen="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                <Border CornerRadius="10" Background="#1B2029" BorderBrush="{StaticResource Line2}" BorderThickness="1" Padding="4" Margin="0,0,8,8"
+                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                  <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="4" Opacity="0.45" Color="Black"/></Border.Effect>
+                  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                  </ScrollViewer>
+                </Border>
+              </Popup>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="focus" Property="Opacity" Value="1"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="DropItem" TargetType="ComboBoxItem">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ComboBoxItem">
+            <Grid Background="Transparent">
+              <Border x:Name="sel" CornerRadius="7" Background="#26FFB02E" Opacity="0"/>
+              <Border x:Name="hl" CornerRadius="7" Background="White" Opacity="0"/>
+              <Grid Margin="10,8,10,8">
+                <StackPanel Margin="0,0,24,0" VerticalAlignment="Center">
+                  <ContentPresenter/>
+                  <!-- a line about this choice: the item's AutomationProperties.HelpText, which screen readers read too -->
+                  <TextBlock x:Name="hint" Text="{Binding (AutomationProperties.HelpText), RelativeSource={RelativeSource TemplatedParent}}"
+                             FontSize="11.5" LineHeight="15.5" Foreground="{StaticResource Text2}" TextWrapping="Wrap" MaxWidth="250"
+                             HorizontalAlignment="Left" Margin="0,3,0,1"/>
+                </StackPanel>
+                <TextBlock x:Name="tick" Style="{StaticResource Icon}" FontSize="11" Text="&#xE73E;" Foreground="{StaticResource Accent}"
+                           HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,0,0" Opacity="0"/>
+              </Grid>
+            </Grid>
+            <ControlTemplate.Triggers>
+              <Trigger Property="AutomationProperties.HelpText" Value="">
+                <Setter TargetName="hint" Property="Visibility" Value="Collapsed"/>
+              </Trigger>
+              <Trigger Property="IsHighlighted" Value="True">
+                <Setter TargetName="hl" Property="Opacity" Value="0.06"/>
+              </Trigger>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="sel" Property="Opacity" Value="1"/>
+                <Setter TargetName="tick" Property="Opacity" Value="1"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+                <Setter TargetName="hint" Property="Foreground" Value="{StaticResource Muted}"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- "Show details": a chevron that turns -->
+    <Style x:Key="Disclosure" TargetType="ToggleButton">
+      <Setter Property="Foreground" Value="{StaticResource Text2}"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToggleButton">
+            <Border x:Name="bg" CornerRadius="8" Background="Transparent" Padding="8,6">
+              <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="chev" Text="&#xE76C;" FontFamily="{StaticResource Icons}" FontSize="10" VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                  <TextBlock.RenderTransform><RotateTransform/></TextBlock.RenderTransform>
+                </TextBlock>
+                <ContentPresenter Margin="8,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+                <Setter TargetName="bg" Property="Background" Value="#0FFFFFFF"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Trigger.EnterActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="chev" Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)" To="90" Duration="0:0:0.18"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                  <BeginStoryboard>
+                    <Storyboard>
+                      <DoubleAnimation Storyboard.TargetName="chev" Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)" To="0" Duration="0:0:0.18"/>
+                    </Storyboard>
+                  </BeginStoryboard>
+                </Trigger.ExitActions>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- Settings page: one choice in a row of choices (SettingsPage.cs puts them in a SegBar). Same weight checked
+         or not, so the row doesn't shift when the choice changes. -->
+    <Style x:Key="Seg" TargetType="RadioButton">
+      <Setter Property="Foreground" Value="{StaticResource Text2}"/>
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="bg" CornerRadius="7" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" Padding="12,0">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#0FFFFFFF"/>
+                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+              </Trigger>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#2BFFB02E"/>
+                <Setter TargetName="bg" Property="BorderBrush" Value="#99FFB02E"/>
+                <Setter Property="Foreground" Value="{StaticResource Text}"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="bg" Property="BorderBrush" Value="{StaticResource Accent}"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.38"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="SegBar" TargetType="Border">
+      <Setter Property="Background" Value="#101318"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Line2}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="9"/>
+      <Setter Property="Padding" Value="2"/>
+    </Style>
+
+    <!-- Settings page: a section's header, which folds it open and shut -->
+    <Style x:Key="Fold" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="12" Background="Transparent" BorderBrush="Transparent" BorderThickness="1" Padding="{TemplateBinding Padding}">
+              <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#08FFFFFF"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="bg" Property="BorderBrush" Value="#99FFB02E"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#05FFFFFF"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="Field" TargetType="TextBox">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="CaretBrush" Value="{StaticResource Accent}"/>
+      <Setter Property="SelectionBrush" Value="{StaticResource Accent}"/>
+      <Setter Property="FontSize" Value="13.5"/>
+      <Setter Property="Height" Value="44"/>
+      <Setter Property="Padding" Value="12,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border x:Name="b" CornerRadius="10" Background="#0F1217" BorderBrush="#2A303B" BorderThickness="1">
+              <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" Focusable="False"
+                            HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="b" Property="BorderBrush" Value="#3A4250"/>
+              </Trigger>
+              <Trigger Property="IsKeyboardFocused" Value="True">
+                <Setter TargetName="b" Property="BorderBrush" Value="#FFB02E"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="LogBox" TargetType="TextBox">
+      <Setter Property="Foreground" Value="#8E97A6"/>
+      <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+      <Setter Property="FontSize" Value="11.5"/>
+      <Setter Property="IsReadOnly" Value="True"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="VerticalScrollBarVisibility" Value="Auto"/>
+      <Setter Property="HorizontalScrollBarVisibility" Value="Disabled"/>
+      <Setter Property="SelectionBrush" Value="{StaticResource Accent}"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border CornerRadius="10" Background="#0A0C10" BorderBrush="{StaticResource Line}" BorderThickness="1" Padding="12,10,4,10">
+              <ScrollViewer x:Name="PART_ContentHost" Focusable="False"/>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- slim scroll bars -->
+    <Style x:Key="BarRepeat" TargetType="RepeatButton">
+      <Setter Property="Focusable" Value="False"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style x:Key="BarThumb" TargetType="Thumb">
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Thumb">
+            <Border x:Name="t" CornerRadius="3" Background="#323946" Margin="1,0"/>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="t" Property="Background" Value="#4A5363"/></Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <Style TargetType="ScrollBar">
+      <Setter Property="Width" Value="8"/>
+      <Setter Property="MinWidth" Value="8"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ScrollBar">
+            <Track x:Name="PART_Track" IsDirectionReversed="True">
+              <Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource BarRepeat}" Command="{x:Static ScrollBar.PageUpCommand}"/></Track.DecreaseRepeatButton>
+              <Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource BarRepeat}" Command="{x:Static ScrollBar.PageDownCommand}"/></Track.IncreaseRepeatButton>
+              <Track.Thumb><Thumb Style="{StaticResource BarThumb}"/></Track.Thumb>
+            </Track>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style TargetType="ToolTip">
+      <Setter Property="Foreground" Value="{StaticResource Text}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="ToolTip">
+            <Border Background="#252B35" BorderBrush="#363E4C" BorderThickness="1" CornerRadius="9" Padding="12,9" MaxWidth="330" Margin="6">
+              <Border.Effect><DropShadowEffect BlurRadius="16" ShadowDepth="3" Opacity="0.45"/></Border.Effect>
+              <ContentPresenter>
+                <ContentPresenter.Resources>
+                  <Style TargetType="TextBlock"><Setter Property="TextWrapping" Value="Wrap"/><Setter Property="LineHeight" Value="17"/></Style>
+                </ContentPresenter.Resources>
+              </ContentPresenter>
+            </Border>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid Margin="18">
+    <!-- the shadow is on its own border, so the content isn't drawn through an effect -->
+    <Border CornerRadius="16" Background="{StaticResource Bg}">
+      <Border.Effect><DropShadowEffect BlurRadius="26" ShadowDepth="4" Opacity="0.6" Color="Black"/></Border.Effect>
+    </Border>
+    <Grid x:Name="Root">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="252"/>
+        <ColumnDefinition Width="*"/>
+      </Grid.ColumnDefinitions>
+
+      <!-- ============================================================ rail -->
+      <Grid x:Name="Rail" Grid.Column="0">
+        <Grid.Background>
+          <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#15181F" Offset="0"/>
+            <GradientStop Color="#111318" Offset="1"/>
+          </LinearGradientBrush>
+        </Grid.Background>
+        <Canvas IsHitTestVisible="False" ClipToBounds="True">
+          <Ellipse x:Name="RailGlow" Width="420" Height="420" Canvas.Left="-200" Canvas.Top="-230">
+            <Ellipse.Fill>
+              <RadialGradientBrush>
+                <GradientStop Color="#55FF9F2E" Offset="0"/>
+                <GradientStop Color="#18FF8A1F" Offset="0.45"/>
+                <GradientStop Color="#00FF8A1F" Offset="1"/>
+              </RadialGradientBrush>
+            </Ellipse.Fill>
+          </Ellipse>
+        </Canvas>
+        <Border HorizontalAlignment="Right" Width="1" Background="#1C2129"/>
+        <DockPanel Margin="22,24,20,20">
+          <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,0,34">
+            <Grid Width="38" Height="38">
+              <Border CornerRadius="11" Background="{StaticResource AccentGrad}" Opacity="0.55" Margin="2,6,2,-2">
+                <Border.Effect><BlurEffect Radius="12"/></Border.Effect>
+              </Border>
+              <Viewbox>
+                <Canvas Width="1024" Height="1024">
+                  <!-- the logo (docs/brand/smoovplay-icon.svg): a controller in the S, a play button in the P -->
+                  <Rectangle Width="1024" Height="1024" RadiusX="228" RadiusY="228">
+                    <Rectangle.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Offset="0" Color="#FFBD24"/><GradientStop Offset="0.5" Color="#FC930B"/><GradientStop Offset="1" Color="#FC5F03"/></LinearGradientBrush></Rectangle.Fill>
+                  </Rectangle>
+                  <Path Fill="#FFB02E" Data="M540.5 780.4C535.8 780.1 534.1 779.5 531.6 777.1C529.7 775.4 528.1 772.1 528.1 769.9C528.1 768.9 528.8 765.4 530.9 756.0C531.5 753.4 533.6 743.0 534.3 739.2C534.7 737.4 535.9 731.5 537.0 726.1C540.0 711.6 540.6 708.5 541.5 704.0C541.9 701.7 544.0 690.9 546.3 679.8C548.6 668.8 551.1 656.0 552.0 651.5C553.9 641.9 557.1 626.0 560.3 610.5C563.8 593.5 564.8 588.1 566.4 579.9C567.2 575.7 568.6 568.8 569.4 564.7C571.3 556.0 575.6 534.6 578.2 521.3C580.0 512.1 580.7 508.6 583.6 494.8C584.5 490.6 585.9 483.3 586.9 478.8C587.8 474.2 589.2 467.6 589.9 464.2C590.7 460.7 591.9 454.7 592.7 450.8C595.2 438.4 597.8 426.0 598.6 422.4C599.1 420.5 600.3 414.5 601.5 409.1C605.7 388.5 607.6 381.2 610.0 374.8C614.7 362.7 622.6 352.1 632.7 344.4C640.8 338.1 651.4 333.7 662.7 331.8C668.1 330.9 813.5 331.0 821.2 331.8C834.0 333.3 845.3 335.6 852.4 338.2C853.6 338.6 855.6 339.3 856.8 339.7C866.1 342.8 881.9 350.4 888.6 354.9C899.4 362.2 902.6 364.7 908.9 371.0C927.7 389.6 940.4 412.5 946.6 439.0C950.6 456.0 952.0 469.3 951.6 485.5C950.9 509.2 946.5 529.7 936.9 552.9C933.6 561.0 926.5 573.5 920.1 582.6C909.4 597.9 899.5 608.4 884.7 620.5C876.1 627.4 860.3 636.9 848.7 642.1C841.5 645.3 829.6 649.6 824.2 650.8C813.3 653.4 812.1 653.7 807.6 654.3C805.8 654.5 802.9 654.9 801.1 655.2C798.8 655.5 780.6 655.7 738.1 655.8C705.2 655.9 677.9 656.0 677.4 656.1C676.7 656.3 676.4 657.0 675.7 660.1C675.2 662.1 674.0 667.2 673.0 671.3C672.0 675.5 670.8 680.6 670.4 682.7C669.5 686.5 667.8 693.8 667.1 696.5C666.9 697.2 666.6 698.7 666.4 699.7C666.1 700.7 664.5 707.5 662.7 714.7C657.8 735.1 656.6 740.2 655.7 744.0C654.9 748.0 652.8 753.4 650.5 757.1C648.7 760.1 643.5 766.6 641.1 768.9C635.8 773.8 627.2 778.2 619.7 779.8C616.6 780.5 613.2 780.5 580.4 780.6C560.7 780.6 542.7 780.5 540.5 780.4Z"/>
+                  <Path Fill="#1A1206" Data="M540.5 780.4C535.8 780.1 534.1 779.5 531.6 777.1C529.7 775.4 528.1 772.1 528.1 769.9C528.1 768.9 528.8 765.4 530.9 756.0C531.5 753.4 533.6 743.0 534.3 739.2C534.7 737.4 535.9 731.5 537.0 726.1C540.0 711.6 540.6 708.5 541.5 704.0C541.9 701.7 544.0 690.9 546.3 679.8C548.6 668.8 551.1 656.0 552.0 651.5C553.9 641.9 557.1 626.0 560.3 610.5C563.8 593.5 564.8 588.1 566.4 579.9C567.2 575.7 568.6 568.8 569.4 564.7C571.3 556.0 575.6 534.6 578.2 521.3C580.0 512.1 580.7 508.6 583.6 494.8C584.5 490.6 585.9 483.3 586.9 478.8C587.8 474.2 589.2 467.6 589.9 464.2C590.7 460.7 591.9 454.7 592.7 450.8C595.2 438.4 597.8 426.0 598.6 422.4C599.1 420.5 600.3 414.5 601.5 409.1C605.7 388.5 607.6 381.2 610.0 374.8C614.7 362.7 622.6 352.1 632.7 344.4C640.8 338.1 651.4 333.7 662.7 331.8C668.1 330.9 813.5 331.0 821.2 331.8C834.0 333.3 845.3 335.6 852.4 338.2C853.6 338.6 855.6 339.3 856.8 339.7C866.1 342.8 881.9 350.4 888.6 354.9C899.4 362.2 902.6 364.7 908.9 371.0C927.7 389.6 940.4 412.5 946.6 439.0C950.6 456.0 952.0 469.3 951.6 485.5C950.9 509.2 946.5 529.7 936.9 552.9C933.6 561.0 926.5 573.5 920.1 582.6C909.4 597.9 899.5 608.4 884.7 620.5C876.1 627.4 860.3 636.9 848.7 642.1C841.5 645.3 829.6 649.6 824.2 650.8C813.3 653.4 812.1 653.7 807.6 654.3C805.8 654.5 802.9 654.9 801.1 655.2C798.8 655.5 780.6 655.7 738.1 655.8C705.2 655.9 677.9 656.0 677.4 656.1C676.7 656.3 676.4 657.0 675.7 660.1C675.2 662.1 674.0 667.2 673.0 671.3C672.0 675.5 670.8 680.6 670.4 682.7C669.5 686.5 667.8 693.8 667.1 696.5C666.9 697.2 666.6 698.7 666.4 699.7C666.1 700.7 664.5 707.5 662.7 714.7C657.8 735.1 656.6 740.2 655.7 744.0C654.9 748.0 652.8 753.4 650.5 757.1C648.7 760.1 643.5 766.6 641.1 768.9C635.8 773.8 627.2 778.2 619.7 779.8C616.6 780.5 613.2 780.5 580.4 780.6C560.7 780.6 542.7 780.5 540.5 780.4ZM131.8 707.2C126.1 705.1 123.7 698.8 126.1 692.3C129.4 683.7 137.3 667.0 140.9 661.0C142.0 659.2 143.8 656.3 144.8 654.5C148.5 648.5 158.5 635.6 163.9 630.1C174.2 619.4 184.1 612.1 197.5 605.4C206.8 600.7 215.4 598.0 227.9 595.6L234.0 594.5L327.0 594.4C431.6 594.3 422.8 594.6 429.7 591.2C436.4 587.8 441.9 581.1 443.4 574.6C443.6 573.5 443.8 571.2 443.8 569.4C443.9 558.7 437.4 550.4 426.1 546.4L422.1 545.1L370.8 545.0C342.6 545.0 317.7 544.8 315.5 544.7C305.8 544.2 290.6 540.3 280.8 535.9C272.7 532.2 262.6 526.3 255.6 521.2C250.0 517.1 241.6 510.1 239.1 507.3C226.5 493.8 220.1 485.0 213.9 472.6C208.9 462.7 206.4 456.2 203.6 446.1C202.6 442.8 201.0 434.7 200.3 429.3C199.3 422.2 199.3 405.2 200.3 397.9C202.0 385.2 203.1 380.7 207.7 367.7C210.5 359.7 215.7 348.4 220.7 339.5C227.8 327.2 239.8 311.9 251.7 300.1C264.2 287.8 275.4 279.1 291.6 269.3C299.2 264.7 313.4 257.9 323.0 254.3C336.6 249.2 355.4 245.0 368.6 244.1C373.0 243.8 412.7 243.7 492.9 243.7C624.9 243.7 613.4 243.4 616.6 246.7C618.8 248.9 619.9 251.7 619.6 255.0C619.5 256.8 618.4 259.6 614.2 268.8C611.4 275.2 608.5 281.7 607.7 283.4C607.0 285.1 604.4 290.9 601.9 296.4C599.4 301.8 596.3 308.5 595.1 311.1C592.7 316.5 588.9 323.3 586.2 327.0C583.4 331.0 577.4 337.5 573.8 340.3C572.0 341.8 568.7 343.9 566.6 344.9C563.0 346.7 562.6 346.8 559.5 346.8C554.8 346.8 552.3 345.5 546.7 340.0C535.0 328.5 522.3 322.2 507.2 320.5C504.1 320.1 354.1 320.1 350.3 320.5C336.9 321.8 321.8 327.4 309.9 335.4C305.2 338.6 295.6 346.6 293.2 349.3C291.8 350.8 289.8 353.2 288.6 354.5C285.6 357.9 280.5 365.6 277.8 371.0C275.1 376.3 272.3 384.3 271.0 390.8C269.2 400.1 270.0 412.8 273.2 422.2C274.8 426.9 278.3 434.2 281.2 438.5C289.3 450.7 301.9 460.0 316.9 464.9C326.8 468.2 320.5 467.9 399.0 468.2C448.3 468.4 469.9 468.7 471.6 469.0C477.0 470.0 482.6 471.2 484.7 471.9C493.2 474.6 496.8 476.2 505.2 480.8C518.5 488.2 531.3 501.3 539.0 515.7C542.2 521.7 546.5 532.2 548.2 538.6C550.6 547.4 552.4 561.2 552.4 570.4C552.4 573.5 551.6 583.7 551.0 587.4C549.4 597.9 548.5 601.8 545.9 610.7C544.9 614.0 542.9 619.8 541.9 622.1C541.5 623.0 540.7 625.0 540.1 626.5C538.8 629.9 533.7 639.3 530.8 644.0C520.4 660.3 507.8 673.4 491.8 684.3C484.0 689.7 473.2 695.4 464.5 698.9C456.9 701.9 444.9 705.1 437.5 706.2C435.7 706.5 433.5 706.9 432.6 707.1C431.4 707.5 391.0 707.6 282.2 707.7C153.5 707.7 133.2 707.7 131.8 707.2ZM699.9 592.7C702.3 592.0 711.5 587.0 722.5 580.5C725.4 578.8 729.5 576.4 731.6 575.3C733.7 574.1 737.8 571.7 740.7 570.0C743.6 568.3 749.3 565.0 753.3 562.7C757.3 560.4 764.0 556.5 768.3 554.0C772.5 551.5 777.2 548.7 778.8 547.8C780.4 546.9 783.9 544.9 786.7 543.3C789.4 541.7 791.7 540.4 791.8 540.4C791.9 540.4 793.3 539.6 794.9 538.6C796.5 537.7 800.2 535.5 803.1 533.8C806.0 532.2 811.3 529.1 814.9 527.0C818.5 525.0 822.2 522.8 823.2 522.2C824.2 521.7 827.1 520.0 829.7 518.5C832.2 517.0 835.6 515.0 837.2 514.1C845.3 509.5 849.9 503.9 851.2 497.4C851.8 494.3 851.5 488.0 850.6 485.5C849.8 483.4 847.4 479.4 845.5 477.4C844.6 476.3 838.8 472.4 825.0 463.5C816.7 458.1 792.7 442.4 771.3 428.2C726.2 398.4 729.7 400.5 724.9 399.5C718.0 398.1 711.4 399.7 705.8 404.1C703.5 405.9 699.6 410.6 698.4 412.9C696.7 416.4 694.7 423.2 693.9 428.7C693.6 430.5 693.3 432.8 693.1 433.8C692.9 434.8 692.5 436.9 692.3 438.4C692.0 440.0 691.2 445.0 690.4 449.6C687.3 468.0 686.1 475.1 684.0 488.1C682.7 495.6 681.6 502.9 681.4 504.3C681.1 505.8 680.7 508.6 680.3 510.6C680.0 512.6 679.2 517.1 678.7 520.5C678.1 524.0 677.5 527.8 677.2 529.0C677.0 530.3 676.7 532.5 676.5 533.9C676.3 535.4 675.6 539.4 675.1 542.8C671.7 563.5 671.0 568.4 671.3 573.2C671.5 577.3 672.6 581.2 674.2 584.0C675.6 586.4 679.6 590.0 682.4 591.4C687.4 593.9 694.3 594.5 699.9 592.7ZM136.7 583.0C90.0 582.8 89.7 582.7 87.4 581.9C83.5 580.4 81.8 579.3 79.4 577.0C74.1 571.6 72.0 563.0 74.3 556.0C75.2 553.3 78.1 548.9 80.2 547.0C82.2 545.2 86.1 543.0 89.1 542.1C91.1 541.5 96.3 541.4 145.4 541.3C204.4 541.2 202.3 541.1 207.4 543.4C210.4 544.8 212.3 546.5 214.5 549.4C218.5 554.6 219.8 559.9 218.7 565.8C217.2 573.6 212.3 579.3 204.8 581.9C202.2 582.8 201.2 582.9 192.9 583.1C187.8 583.2 162.6 583.1 136.7 583.0ZM92.4 511.5C88.9 511.1 84.4 509.3 81.7 507.3C79.2 505.3 76.3 501.1 75.3 497.9C74.2 494.4 74.2 487.9 75.3 484.4C76.2 481.6 77.9 478.5 79.9 476.4C81.6 474.6 85.7 472.0 88.5 471.0L90.9 470.1L139.3 469.9C187.4 469.8 190.3 469.9 193.9 471.1C199.1 473.0 203.1 476.6 205.4 481.4C207.5 485.7 208.1 489.5 207.5 493.9C206.4 501.1 201.5 507.6 195.0 510.1C190.1 512.0 190.3 512.0 141.4 512.0C116.1 511.9 94.1 511.7 92.4 511.5ZM346.0 450.3C342.3 449.1 339.2 445.7 338.2 442.1C338.1 441.6 337.9 436.0 337.8 429.6C337.7 423.2 337.5 417.8 337.4 417.6C337.2 417.5 331.2 417.3 324.1 417.2C312.2 417.0 310.9 416.9 309.4 416.2C307.2 415.1 304.8 412.5 303.7 410.0C302.7 407.9 302.7 407.5 302.7 396.5C302.7 385.4 302.7 385.1 303.7 383.0C304.9 380.3 307.4 377.7 309.9 376.5C311.7 375.7 312.8 375.6 324.6 375.4C331.6 375.2 337.4 375.1 337.4 375.1C337.4 375.0 337.6 369.8 337.7 363.5C338.0 350.2 338.3 349.0 341.1 345.8C343.1 343.6 345.2 342.3 348.3 341.5C351.2 340.7 367.4 340.8 370.3 341.5C374.9 342.8 377.2 344.8 379.2 349.7C379.4 350.1 379.6 356.0 379.7 362.8L379.9 375.2L392.5 375.4C406.2 375.6 406.0 375.6 409.3 378.2C410.5 379.2 411.5 380.5 412.3 382.3L413.6 384.9L413.6 396.3C413.6 407.2 413.5 407.7 412.7 409.6C411.2 412.8 409.5 414.6 406.8 415.9L404.3 417.1L392.4 417.3C385.9 417.4 380.4 417.6 380.2 417.7C379.9 417.9 379.7 421.4 379.7 429.0C379.7 435.4 379.5 440.8 379.3 441.7C378.4 445.1 377.0 447.1 374.5 448.8C371.2 450.9 368.9 451.2 358.1 451.2C349.4 451.2 348.0 451.1 346.0 450.3ZM459.6 441.7C453.3 440.0 447.2 433.8 445.6 427.5C444.8 424.4 444.8 418.8 445.6 415.7C447.3 409.5 452.1 404.2 458.5 401.8C461.7 400.6 469.3 400.6 472.7 401.7C482.1 405.0 488.0 414.7 486.4 424.4C485.0 432.6 479.1 439.3 471.0 441.6C468.2 442.5 462.6 442.5 459.6 441.7ZM513.1 441.5C506.9 439.6 501.4 433.8 499.6 427.4C497.1 418.2 501.0 408.4 509.1 403.5C511.6 402.0 516.8 400.5 519.6 400.5C526.1 400.5 533.3 404.2 536.9 409.4C539.6 413.3 540.4 415.8 540.4 421.2C540.4 426.2 540.0 428.0 537.9 431.9C535.6 436.1 529.4 440.7 524.4 441.9C521.5 442.5 515.6 442.4 513.1 441.5ZM99.8 439.9C93.2 438.8 86.7 433.4 84.3 427.0C81.6 419.6 83.2 411.2 88.4 405.5C91.1 402.6 93.2 401.2 97.0 399.9L100.2 398.8L137.1 398.7L174.0 398.7L176.8 399.8C182.9 402.1 186.5 405.1 188.6 409.7C190.4 413.6 191.0 416.4 190.7 420.5C190.2 429.5 185.1 436.3 176.7 439.2C174.5 439.9 172.8 440.0 138.1 440.1C118.2 440.1 100.9 440.0 99.8 439.9ZM458.4 386.6C453.2 384.6 448.3 380.0 446.6 375.5C442.9 365.6 447.1 354.6 456.3 349.7C459.7 347.9 463.1 347.3 467.6 347.6C471.9 347.8 473.3 348.2 476.6 350.2C490.0 358.3 490.1 375.6 476.8 384.4C473.3 386.7 469.9 387.6 465.0 387.6C461.8 387.5 460.5 387.3 458.4 386.6ZM514.2 387.1C511.6 386.5 508.1 384.5 505.9 382.3C501.2 377.8 499.6 373.9 499.6 367.5C499.7 361.7 501.3 357.7 505.3 353.6C510.1 348.7 518.4 346.3 524.8 348.0C528.4 349.0 532.7 351.3 534.8 353.4C536.8 355.4 539.1 359.7 539.8 362.9C540.4 365.4 540.3 370.4 539.7 372.8C538.0 379.2 533.0 384.3 526.3 386.5C523.9 387.4 522.5 387.6 519.5 387.5C517.4 387.5 515.0 387.3 514.2 387.1Z"/>
+                </Canvas>
+              </Viewbox>
+            </Grid>
+            <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+              <TextBlock Text="SmoovPlay" FontFamily="{StaticResource Display}" FontSize="18" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
+              <TextBlock x:Name="RailVersion" Text="v0.1.0" FontSize="11.5" Foreground="{StaticResource Muted}" Margin="1,1,0,0"/>
+              <!-- shown when GitHub has a newer release (UpdateCheck in Core.cs) -->
+              <Button x:Name="RailUpdate" Visibility="Collapsed" Cursor="Hand" HorizontalAlignment="Left" Margin="1,3,0,0">
+                <Button.Template>
+                  <ControlTemplate TargetType="Button">
+                    <TextBlock x:Name="t" Text="{Binding Content, RelativeSource={RelativeSource TemplatedParent}}" FontSize="11.5"
+                               FontWeight="SemiBold" Foreground="{StaticResource Accent}"/>
+                    <ControlTemplate.Triggers>
+                      <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="t" Property="TextDecorations" Value="Underline"/></Trigger>
+                      <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="t" Property="TextDecorations" Value="Underline"/></Trigger>
+                    </ControlTemplate.Triggers>
+                  </ControlTemplate>
+                </Button.Template>
+              </Button>
+            </StackPanel>
+          </StackPanel>
+
+          <StackPanel DockPanel.Dock="Bottom" x:Name="RailFooter" Margin="4,0,0,0">
+            <TextBlock x:Name="RailFooterTitle" Text="Free and open source" FontSize="12" Foreground="{StaticResource Text2}"/>
+            <TextBlock x:Name="RailFooterText" Text="MIT licence. Not affiliated with Sony, NVIDIA or AMD." FontSize="11.5"
+                       Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0" LineHeight="16"/>
+          </StackPanel>
+
+          <Grid>
+            <StackPanel x:Name="Stepper"/>
+            <StackPanel x:Name="Nav" Visibility="Collapsed">
+              <RadioButton x:Name="NavPlay" Style="{StaticResource Nav}" Tag="&#xE768;" Content="Play"/>
+              <RadioButton x:Name="NavGuide" Style="{StaticResource Nav}" Tag="&#xE7FC;" Content="Connect your PS5"/>
+              <RadioButton x:Name="NavCheck" Style="{StaticResource Nav}" Tag="&#xE9D9;" Content="PC check"/>
+              <RadioButton x:Name="NavSettings" Style="{StaticResource Nav}" Tag="&#xE713;" Content="Settings"/>
+              <RadioButton x:Name="NavLooks" Style="{StaticResource Nav}" Tag="&#xE790;" Content="Looks"/>
+              <RadioButton x:Name="NavHelp" Style="{StaticResource Nav}" Tag="&#xE897;" Content="Help"/>
+            </StackPanel>
+          </Grid>
+        </DockPanel>
+      </Grid>
+
+      <!-- ============================================================ pages -->
+      <Grid Grid.Column="1" x:Name="Content">
+        <Grid.Background>
+          <LinearGradientBrush StartPoint="0,0" EndPoint="0.4,1">
+            <GradientStop Color="#11141A" Offset="0"/>
+            <GradientStop Color="#0E1014" Offset="1"/>
+          </LinearGradientBrush>
+        </Grid.Background>
+        <Grid x:Name="Pages" Margin="40,34,40,30">
+
+          <!-- ======================== PC check -->
+          <Grid x:Name="PageCheck" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+              <TextBlock x:Name="CheckOverline" Style="{StaticResource Overline}" Text="STEP 1 OF 3  ·  PC CHECK"/>
+              <TextBlock x:Name="CheckTitle" Style="{StaticResource H1}" Text="Let's check your PC"/>
+              <TextBlock x:Name="CheckSub" Style="{StaticResource Sub}" Text="SmoovPlay is made for NVIDIA RTX graphics cards; AMD and Intel cards work as an Experimental option. Anything missing can be fixed right here."/>
+            </StackPanel>
+            <UniformGrid x:Name="CheckCards" Grid.Row="1" Columns="2" Margin="-5,16,-5,0" VerticalAlignment="Top"/>
+            <Grid Grid.Row="2" Margin="0,14,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Grid Width="30" Height="30">
+                  <Ellipse x:Name="CheckSummaryDot" Fill="#22FFB02E"/>
+                  <TextBlock x:Name="CheckSummaryIcon" Style="{StaticResource Icon}" FontSize="13" Foreground="{StaticResource Accent}" Text="&#xE9D9;"/>
+                </Grid>
+                <StackPanel Margin="12,0,0,0" VerticalAlignment="Center" MaxWidth="300">
+                  <TextBlock x:Name="CheckSummary" FontSize="14" FontWeight="SemiBold" Text="Checking your PC..." TextTrimming="CharacterEllipsis"/>
+                  <TextBlock x:Name="CheckSummaryDetail" FontSize="12" Foreground="{StaticResource Text2}" Text="" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+              </StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button x:Name="BtnCheckAnyway" Style="{StaticResource Ghost}" Content="Continue anyway" Margin="0,0,6,0" Visibility="Collapsed"/>
+                <Button x:Name="BtnRecheck" Style="{StaticResource Secondary}" Margin="0,0,10,0">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE72C;"/>
+                    <TextBlock Text="Check again" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Button>
+                <Button x:Name="BtnCheckNext" Style="{StaticResource Primary}" IsEnabled="False">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock x:Name="BtnCheckNextText" Text="Continue" VerticalAlignment="Center"/>
+                    <TextBlock Style="{StaticResource Icon}" FontSize="12" Text="&#xE72A;" Margin="10,1,0,0"/>
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+            </Grid>
+          </Grid>
+
+          <!-- ======================== folder -->
+          <Grid x:Name="PageLocation" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Overline}" Text="STEP 2 OF 3  ·  LOCATION"/>
+              <TextBlock Style="{StaticResource H1}" Text="Where should SmoovPlay go?"/>
+              <TextBlock Style="{StaticResource Sub}" Text="It takes about 12 GB, mostly PyTorch and TensorRT. No admin rights needed, and your settings stay put when you update."/>
+            </StackPanel>
+            <ScrollViewer Grid.Row="1" Margin="0,22,-14,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+              <ScrollViewer.OpacityMask>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="Black" Offset="0"/>
+                  <GradientStop Color="Black" Offset="0.9"/>
+                  <GradientStop Color="Transparent" Offset="1"/>
+                </LinearGradientBrush>
+              </ScrollViewer.OpacityMask>
+            <StackPanel Margin="0,0,14,0">
+              <Border Style="{StaticResource Card}" Padding="18">
+                <StackPanel>
+                  <TextBlock Text="Install folder" FontSize="12" Foreground="{StaticResource Muted}" FontWeight="SemiBold" Margin="0,0,0,8"/>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox x:Name="DirBox" Style="{StaticResource Field}"/>
+                    <Button x:Name="BtnBrowse" Grid.Column="1" Style="{StaticResource Secondary}" Margin="10,0,0,0">
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Style="{StaticResource Icon}" FontSize="14" Text="&#xED25;"/>
+                        <TextBlock Text="Browse" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                      </StackPanel>
+                    </Button>
+                  </Grid>
+                  <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Style="{StaticResource Icon}" FontSize="13" Foreground="{StaticResource Text2}" Text="&#xEDA2;"/>
+                      <TextBlock x:Name="DriveName" Margin="8,0,0,0" FontWeight="SemiBold" Text="C:"/>
+                      <TextBlock x:Name="DriveFree" Margin="8,0,0,0" Foreground="{StaticResource Text2}" Text=""/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal">
+                      <Ellipse Width="8" Height="8" Fill="#3A4250" VerticalAlignment="Center"/>
+                      <TextBlock Text="Used" FontSize="12" Foreground="{StaticResource Muted}" Margin="6,0,14,0"/>
+                      <Ellipse Width="8" Height="8" Fill="{StaticResource AccentGrad}" VerticalAlignment="Center"/>
+                      <TextBlock Text="SmoovPlay" FontSize="12" Foreground="{StaticResource Muted}" Margin="6,0,0,0"/>
+                    </StackPanel>
+                  </Grid>
+                  <Grid x:Name="DriveBar" Height="10" Margin="0,10,0,0" ClipToBounds="True">
+                    <Border CornerRadius="5" Background="#20252E"/>
+                    <StackPanel Orientation="Horizontal">
+                      <Border x:Name="DriveUsed" Width="0" Background="#3A4250" CornerRadius="5,0,0,5"/>
+                      <Border x:Name="DriveNeed" Width="0" Background="{StaticResource AccentGradH}" CornerRadius="0,5,5,0" Margin="2,0,0,0"/>
+                    </StackPanel>
+                  </Grid>
+                  <Border x:Name="DirProblem" Margin="0,14,0,0" CornerRadius="9" Background="#1FFF6464" BorderBrush="#40FF6464" BorderThickness="1" Padding="12,10" Visibility="Collapsed">
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <TextBlock x:Name="DirProblemIcon" Style="{StaticResource Icon}" FontSize="14" Foreground="{StaticResource Bad}" Text="&#xE7BA;" VerticalAlignment="Top" Margin="0,1,10,0"/>
+                      <TextBlock x:Name="DirProblemText" Grid.Column="1" Style="{StaticResource Small}" Foreground="{StaticResource Text}"/>
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
+                        <Button x:Name="BtnShortPath" Style="{StaticResource Pill}" Content="Use a shorter path" Visibility="Collapsed"/>
+                        <Button x:Name="BtnLongPaths" Style="{StaticResource Pill}" Content="Turn on long paths" Margin="6,0,0,0" Visibility="Collapsed"/>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                  <TextBlock x:Name="DirExisting" Style="{StaticResource Small}" Margin="0,12,0,0" Foreground="{StaticResource Good}" Visibility="Collapsed"
+                             Text="SmoovPlay is already installed here. Setup updates it in place."/>
+                  <CheckBox x:Name="ToggleDesktop" Style="{StaticResource Switch}" Content="Add a desktop shortcut" IsChecked="True" Margin="0,18,0,0"/>
+                </StackPanel>
+              </Border>
+
+              <TextBlock Text="WHAT SETUP DOWNLOADS" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource Muted}" Margin="2,22,0,10"/>
+              <UniformGrid Columns="2" Margin="-5,0">
+                <Border Style="{StaticResource Card}" Margin="5" Padding="14,12">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource Accent}" Text="&#xE943;" Width="22"/>
+                    <StackPanel Margin="10,0,0,0">
+                      <TextBlock Text="Python 3.12" FontWeight="SemiBold"/>
+                      <TextBlock Text="python.org  ·  a private copy, just for SmoovPlay" FontSize="12" Foreground="{StaticResource Text2}"/>
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card}" Margin="5" Padding="14,12">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource Accent}" Text="&#xE945;" Width="22"/>
+                    <StackPanel Margin="10,0,0,0">
+                      <TextBlock Text="PyTorch with CUDA" FontWeight="SemiBold"/>
+                      <TextBlock Text="download.pytorch.org  ·  runs the AI model" FontSize="12" Foreground="{StaticResource Text2}"/>
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card}" Margin="5" Padding="14,12">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource Accent}" Text="&#xE950;" Width="22"/>
+                    <StackPanel Margin="10,0,0,0">
+                      <TextBlock Text="NVIDIA TensorRT" FontWeight="SemiBold"/>
+                      <TextBlock Text="pypi.nvidia.com  ·  makes it about 12% faster" FontSize="12" Foreground="{StaticResource Text2}"/>
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+                <Border Style="{StaticResource Card}" Margin="5" Padding="14,12">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource Accent}" Text="&#xE8F1;" Width="22"/>
+                    <StackPanel Margin="10,0,0,0">
+                      <TextBlock Text="PyAV, OpenCV, NumPy, ..." FontWeight="SemiBold"/>
+                      <TextBlock Text="pypi.org  ·  video decoding and the window" FontSize="12" Foreground="{StaticResource Text2}"/>
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </UniformGrid>
+              <TextBlock Style="{StaticResource Small}" Margin="2,10,0,0" Foreground="{StaticResource Muted}"
+                         Text="About 5 GB in all, straight from each project, each under its own licence. 10 to 20 minutes on a fast connection."/>
+            </StackPanel>
+            </ScrollViewer>
+            <Grid Grid.Row="2" Margin="0,14,0,0">
+              <Button x:Name="BtnLocBack" Style="{StaticResource Ghost}" HorizontalAlignment="Left" Height="44">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Style="{StaticResource Icon}" FontSize="12" Text="&#xE72B;"/>
+                  <TextBlock Text="Back" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+              <Button x:Name="BtnInstall" Style="{StaticResource Primary}" HorizontalAlignment="Right" MinWidth="150">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Style="{StaticResource Icon}" FontSize="14" Text="&#xE896;"/>
+                  <TextBlock x:Name="BtnInstallText" Text="Install" Margin="10,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+            </Grid>
+          </Grid>
+
+          <!-- ======================== installing -->
+          <Grid x:Name="PageInstall" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+              <TextBlock x:Name="InstallOverline" Style="{StaticResource Overline}" Text="STEP 3 OF 3  ·  INSTALLING"/>
+              <TextBlock x:Name="InstallTitle" Style="{StaticResource H1}" Text="Setting things up"/>
+              <TextBlock x:Name="InstallSub" Style="{StaticResource Sub}" Text="You can keep using your PC. Closing this window pauses setup; running it again picks up where it stopped."/>
+            </StackPanel>
+            <Grid Grid.Row="1" Margin="0,24,0,0">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+              <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Bottom">
+                  <TextBlock x:Name="InstallPercent" Text="0" FontFamily="{StaticResource Display}" FontSize="46" FontWeight="SemiBold" TextOptions.TextFormattingMode="Ideal"/>
+                  <TextBlock Text="%" FontFamily="{StaticResource Display}" FontSize="24" Foreground="{StaticResource Text2}" Margin="3,0,0,9" VerticalAlignment="Bottom" TextOptions.TextFormattingMode="Ideal"/>
+                </StackPanel>
+                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,0,10">
+                  <TextBlock x:Name="InstallSpeed" HorizontalAlignment="Right" FontSize="13" Foreground="{StaticResource Text2}" Text=""/>
+                </StackPanel>
+              </Grid>
+              <Grid x:Name="BarTrack" Grid.Row="1" Height="10" Margin="0,4,0,0">
+                <Border CornerRadius="5" Background="#1E232B"/>
+                <Border x:Name="BarFill" CornerRadius="5" Background="{StaticResource AccentGradH}" HorizontalAlignment="Left" Width="0" ClipToBounds="True">
+                  <Canvas>
+                    <Rectangle x:Name="BarShimmer" Width="160" Height="10">
+                      <Rectangle.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                          <GradientStop Color="#00FFFFFF" Offset="0"/>
+                          <GradientStop Color="#66FFFFFF" Offset="0.5"/>
+                          <GradientStop Color="#00FFFFFF" Offset="1"/>
+                        </LinearGradientBrush>
+                      </Rectangle.Fill>
+                    </Rectangle>
+                  </Canvas>
+                </Border>
+                <Border x:Name="BarGlow" CornerRadius="5" Background="{StaticResource AccentGradH}" HorizontalAlignment="Left" Width="0" Opacity="0.6" IsHitTestVisible="False">
+                  <Border.Effect><BlurEffect Radius="12"/></Border.Effect>
+                </Border>
+              </Grid>
+            </Grid>
+            <Grid Grid.Row="2" Margin="0,22,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="18"/>
+                <ColumnDefinition Width="250"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+              <Border Style="{StaticResource Card}" Padding="18,14">
+                <StackPanel x:Name="InstallSteps"/>
+              </Border>
+              <!-- while you wait: what to do on the PS5 -->
+              <Border x:Name="TipCard" Grid.Column="2" Style="{StaticResource Card}" Padding="18">
+                <Border.Background>
+                  <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#1E1B17" Offset="0"/>
+                    <GradientStop Color="#161A21" Offset="1"/>
+                  </LinearGradientBrush>
+                </Border.Background>
+                <StackPanel>
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Foreground="{StaticResource Accent}" Text="&#xEA80;"/>
+                    <TextBlock Text="WHILE YOU WAIT" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource Accent}" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                  </StackPanel>
+                  <StackPanel x:Name="TipBody">
+                    <TextBlock x:Name="TipTitle" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,12,0,0" Text=""/>
+                    <TextBlock x:Name="TipText" Style="{StaticResource Small}" Margin="0,6,0,0" Text=""/>
+                  </StackPanel>
+                  <StackPanel x:Name="TipDots" Orientation="Horizontal" Margin="0,14,0,0"/>
+                </StackPanel>
+              </Border>
+              <DockPanel Grid.Row="1" Grid.ColumnSpan="3" LastChildFill="True">
+              <Border x:Name="ErrorCard" DockPanel.Dock="Top" Margin="0,14,0,0" CornerRadius="12" Background="#1AFF6464" BorderBrush="#4DFF6464"
+                      BorderThickness="1" Padding="16,12" Visibility="Collapsed">
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Style="{StaticResource Icon}" FontSize="15" Foreground="{StaticResource Bad}" Text="&#xE7BA;" VerticalAlignment="Top" Margin="0,2,12,0"/>
+                  <StackPanel Grid.Column="1">
+                    <TextBlock x:Name="ErrorTitle" FontWeight="SemiBold" FontSize="14" Text="Setup stopped"/>
+                    <TextBlock x:Name="ErrorText" Style="{StaticResource Small}" Foreground="{StaticResource Text}" Margin="0,4,0,0"/>
+                  </StackPanel>
+                </Grid>
+              </Border>
+              <Grid x:Name="InstallLogHost" Margin="0,10,0,0">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <ToggleButton x:Name="BtnInstallDetails" Style="{StaticResource Disclosure}" Content="Show details" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <TextBox x:Name="InstallLog" Grid.Row="1" Style="{StaticResource LogBox}" Margin="0,6,0,0" Visibility="Collapsed"/>
+              </Grid>
+              </DockPanel>
+            </Grid>
+            <Grid Grid.Row="3" Margin="0,14,0,0">
+              <Button x:Name="BtnCopyLog" Style="{StaticResource Ghost}" HorizontalAlignment="Left" Height="44" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8C8;"/>
+                  <TextBlock Text="Copy diagnostics" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnCancel" Style="{StaticResource Secondary}" Content="Cancel" MinWidth="110"/>
+                <Button x:Name="BtnRetry" Style="{StaticResource Primary}" Margin="10,0,0,0" Visibility="Collapsed">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE72C;"/>
+                    <TextBlock Text="Retry" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+            </Grid>
+          </Grid>
+
+          <!-- ======================== done -->
+          <Grid x:Name="PageDone" Visibility="Collapsed">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,0,30">
+              <Grid Width="132" Height="132" HorizontalAlignment="Center">
+                <Ellipse x:Name="DoneGlow" Fill="#3DDC8E" Opacity="0" Margin="10">
+                  <Ellipse.Effect><BlurEffect Radius="40"/></Ellipse.Effect>
+                </Ellipse>
+                <Ellipse Stroke="#1F3A2D" StrokeThickness="5" Margin="8"/>
+                <Ellipse x:Name="DoneRing" Stroke="#3DDC8E" StrokeThickness="5" Margin="8" StrokeDashCap="Round" RenderTransformOrigin="0.5,0.5">
+                  <Ellipse.RenderTransform><RotateTransform Angle="-90"/></Ellipse.RenderTransform>
+                </Ellipse>
+                <Path x:Name="DoneCheck" Data="M42,68 L59,84 L92,50" Stroke="#3DDC8E" StrokeThickness="7" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                <Canvas x:Name="DoneBurst" IsHitTestVisible="False"/>
+              </Grid>
+              <TextBlock x:Name="DoneTitle" Style="{StaticResource H1}" FontSize="30" HorizontalAlignment="Center" Margin="0,26,0,0" Text="SmoovPlay is ready"/>
+              <TextBlock x:Name="DoneSub" Style="{StaticResource Sub}" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="460"
+                         Text="It's in your Start menu too. Next, SmoovPlay walks you through connecting your PS5. It takes about five minutes, once."/>
+              <Button x:Name="BtnOpen" Style="{StaticResource Primary}" HorizontalAlignment="Center" Margin="0,30,0,0" MinWidth="200" Height="48" FontSize="15">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock x:Name="BtnOpenText" Text="Open SmoovPlay" VerticalAlignment="Center"/>
+                  <TextBlock Style="{StaticResource Icon}" FontSize="12" Text="&#xE72A;" Margin="10,1,0,0"/>
+                </StackPanel>
+              </Button>
+            </StackPanel>
+          </Grid>
+
+          <!-- ======================== play -->
+          <Grid x:Name="PagePlay" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel VerticalAlignment="Center" Margin="0,0,0,10">
+              <Grid x:Name="PlayDiscArea" HorizontalAlignment="Center" Width="214" Height="214">
+                <Ellipse x:Name="PlayGlow" Width="170" Height="170" Fill="{StaticResource AccentGrad}" Opacity="0.35">
+                  <Ellipse.Effect><BlurEffect Radius="48"/></Ellipse.Effect>
+                </Ellipse>
+                <Ellipse x:Name="PlaySpin" Width="196" Height="196" StrokeThickness="3" StrokeDashCap="Round" StrokeDashArray="14 50" Opacity="0" RenderTransformOrigin="0.5,0.5"
+                         Stroke="{StaticResource AccentGrad}">
+                  <Ellipse.RenderTransform><RotateTransform/></Ellipse.RenderTransform>
+                </Ellipse>
+                <Ellipse Width="196" Height="196" Stroke="#1AFFFFFF" StrokeThickness="1"/>
+                <Button x:Name="PlayButton" Style="{StaticResource Bare}" Width="164" Height="164" AutomationProperties.Name="Play">
+                  <Grid>
+                    <Ellipse x:Name="PlayDisc" Fill="{StaticResource AccentGrad}"/>
+                    <Ellipse Margin="1">
+                      <Ellipse.Fill>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                          <GradientStop Color="#40FFFFFF" Offset="0"/>
+                          <GradientStop Color="#00FFFFFF" Offset="0.55"/>
+                        </LinearGradientBrush>
+                      </Ellipse.Fill>
+                    </Ellipse>
+                    <Path x:Name="PlayTri" Data="M0,0 L40,24 L0,48 Z" Fill="#1A1206" Stroke="#1A1206" StrokeThickness="7" StrokeLineJoin="Round"
+                          HorizontalAlignment="Center" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    <Rectangle x:Name="PlayStop" Width="40" Height="40" RadiusX="8" RadiusY="8" Fill="#1A1206" Visibility="Collapsed"/>
+                  </Grid>
+                </Button>
+                <Border x:Name="PlayLive" HorizontalAlignment="Center" VerticalAlignment="Bottom" CornerRadius="11" Background="#1E2A24" BorderBrush="#3DDC8E"
+                        BorderThickness="1" Padding="10,3" Margin="0,0,0,-4" Visibility="Hidden">
+                  <StackPanel Orientation="Horizontal">
+                    <Ellipse x:Name="PlayLiveDot" Width="7" Height="7" Fill="{StaticResource Good}" VerticalAlignment="Center"/>
+                    <TextBlock Text="LIVE" FontSize="11" FontWeight="Bold" Foreground="{StaticResource Good}" Margin="6,0,0,0"/>
+                  </StackPanel>
+                </Border>
+              </Grid>
+              <TextBlock x:Name="PlayTitle" Style="{StaticResource H1}" FontSize="26" HorizontalAlignment="Center" Margin="0,18,0,0" Text="Ready when you are"/>
+              <TextBlock x:Name="PlaySub" Style="{StaticResource Sub}" HorizontalAlignment="Center" TextAlignment="Center" MaxWidth="500"
+                         Text="Press Play. chiaki-ng opens: connect to your PS5 there, and the smooth video appears in its own window."/>
+              <!-- Where the video comes from (Sources in Core.cs); only shown when more than one source is offered. -->
+              <WrapPanel x:Name="PlaySources" HorizontalAlignment="Center" Margin="0,16,0,0" Visibility="Collapsed"/>
+              <!-- Playing from a capture card: which card and which sound (Ui.BuildDevices). -->
+              <WrapPanel x:Name="PlayDevices" HorizontalAlignment="Center" Margin="0,6,0,0" Visibility="Collapsed"/>
+              <WrapPanel x:Name="PlayChips" HorizontalAlignment="Center" Margin="0,18,0,0"/>
+              <Border x:Name="PlayNote" HorizontalAlignment="Center" MaxWidth="560" Margin="0,16,0,0" CornerRadius="10" Background="#1FFFC24B" BorderBrush="#40FFC24B"
+                      BorderThickness="1" Padding="14,10" Visibility="Collapsed">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Style="{StaticResource Icon}" FontSize="13" Foreground="{StaticResource Warn}" Text="&#xE7BA;" VerticalAlignment="Top" Margin="0,2,10,0"/>
+                  <TextBlock x:Name="PlayNoteText" Style="{StaticResource Small}" Foreground="{StaticResource Text}" MaxWidth="500"/>
+                </StackPanel>
+              </Border>
+              <!-- Test mode: a 60 fps game played as if it were 30 fps (Session.TestMode), then its report. -->
+              <Button x:Name="BtnPlayTest" Style="{StaticResource Ghost}" HorizontalAlignment="Center" Margin="0,8,0,0"
+                      ToolTip="Most PS5 games already run at 60 fps, so SmoovPlay has nothing to add. This plays one as if it were 30 fps, so you can see how your PC handles frame generation and how close the AI frames come to the real ones.">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE9D9;"/>
+                  <TextBlock x:Name="BtnPlayTestText" Text="Test with a 60 fps game" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+              <Border x:Name="PlayResults" Style="{StaticResource Card}" HorizontalAlignment="Center" Width="580" Margin="0,10,0,0" Padding="18,12,10,14" Visibility="Collapsed">
+                <StackPanel>
+                  <Grid>
+                    <TextBlock Text="TEST RESULTS" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource Muted}" VerticalAlignment="Center"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,-6,0,-6">
+                      <Button x:Name="BtnResultsCopy" Style="{StaticResource Ghost}" Height="30" Padding="10,0" ToolTip="Copy the full report, to paste into a test report or a GitHub issue">
+                        <StackPanel Orientation="Horizontal">
+                          <TextBlock Style="{StaticResource Icon}" FontSize="12" Text="&#xE8C8;"/>
+                          <TextBlock Text="Copy results" FontSize="12.5" Margin="7,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                      </Button>
+                      <Button x:Name="BtnResultsOpen" Style="{StaticResource Ghost}" Height="30" Padding="10,0" Content="Full report" FontSize="12.5"/>
+                      <Button x:Name="BtnResultsClose" Style="{StaticResource Ghost}" Height="30" Width="30" Padding="0" AutomationProperties.Name="Close the results" ToolTip="Close">
+                        <TextBlock Style="{StaticResource Icon}" FontSize="10" Text="&#xE8BB;"/>
+                      </Button>
+                    </StackPanel>
+                  </Grid>
+                  <TextBlock x:Name="ResultsVerdict" FontSize="15" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,8,8,0"/>
+                  <UniformGrid x:Name="ResultsTiles" Rows="1" Margin="-4,10,4,0"/>
+                  <TextBlock x:Name="ResultsNote" Style="{StaticResource Small}" Foreground="{StaticResource Muted}" Margin="0,10,8,0"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+            <Grid Grid.Row="1">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+              <Grid>
+                <ToggleButton x:Name="BtnPlayDetails" Style="{StaticResource Disclosure}" Content="Show details" HorizontalAlignment="Left"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                  <Button x:Name="BtnPlayDiag" Style="{StaticResource Ghost}" Visibility="Collapsed">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8C8;"/>
+                      <TextBlock Text="Copy diagnostics" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                  </Button>
+                  <Button x:Name="BtnPlayLogs" Style="{StaticResource Ghost}">
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xED25;"/>
+                      <TextBlock Text="Logs" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                  </Button>
+                </StackPanel>
+              </Grid>
+              <TextBox x:Name="PlayLog" Grid.Row="1" Style="{StaticResource LogBox}" Height="150" Margin="0,6,0,0" Visibility="Collapsed"/>
+            </Grid>
+          </Grid>
+
+          <!-- ======================== PS5 guide -->
+          <Grid x:Name="PageGuide" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <StackPanel>
+                <TextBlock x:Name="GuideOverline" Style="{StaticResource Overline}" Text="ONE-TIME SETUP  ·  ABOUT 5 MINUTES"/>
+                <TextBlock x:Name="GuideTitle" Style="{StaticResource H1}" Text="Connect your PS5"/>
+                <TextBlock x:Name="GuideSub" Style="{StaticResource Sub}" Text="SmoovPlay gets the picture from chiaki-ng, a free, unofficial Remote Play app that comes with it. Sony doesn't make or support it. Tick each step as you go; SmoovPlay remembers."/>
+              </StackPanel>
+              <Grid Grid.Column="1" Width="64" Height="64" Margin="20,30,0,0" VerticalAlignment="Top">
+                <Ellipse Stroke="#232933" StrokeThickness="5"/>
+                <Ellipse x:Name="GuideRing" Stroke="{StaticResource AccentGrad}" StrokeThickness="5" StrokeDashCap="Round" RenderTransformOrigin="0.5,0.5">
+                  <Ellipse.RenderTransform><RotateTransform Angle="-90"/></Ellipse.RenderTransform>
+                </Ellipse>
+                <TextBlock x:Name="GuideCount" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="SemiBold" FontSize="14" Text="0/7"/>
+              </Grid>
+            </Grid>
+            <ScrollViewer Grid.Row="1" Margin="0,18,-14,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+              <ScrollViewer.OpacityMask>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="Black" Offset="0"/>
+                  <GradientStop Color="Black" Offset="0.9"/>
+                  <GradientStop Color="Transparent" Offset="1"/>
+                </LinearGradientBrush>
+              </ScrollViewer.OpacityMask>
+              <StackPanel x:Name="GuideSteps" Margin="0,0,14,0"/>
+            </ScrollViewer>
+            <Grid Grid.Row="2" Margin="0,14,0,0">
+              <Button x:Name="BtnGuideDocs" Style="{StaticResource Ghost}" HorizontalAlignment="Left" Height="44">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8A7;"/>
+                  <TextBlock Text="chiaki-ng's full guide" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+              <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="BtnGuideChiaki" Style="{StaticResource Secondary}" Margin="0,0,10,0">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource Icon}" FontSize="13" Text="&#xE8A7;"/>
+                    <TextBlock Text="Open chiaki-ng" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Button>
+                <Button x:Name="BtnGuidePlay" Style="{StaticResource Primary}">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Go to Play" VerticalAlignment="Center"/>
+                    <TextBlock Style="{StaticResource Icon}" FontSize="12" Text="&#xE72A;" Margin="10,1,0,0"/>
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+            </Grid>
+          </Grid>
+
+          <!-- ======================== settings (rows built by SettingsPage.cs from the pipeline's own list) -->
+          <Grid x:Name="PageSettings" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Overline}" Text="SETTINGS"/>
+              <TextBlock Style="{StaticResource H1}" Text="Tune SmoovPlay"/>
+              <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border x:Name="SetLive" CornerRadius="10" Background="#1E2A24" BorderBrush="#3DDC8E" BorderThickness="1" Padding="8,2" Margin="0,1,10,0"
+                        VerticalAlignment="Top" Visibility="Collapsed">
+                  <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="6" Height="6" Fill="{StaticResource Good}" VerticalAlignment="Center"/>
+                    <TextBlock Text="LIVE" FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource Good}" Margin="5,0,0,0"/>
+                  </StackPanel>
+                </Border>
+                <TextBlock x:Name="SetStatus" Grid.Column="1" Style="{StaticResource Sub}" Margin="0"
+                           Text="Saved for every session. While you play, changes reach the video straight away."/>
+              </Grid>
+            </StackPanel>
+            <!-- restart-only settings changed while playing -->
+            <Border x:Name="SetRestart" Grid.Row="1" Margin="0,14,0,0" CornerRadius="12" Background="#1AFFB02E" BorderBrush="#40FFB02E" BorderThickness="1"
+                    Padding="16,10,10,10" Visibility="Collapsed">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Style="{StaticResource Icon}" FontSize="15" Foreground="{StaticResource Accent}" Text="&#xE72C;" Margin="0,0,12,0"/>
+                <TextBlock x:Name="SetRestartText" Grid.Column="1" Style="{StaticResource Small}" Foreground="{StaticResource Text}" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <Button x:Name="BtnSetRestart" Grid.Column="2" Style="{StaticResource Primary}" Height="36" Padding="16,0" Content="Restart now"
+                        ToolTip="The video pauses for a few seconds while the AI model restarts. The stream keeps going."/>
+              </Grid>
+            </Border>
+            <ScrollViewer x:Name="SetScroll" Grid.Row="2" Margin="0,14,-14,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+              <ScrollViewer.OpacityMask>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                  <GradientStop Color="Black" Offset="0"/>
+                  <GradientStop Color="Black" Offset="0.93"/>
+                  <GradientStop Color="Transparent" Offset="1"/>
+                </LinearGradientBrush>
+              </ScrollViewer.OpacityMask>
+              <StackPanel Margin="0,0,14,24">
+                <!-- the big choices: frame rate, model, upscaler (SettingsPage.cs, specs with "quick") -->
+                <StackPanel x:Name="SetQuick"/>
+                <!-- Auto-detect (AutoDetect.cs): DetectBody shows the test's progress, then what it found and suggests -->
+                <Border x:Name="DetectCard" Style="{StaticResource Card}" Padding="18,16" Margin="0,0,0,22">
+                  <StackPanel>
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <Border Width="38" Height="38" CornerRadius="10" Background="#2A2214" VerticalAlignment="Top" Margin="0,1,14,0">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE9D9;" FontSize="18" Foreground="{StaticResource Accent}"/>
+                      </Border>
+                      <StackPanel Grid.Column="1" Margin="0,0,16,0">
+                        <TextBlock Text="Best settings for this PC" FontSize="14" FontWeight="SemiBold"/>
+                        <TextBlock Style="{StaticResource Small}" Margin="0,4,0,0"
+                                   Text="Auto-detect times the AI model on your graphics card, reads your display's refresh rate and checks what's installed, then suggests settings, with the reason for each. It takes about 10 seconds."/>
+                      </StackPanel>
+                      <Button x:Name="BtnDetect" Grid.Column="2" Style="{StaticResource Primary}" Height="36" Padding="16,0" VerticalAlignment="Top"
+                              Content="Auto-detect" ToolTipService.ShowOnDisabled="True"/>
+                    </Grid>
+                    <StackPanel x:Name="DetectBody" Margin="52,14,0,0" Visibility="Collapsed"/>
+                  </StackPanel>
+                </Border>
+                <!-- the other settings, in folding sections: one column, or two in a wide window -->
+                <Grid x:Name="SetRows"/>
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+
+          <!-- ======================== looks (LooksPage.cs builds the list and the editor) -->
+          <Grid x:Name="PageLooks" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Overline}" Text="LOOKS"/>
+              <TextBlock Style="{StaticResource H1}" Text="Give the picture a look"/>
+              <Grid Margin="0,8,0,0">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto"/>
+                  <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Border x:Name="LooksLive" CornerRadius="10" Background="#1E2A24" BorderBrush="#3DDC8E" BorderThickness="1" Padding="8,2" Margin="0,1,10,0"
+                        VerticalAlignment="Top" Visibility="Collapsed">
+                  <StackPanel Orientation="Horizontal">
+                    <Ellipse Width="6" Height="6" Fill="{StaticResource Good}" VerticalAlignment="Center"/>
+                    <TextBlock Text="LIVE" FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource Good}" Margin="5,0,0,0"/>
+                  </StackPanel>
+                </Border>
+                <TextBlock x:Name="LooksStatus" Grid.Column="1" Style="{StaticResource Sub}" Margin="0"/>
+              </Grid>
+            </StackPanel>
+            <Grid Grid.Row="1" Margin="0,16,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="236"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <!-- the looks: SmoovPlay's, then yours -->
+              <Border Style="{StaticResource Card}" Padding="0" Margin="0,0,16,0">
+                <Grid>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                  </Grid.RowDefinitions>
+                  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                    <StackPanel x:Name="LooksList" Margin="8,10,8,10"/>
+                  </ScrollViewer>
+                  <Border Grid.Row="1" BorderBrush="{StaticResource Line}" BorderThickness="0,1,0,0" Padding="10">
+                    <UniformGrid Columns="2">
+                      <Button x:Name="BtnLookNew" Style="{StaticResource Ghost}" Height="34" Padding="8,0" Margin="0,0,4,0" Content="New look"
+                              ToolTip="A new look of your own, starting with a Color node."/>
+                      <Button x:Name="BtnLookPaste" Style="{StaticResource Ghost}" Height="34" Padding="8,0" Margin="4,0,0,0" Content="Paste a code"
+                              ToolTip="Copy a look code someone shared (it starts with SPL1-), then press this: the look is added to yours."/>
+                    </UniformGrid>
+                  </Border>
+                </Grid>
+              </Border>
+              <!-- the picked look: its name and buttons, the preview, then its nodes, top to bottom (a wide window puts
+                   the preview beside the nodes: LookPreview.cs) -->
+              <Grid x:Name="LookRight" Grid.Column="1">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*"/>
+                  <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel x:Name="LookHead" Grid.ColumnSpan="2"/>
+                <!-- the look on a sample game picture (framegen/looks_preview.py) -->
+                <Border x:Name="LookPreviewCard" Grid.Row="1" Grid.ColumnSpan="2" Style="{StaticResource Card}" Padding="6" Margin="0,12,0,0"
+                        VerticalAlignment="Top" Visibility="Collapsed">
+                  <StackPanel>
+                    <Grid x:Name="LookPreviewBox" Background="#0B0D11" Cursor="Hand" HorizontalAlignment="Center"
+                          AutomationProperties.Name="Preview of the look. Hold to see the picture without it."
+                          ToolTip="Hold to see the picture without the look">
+                      <Image x:Name="LookPreviewImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality"/>
+                      <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8" CornerRadius="5" Background="#C0101318" Padding="7,2"
+                              IsHitTestVisible="False">
+                        <TextBlock x:Name="LookPreviewBadge" Text="LOOK" FontSize="10" FontWeight="Bold" Foreground="#FFFFFF"/>
+                      </Border>
+                      <Border x:Name="LookPreviewWait" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="8" CornerRadius="5"
+                              Background="#C0101318" Padding="8,3" IsHitTestVisible="False" Visibility="Collapsed">
+                        <TextBlock x:Name="LookPreviewWaitText" Text="Drawing the look..." FontSize="11" Foreground="#C9CED8"/>
+                      </Border>
+                    </Grid>
+                    <Grid Margin="4,7,0,0">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                      </Grid.ColumnDefinitions>
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock x:Name="LookPreviewTitle" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource Text}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="LookPreviewCredit" FontSize="11" Foreground="{StaticResource Muted}" TextTrimming="CharacterEllipsis"/>
+                      </StackPanel>
+                      <TextBlock x:Name="LookPreviewCount" Grid.Column="1" FontSize="11.5" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="8,0,6,0"/>
+                      <Button x:Name="BtnPreviewPrev" Grid.Column="2" Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0"
+                              ToolTip="Another picture" AutomationProperties.Name="Previous picture">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE76B;" FontSize="11"/>
+                      </Button>
+                      <Button x:Name="BtnPreviewNext" Grid.Column="3" Style="{StaticResource Ghost}" Width="30" Height="30" Padding="0" Margin="2,0,0,0"
+                              ToolTip="Another picture" AutomationProperties.Name="Next picture">
+                        <TextBlock Style="{StaticResource Icon}" Text="&#xE76C;" FontSize="11"/>
+                      </Button>
+                    </Grid>
+                  </StackPanel>
+                </Border>
+                <ScrollViewer x:Name="LookScroll" Grid.Row="2" Grid.ColumnSpan="2" Margin="0,12,-14,0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Focusable="False">
+                  <ScrollViewer.OpacityMask>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                      <GradientStop Color="Black" Offset="0"/>
+                      <GradientStop Color="Black" Offset="0.94"/>
+                      <GradientStop Color="Transparent" Offset="1"/>
+                    </LinearGradientBrush>
+                  </ScrollViewer.OpacityMask>
+                  <StackPanel x:Name="LookNodes" Margin="0,0,14,24"/>
+                </ScrollViewer>
+              </Grid>
+            </Grid>
+          </Grid>
+
+          <!-- ======================== help -->
+          <Grid x:Name="PageHelp" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <StackPanel>
+              <TextBlock Style="{StaticResource Overline}" Text="HELP"/>
+              <TextBlock Style="{StaticResource H1}" Text="Help and tools"/>
+              <TextBlock Style="{StaticResource Sub}" Text="Something off? Copy diagnostics and paste them into your bug report. They leave out your Windows user name."/>
+            </StackPanel>
+            <UniformGrid Grid.Row="1" Columns="2" Margin="-5,16,-5,0">
+              <Button x:Name="HelpDiag" Style="{StaticResource Tile}">
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid Width="36" Height="36" VerticalAlignment="Top"><Ellipse Fill="#22FFB02E"/><TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource Accent}" FontSize="15" Text="&#xE8C8;"/></Grid>
+                  <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                    <TextBlock Text="Copy diagnostics" FontWeight="SemiBold" FontSize="14"/>
+                    <TextBlock Style="{StaticResource Small}" Text="PC check, versions and the last log, ready to paste." Margin="0,3,0,0"/>
+                  </StackPanel>
+                </Grid>
+              </Button>
+              <Button x:Name="HelpLogs" Style="{StaticResource Tile}">
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid Width="36" Height="36" VerticalAlignment="Top"><Ellipse Fill="#22FFB02E"/><TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource Accent}" FontSize="15" Text="&#xED25;"/></Grid>
+                  <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                    <TextBlock Text="Open the logs folder" FontWeight="SemiBold" FontSize="14"/>
+                    <TextBlock Style="{StaticResource Small}" Text="One log per session and per setup run." Margin="0,3,0,0"/>
+                  </StackPanel>
+                </Grid>
+              </Button>
+              <Button x:Name="HelpRepair" Style="{StaticResource Tile}">
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid Width="36" Height="36" VerticalAlignment="Top"><Ellipse Fill="#22FFB02E"/><TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource Accent}" FontSize="15" Text="&#xE90F;"/></Grid>
+                  <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                    <TextBlock Text="Repair SmoovPlay" FontWeight="SemiBold" FontSize="14"/>
+                    <TextBlock Style="{StaticResource Small}" Text="Puts back anything missing, or downloads it all again." Margin="0,3,0,0"/>
+                  </StackPanel>
+                </Grid>
+              </Button>
+              <Button x:Name="HelpUninstall" Style="{StaticResource Tile}">
+                <Grid>
+                  <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                  <Grid Width="36" Height="36" VerticalAlignment="Top"><Ellipse Fill="#1FFF6464"/><TextBlock Style="{StaticResource Icon}" Foreground="{StaticResource Bad}" FontSize="15" Text="&#xE74D;"/></Grid>
+                  <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                    <TextBlock Text="Uninstall" FontWeight="SemiBold" FontSize="14"/>
+                    <TextBlock Style="{StaticResource Small}" Text="Removes SmoovPlay. Your settings are kept." Margin="0,3,0,0"/>
+                  </StackPanel>
+                </Grid>
+              </Button>
+            </UniformGrid>
+            <StackPanel Grid.Row="2" Margin="0,10,0,0" VerticalAlignment="Top">
+              <Border Style="{StaticResource Card}" Padding="18,14">
+                <StackPanel>
+                  <TextBlock Text="IN THE VIDEO WINDOW" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource Muted}"/>
+                  <WrapPanel x:Name="Keys" Margin="0,8,0,0"/>
+                  <TextBlock Style="{StaticResource Small}" Margin="0,12,0,0" TextWrapping="Wrap"
+                             ToolTip="Most PS5 games already run at 60 fps, so SmoovPlay has nothing to add. Test with a 60 fps game (or Simulate a 30 fps game in the M menu) plays one as if it were 30 fps, then reports how well your PC keeps up and how close the AI frames come to the real ones."
+                             Text="Only 60 fps games? Test with a 60 fps game, on the Play page, plays one as if it were 30 fps."/>
+                  <TextBlock Style="{StaticResource Small}" Margin="0,6,0,0" TextWrapping="Wrap"
+                             ToolTip="NVIDIA Smooth Motion, AMD Fluid Motion Frames and Lossless Scaling also generate frames. Turned on for SmoovPlay's video window or for chiaki-ng, they'd make frames out of SmoovPlay's generated ones (more wobble) and add delay. Leave them off for both; your other games aren't affected."
+                             Text="One frame generator at a time: leave Smooth Motion, AFMF and Lossless Scaling off for SmoovPlay and chiaki-ng."/>
+                </StackPanel>
+              </Border>
+              <TextBlock Style="{StaticResource Small}" Foreground="{StaticResource Muted}" TextWrapping="Wrap" Margin="2,12,0,0"
+                         Text="chiaki-ng is an unofficial Remote Play app. SmoovPlay and chiaki-ng are independent projects, not made, supported or endorsed by Sony Interactive Entertainment. PlayStation and PS5 are its trademarks."/>
+            </StackPanel>
+            <Grid Grid.Row="3" Margin="0,14,0,0">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock x:Name="HelpVersion" Style="{StaticResource Small}" Foreground="{StaticResource Muted}" VerticalAlignment="Center" Margin="2,0,12,0" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button x:Name="HelpFeedback" Style="{StaticResource Ghost}" Content="Send feedback"
+                        ToolTip="Copies diagnostics and opens a GitHub page for your report. Nothing is sent until you post it."/>
+                <Button x:Name="HelpLicences" Style="{StaticResource Ghost}" Content="Licences"/>
+                <Button x:Name="HelpSource" Style="{StaticResource Ghost}" Content="chiaki-ng source"/>
+                <Button x:Name="HelpDocs" Style="{StaticResource Ghost}" Content="chiaki-ng help"/>
+              </StackPanel>
+            </Grid>
+          </Grid>
+        </Grid>
+
+        <!-- window buttons -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,10,0">
+          <Button x:Name="BtnMin" Style="{StaticResource Chrome}" Content="&#xE921;" ToolTip="Minimise"/>
+          <Button x:Name="BtnClose" Style="{StaticResource Chrome}" Content="&#xE8BB;" Tag="close" ToolTip="Close"/>
+        </StackPanel>
+
+        <!-- toast -->
+        <Border x:Name="Toast" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,86" CornerRadius="20" Background="#262C36"
+                BorderBrush="#38404E" BorderThickness="1" Padding="16,9" Opacity="0" IsHitTestVisible="False">
+          <Border.Effect><DropShadowEffect BlurRadius="18" ShadowDepth="4" Opacity="0.5"/></Border.Effect>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock x:Name="ToastIcon" Style="{StaticResource Icon}" Foreground="{StaticResource Good}" FontSize="13" Text="&#xE73E;"/>
+            <TextBlock x:Name="ToastText" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="13"/>
+            <!-- an offer that goes with the message ("Use it now"); only shown when there is one -->
+            <Button x:Name="ToastAction" Style="{StaticResource Pill}" Margin="14,0,0,0" Visibility="Collapsed" AutomationProperties.AutomationId="ToastAction"/>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <!-- ============================================================ dialog -->
+      <Grid x:Name="Dialog" Grid.ColumnSpan="2" Visibility="Collapsed">
+        <Border x:Name="DialogScrim" CornerRadius="16" Background="#C0080A0D"/>
+        <Border x:Name="DialogCard" Width="452" HorizontalAlignment="Center" VerticalAlignment="Center" CornerRadius="16" Background="#1A1F27"
+                BorderBrush="#2E3542" BorderThickness="1" Padding="26,24" RenderTransformOrigin="0.5,0.5">
+          <StackPanel>
+            <Grid Width="44" Height="44" HorizontalAlignment="Left">
+              <Ellipse x:Name="DialogIconBg" Fill="#26FFB02E"/>
+              <TextBlock x:Name="DialogIcon" Style="{StaticResource Icon}" Foreground="{StaticResource Accent}" FontSize="19" Text="&#xE897;"/>
+            </Grid>
+            <TextBlock x:Name="DialogTitle" FontFamily="{StaticResource Display}" FontSize="19" FontWeight="SemiBold" Margin="0,16,0,0" TextWrapping="Wrap" TextOptions.TextFormattingMode="Ideal"/>
+            <TextBlock x:Name="DialogText" Foreground="{StaticResource Text2}" TextWrapping="Wrap" Margin="0,8,0,0" LineHeight="20" FontSize="13.5"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,24,0,0">
+              <Button x:Name="DialogBtn3" Style="{StaticResource Ghost}" Height="44" Margin="0,0,6,0"/>
+              <Button x:Name="DialogBtn2" Style="{StaticResource Secondary}" Margin="0,0,10,0"/>
+              <Button x:Name="DialogBtn1" Style="{StaticResource Primary}"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Grid>
+  </Grid>
+</Window>

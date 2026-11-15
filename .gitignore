@@ -1,0 +1,18 @@
+.venv/
+.venv-tts/
+__pycache__/
+.pytest_cache/
+models/
+testdata/
+out/
+installer/build/
+installer/dist/
+installer/.cache/
+native/*/build/
+*.log
+
+# Kept local, not published: marketing and demo-clip tooling, and working notes
+promo/
+notes/
+scripts/make_clips.py
+scripts/render_demo.py

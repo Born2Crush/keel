@@ -1,0 +1,342 @@
+# Developing SmoovPlay
+
+Everything for working on SmoovPlay itself: every command and tool, settings and hotkeys, how Instant replay and
+Looks work inside, the scheduler, upscaling, NVIDIA VFG, measured results and known limits. For what SmoovPlay is
+and how to get it, see the [README](../../README.md).
+
+## What's where
+
+| Path | What's in it |
+|---|---|
+| [`framegen/`](../framegen/) | The pipeline: video sources (file, capture card, app window, chiaki-ng frame tap), repeat and cut detection, RIFE interpolation (PyTorch and TensorRT), FSR 1 and RTX VSR upscaling, the OpenGL window and the settings menu. |
+| [`run.py`](../run.py) | Command-line entry point. |
+| [`chiaki_tap/`](../chiaki_tap/) | The patch that adds a frame tap to chiaki-ng, and how to build it. |
+| [`installer/`](../installer/) | `SmoovPlay-Setup.exe` and the SmoovPlay launcher, in C# and WPF. |
+| [`native/rtxvsr/`](../native/rtxvsr/) | Optional wrapper around NVIDIA's RTX Video SDK. |
+| [`scripts/`](../scripts/) | Benchmarks, a model check and a fake chiaki-ng stream for testing without a PS5. |
+| [`tests/`](../tests/) | `pytest` tests. |
+
+### Setup
+
+Needs 64-bit Windows 10 or 11, an NVIDIA RTX card with a recent driver (or an AMD or Intel card through DirectML,
+Experimental), and Python 3.12.
+
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cu128
+.venv\Scripts\python -m pip install -r requirements.txt
+```
+
+RIFE weights download automatically into `models/` on first run. To build the installer and launcher, see
+[installer/README.md](../installer/README.md); to build the patched chiaki-ng, see [chiaki_tap/README.md](../chiaki_tap/README.md).
+
+### Usage
+
+Any 60 fps gameplay recording works for testing; the examples use `testdata\clip_1080p60.mp4`.
+
+```powershell
+# Simulate PS5 30 fps output from a native 60 fps recording and watch it live:
+.venv\Scripts\python run.py testdata\clip_1080p60.mp4 --realtime --display
+
+# Score interpolated frames against the real frames that were dropped:
+.venv\Scripts\python run.py testdata\clip_1080p60.mp4 --score --hitch 0.03 --save-worst out\worst.jpg
+
+# Write the result to a file (NVENC):
+.venv\Scripts\python run.py testdata\clip_1080p60.mp4 --out out\clip_interp_60fps.mp4
+
+# Capture card (Experimental, not tested with a real card):
+.venv\Scripts\python run.py --list-devices
+.venv\Scripts\python run.py --capture 0 --display
+
+# Another app's window (Experimental, not tested with a real app): a preset, exe:NAME, hwnd:N or part of its title
+.venv\Scripts\python -m framegen.window --list
+.venv\Scripts\python run.py --source window --window ps-remote-play --display
+
+# PS5 Remote Play through the patched chiaki-ng (the CSV: one row per frame, stream facts and decisions):
+.venv\Scripts\python run.py --chiaki --display --chiaki-log out\session.csv
+
+# Every Remote Play session ends with a stream check: how well the size-based repeat check read the game (frame
+# rate, the 30 fps new/repeat rhythm, likely misreads by the picture, sizes, arrival times, a verdict). It goes in
+# the log and, with --results, in stream-check-<stamp>.txt beside the results. The same report from a saved CSV:
+.venv\Scripts\python scripts\stream_check_replay.py out\session.csv
+
+# Test mode: a 60 fps game played as if it were 30 fps, each AI frame scored against the frame left out, with a
+# plain-language report rewritten every 10 s and at the end (the launcher's results card reads it):
+.venv\Scripts\python run.py --chiaki --test-mode --display --results out\results.txt --chiaki-log out\session_as30.csv
+
+# The same report for a file (always played as a 30 fps game, see the scheduler notes below):
+.venv\Scripts\python run.py testdata\clip_1080p60.mp4 --score --results out\results.txt
+```
+
+`scripts/frametap_fake.py testdata\clip_1080p60.mp4 --native` stands in for a PS5 running a 60 fps game, so test
+mode can be tried without a console.
+
+Other tools: `scripts/benchmark.py` (GPU timing per model and resolution), `scripts/bench_120.py` (30 → 120 speed
+and quality), `scripts/check_fast.py` (checks the optimised forward pass against the reference), `scripts/latency_video.py`
+(delay from a slow-motion phone video) and `pytest tests`.
+
+<details>
+<summary><b>Settings, the in-video menu and hotkeys</b></summary>
+
+The settings are in two places, which stay in step:
+
+- **The launcher's Settings page.** With nothing playing, changes are saved for the next session. While a stream
+  plays, the page shows **LIVE** and changes reach the video straight away, as if made in the video window's menu.
+- **The video window's menu.** Press **M** (or Tab): ↑/↓ pick a setting, ←/→ change it, M or Esc closes it. The
+  video keeps playing behind it, so changes can be judged as they're made.
+
+Both save to `%APPDATA%\framegen\settings.json`. Each setting explains itself on the page, and each choice in a
+dropdown has a line on when to pick it.
+
+**Auto-detect**, at the top of the Settings page, suggests the frame rate, interpolation model, motion detail, engine
+and upscaler for this PC, with the reason for each; **Apply** sets them. It takes about 10 seconds:
+
+- It times RIFE on a 1080p frame, at full and half motion detail, with the engine Auto would use.
+- It reads the main display's refresh rate and resolution, and checks for TensorRT and RTX VSR.
+- It picks the fastest frame rate the display can show where an in-between frame fits in 90% of a display tick.
+  That margin is calibrated from live tests on an RTX 4070 Ti SUPER. 90 fps at full detail is preferred over 120 at
+  half, as in testing.
+- It notes anything worth fixing: a display Windows runs below its top rate, a graphics card busy with something
+  else, or a frame rate that needs G-Sync or FreeSync for even motion.
+
+Setup runs it on a new install (`python -m framegen.prepare` → `python -m framegen.autodetect --apply --if-new`),
+and doesn't save if the card is busy. The logic is `recommend()` in `framegen/autodetect.py`; the tests try it on
+made-up PCs.
+
+| Setting | Choices | Applies |
+|---|---|---|
+| Frame generation | On / Off | live |
+| Output frame rate | 60 / 90 / 120 fps | live (falls back to 60 when the GPU can't keep up) |
+| Even out 40-60 fps | On / Off (Experimental: even motion for games between 30 and 60 fps) | live |
+| Upscaler | AMD FSR 1 / NVIDIA RTX VSR / Bilinear (others may come later) | live |
+| FSR sharpening | Max … Minimal | live |
+| RTX VSR quality | Low / Medium / High / Ultra | live |
+| Stats overlay, Fullscreen, VSync | On / Off | live |
+| Window presentation | Standard / Low delay (Experimental: DXGI flip model, so a window skips the compositor's copy and G-Sync works in a window; fullscreen always uses Standard; `--present gl\|dxgi`) | next Play |
+| Minimise chiaki-ng | On / Off | live (PS5 Remote Play only) |
+| Sound in sync | On / Off (chiaki-ng holds its sound back to meet the picture) | live (PS5 Remote Play only) |
+| Simulate a 30 fps game | Off / On | live, this session only, never saved (any 60 Hz source: Remote Play, a capture card, or a file with `--raw`; `--test-mode`) |
+| Steady HUD | Off / On (off by default; results vary by game; RIFE only) | live |
+| Look, Which look | Off / On, and SmoovPlay's looks and yours (made on the launcher's Looks page) | live |
+| Looks in clips | Off / On (the look in saved instant replays too; only SmoovPlay's half of a before & after video) | live |
+| Interpolation model | RIFE 4.22 lite / NVIDIA VFG (RTX 40 and 50 series, optional download, see below) | **restart** |
+| VFG quality | Low / Medium / High (NVIDIA VFG only) | **restart** |
+| AI engine | Auto (TensorRT at full motion detail, PyTorch at half: the faster for each) / TensorRT / PyTorch (RIFE only) | **restart** |
+| Motion detail | Auto / Full / Half (RIFE only) | **restart** |
+
+Settings marked *restart* are saved at once. The menu and the Settings page then show **Restart now**, which
+rebuilds the AI engine in a few seconds without dropping the stream or closing the window; the first TensorRT
+build for a new resolution takes about 2 minutes. Adding a setting means adding one `Spec` to
+`framegen/settings.py`: the menu, the launcher's Settings page, the saved file and the command line all read from
+that list. The launcher talks to a running session through its stdin and stdout (`run.py --control`; see
+`framegen/remote.py`).
+
+Hotkeys: `i` interpolation on/off for this session (instant A/B, not saved), `s` stats overlay, `f`
+fullscreen, `u` next upscaler, `l` delay test (PS5 Remote Play), `r` save the instant replay, `b` save a before &
+after video of it, `k` look on/off, `j` next look (`Shift+J` back), `q` quit. A short note in the corner confirms each one. While instant replay is on,
+`Ctrl+Alt+R` and `Ctrl+Alt+B` work from any window.
+
+Instant replay (`framegen/replay.py`) keeps three tracks in memory as MPEG-TS pieces, one per encoded packet: every
+frame shown (timed when it was shown, so 90 fps is 90), each new game frame (timed when it arrived plus SmoovPlay's
+delay, so it lines up), and the game's sound, which chiaki-ng copies into a second shared-memory ring (see
+[`chiaki_tap/`](../chiaki_tap/)) or a capture card's player hands over. Frames go to YUV on the graphics card (0.3 ms
+at 1080p), to memory on a side stream, and to NVENC (else AMF, QSV or x264) on a thread of their own. Saving cuts
+from the keyframe before the start (one a second) and remuxes to MP4 without re-encoding; a before & after video is
+composed and encoded by `python -m framegen.replay compose` in a low-priority process of its own.
+
+Looks (`framegen/looks.py`, `framegen/looks_gl.py`): a look is JSON, `{"name", "nodes": [{"type", "on", "mix",
+...}]}`, cleaned by `normalize()`. Yours are files in `%APPDATA%\framegen\looks`, with LUTs in its `luts` folder. The
+video window draws a look in passes: the per-pixel effects share one shader, and each effect that reads neighbouring
+pixels (bloom, halation, blur, clarity, aberration, sharpening) starts a new pass on a half-float image; bloom,
+halation, blur and clarity use a pyramid of up to 6 halvings. `looks.render()` does the same maths in NumPy, and the tests compare the
+shaders with it. With **Looks in clips** on, the look is drawn again at the stream's size into a texture that CUDA
+reads, for the SmoovPlay track only. A share code is `SPL1-` and base64url of a compact binary: each value as its
+difference from the default, deflated when that's shorter, with a 16-bit checksum; a newer version's extra
+settings are skipped by older ones. The launcher's Looks page uses `python -m framegen.looks` (`schema`, `encode`,
+`decode`, `import`, `save`, `delete`, `add-lut`) and shows edits live with the `look-show`, `look-hide` and
+`looks-reload` commands (`framegen/remote.py`). Its preview is `python -m framegen.looks_preview`, a process that
+draws looks on the sample pictures (`framegen/samples`) with the video window's own shaders in a hidden OpenGL context
+(about a millisecond a picture; NumPy without OpenGL), one JSON request per line on stdin.
+`python -m framegen.looks preview LOOK IN.png OUT.png` puts a look (an id or a code) on a picture.
+
+Command-line flags (`--hz`, `--scaler`, `--fsr-sharpness`, `--vsr-quality`, `--engine`/`--trt`, `--off`,
+`--vsync`, `--fullscreen`, `--minimize-chiaki`, `--steady-hud`, `--present gl|dxgi`, `--test-mode`, `--model vfg`
+with `--vfg-quality`) override the saved settings for one run without saving them;
+`--settings none` starts from defaults and saves nothing. `--model 4.25.lite|4.25|4.26` tries another RIFE
+version for testing; those aren't offered in the menus until they're tested for real-time play and setup prepares
+them.
+</details>
+
+<details>
+<summary><b>NVIDIA VFG (optional, RTX 40 and 50 series)</b></summary>
+
+SmoovPlay can draw the in-between frames with NVIDIA's own Video Frame Generation (VFG, part of NVIDIA's Video
+Effects SDK) instead of RIFE. It isn't part of SmoovPlay or its downloads. **Set up NVIDIA VFG**, under
+Interpolation model on the Settings page, downloads NVIDIA's `nvidia-vfx` package from NVIDIA's own package index
+into `runtime\vfx` (about 540 MB, pinned by version and file hash), and only once you accept NVIDIA's licence:
+the NVIDIA Software License Agreement, the Product-Specific Terms for NVIDIA AI Products and the NVIDIA Open Model
+License. **Remove** deletes it again. NVIDIA supports it on RTX 40 and 50 series cards only; RIFE works on every RTX
+card. If VFG can't start, SmoovPlay plays with RIFE instead and says why.
+
+NVIDIA's licence doesn't allow publishing VFG benchmark results, so this page has none, and SmoovPlay keeps VFG's
+timings and quality scores out of its logs and out of Copy diagnostics. They're shown on your own PC only: in the
+stats overlay, in Auto-detect (which times VFG too once it's set up, and suggests it when it keeps up at least as
+well as RIFE) and in test mode's report.
+
+From the command line: `python -m framegen.vfg_setup --install --accept-nvidia-licence --target <folder>` (or
+`--status`, `--remove`), then set `FRAMEGEN_VFX_PATH=<folder>` and run `run.py --model vfg --vfg-quality medium`.
+</details>
+
+<details>
+<summary><b>Upscaling</b></summary>
+
+When the window is bigger than the frame (fullscreen on a 1440p monitor, say), it upscales:
+
+- **AMD FSR 1** (default): edge-adaptive upscaling plus mild sharpening, run as two shader passes while the
+  frame is drawn, so real and generated frames get the same treatment. It costs about 0.1 ms of GPU time per
+  frame at 2560×1440 (bilinear: about 0.04 ms).
+- **NVIDIA RTX Video Super Resolution**: also cleans up compression artefacts, but costs 1.3–4.9 ms per frame
+  at 1440p (quality Low…Ultra, RTX 4070 Ti SUPER). At 90 Hz that's three passes per real frame, which costs
+  some of the extra in-between frames. In side-by-side use it looked about the same as FSR 1. It needs the
+  [RTX Video SDK](https://developer.nvidia.com/rtx-video-sdk) (free, NVIDIA developer login), unpacked wherever
+  `NV_RTX_VIDEO_SDK` points. Build `native\rtxvsr\build.bat` once. It only works when frames are decoded on the
+  GPU (the default for Remote Play).
+
+The overlay names the scaler in use, and the GPU time per frame is printed on exit.
+</details>
+
+<details>
+<summary><b>The scheduler: repeats, hitches and scene cuts</b></summary>
+
+A 30 fps game in a 60 Hz stream arrives as `A A B B C C`. On the tick a new frame arrives we show
+`mid(prev, new)`; on its repeat tick we show the real frame:
+
+```
+input : A   A   B         B   C         C
+output: A   A   mid(A,B)  B   mid(B,C)  C
+```
+
+At 60 Hz the added delay is one tick (about 16.7 ms) plus processing, not a full 30 fps frame. At 90 and 120 Hz
+two or three frames are drawn between each pair. The scheduler also handles hitches (`A A A B`), stretches of
+real 60 fps content (passed through one tick late) and scene cuts (held instead of ghosting two shots together;
+a cut must be a sudden jump in frame difference, not just a large one, so fast camera motion isn't mistaken for a
+cut). See `framegen/cadence.py`.
+
+A file of about 30 fps is fed frame for frame as a 60 Hz stream with repeats; a file of about 60 fps has its odd
+frames dropped and kept as ground truth for `--score`. Test mode does the same to a live 60 fps Remote Play stream
+(`ChiakiSource(test=TestMode(True))`, switchable mid-stream from the menu's Simulate a 30 fps game), and scoring turns on with it.
+
+Duplicate detection compares 16×16 block means: noise averages out, but a small moving object still trips the
+maximum. Over the Remote Play stream, repeats are recognised by their size before decoding.
+
+`framegen/fastrife.py` is a restructured RIFE forward pass (same maths, verified to about 60 dB against the
+reference) that cut 1080p interpolation from about 16 ms to about 9 ms: one warp per direction instead of two,
+inputs downsampled before concatenation, fp32 copies made once per frame, NHWC convolutions. All per-frame GPU
+work is captured as CUDA graphs, and TensorRT engines are built once per resolution.
+</details>
+
+<details>
+<summary><b>Results (RTX 4070 Ti SUPER, 1080p, RIFE 4.22.lite)</b></summary>
+
+Live over Remote Play at 90 fps, in test mode (a 60 fps game played as 30): 35.6 ms (p50) from a compressed frame
+reaching the frame tap to the buffer swap that puts it on screen, and 99% of in-between frames on time. 22.2 ms of
+that is the hold any 3× interpolator needs. Not included: the PS5's encoding, the network, chiaki-ng's own receiving
+and the display. A native 30 fps game over Remote Play hasn't been measured yet.
+
+Quality: native 60 fps game recordings → keep the even frames (the "30 fps game") → interpolate → compare
+with the real odd frames. 3% random hitches injected. PyTorch fp16.
+
+| Clip | RIFE | 50/50 blend | repeat (what the PS5 shows) |
+|---|---|---|---|
+| Skate (third person, city) | **36.2 dB** | 31.0 dB | 28.9 dB |
+| Deadlock (fast combat, effects) | **25.8 dB** | 23.2 dB | 21.1 dB |
+
+Duplicate detection: 100% correct on both clips (2,444 ticks, with hitches). The worst frames are moments when
+the camera passes through geometry and the in-between frame shows content in neither neighbour. The 4.25 and
+4.26 models score within ±0.2 dB but cost about 0.8 ms more; half-resolution flow (`--scale 0.5`) saves about
+3 ms but costs 1.5–2 dB.
+
+Timing from a recorded clip, not a live stream, paced at 60 Hz with the OpenGL window (20 s, 1,202 ticks). At
+60 Hz a real frame is held for one tick (16.7 ms) rather than two, so this is lower than the live 90 fps figure:
+
+| | p50 | p99 | max |
+|---|---|---|---|
+| interpolation tick (upload → RIFE → download) | 12.2 ms | 12.7 ms | 12.8 ms |
+| repeat tick | 1.2 ms | 1.6 ms | 9.7 ms |
+| present (texture upload + blit) | 2.6 ms | 3.1 ms | 18.5 ms |
+| **real frame arrival → presented** | **20.8 ms** | 21.8 ms | 22.8 ms |
+| same, interpolation off (passthrough) | about 7 ms | | |
+
+2 of 1,202 ticks exceeded the 16.7 ms budget; no backlog built up.
+</details>
+
+<details>
+<summary><b>Known limits</b></summary>
+
+- **Capture cards are Experimental.** The code is there (`--capture`), but it hasn't been tested with a real
+  card. On a PS5, turn off HDCP while you use the card (Settings → System → HDMI) and keep it at 60 Hz, not 120 Hz.
+- **Window capture is Experimental.** Not tested with a real app. The app's sound comes ahead of the smooth
+  picture and its window has to stay visible. In Windows HDR mode, on a rotated monitor or without an NVIDIA card,
+  frames go through the CPU instead (a few ms more).
+- **4K** input doesn't fit in real time, even with TensorRT.
+- **90/120 Hz to a file** (`--out`) isn't supported; those rates are window-only.
+- **Soft scene cuts** between two dark shots can occasionally slip past the cut detector and show one blended frame.
+- **Packaging**: the installer is unsigned ([SmartScreen warns](../README.md#smartscreen)) and
+  about 140 MB, because chiaki-ng is embedded. The launcher updates itself from GitHub releases.
+- In a window, Standard presentation goes through the Windows compositor, which adds about 12 ms. Fullscreen (`f`)
+  avoids it, and so does Window presentation: Low delay (Experimental), in a window too.
+</details>
+
+
+## Features in detail
+
+- **Smoother, not faster.** The extra frames are generated: motion gets smoother, but the game still responds like
+  30 fps, and a little later than without SmoovPlay. Great for driving, exploring and story missions; not for
+  competitive online play.
+- **About 36 ms at 90 fps** (about 20 ms at 60 fps). That's how long a frame spends in SmoovPlay, from arriving to
+  being on screen, on top of Remote Play's own delay.
+  About 22 ms of it is a wait every frame generator has: each real frame is held back while the two in-between
+  frames before it are shown. When the graphics card falls behind for a moment, SmoovPlay drops to 60 fps rather
+  than add delay.
+- **1080p and SDR.** Remote Play arrives at 1080p, so the picture is a little softer than HDMI straight from the
+  console. Turn HDR off in chiaki-ng's stream settings.
+- **Some wobble.** HUD text over fast motion, very fast camera turns and thin objects crossing each other can wobble
+  a little. Press **I** in the video window to compare with frame generation off.
+- **Sound and picture stay in step.** chiaki-ng plays the sound, and SmoovPlay tells it to hold the sound back
+  by as long as the picture spends in SmoovPlay, measured as you play (**Sound in sync**, on by default).
+- **Delay test:** press **L** in the video window, standing still where Options opens a menu. chiaki-ng presses
+  Options six times and SmoovPlay times each answer, then shows the PS5 and Remote Play's part, its own part and
+  the two together.
+- **Instant replay** (Settings, **Instant replay**: off until you pick a length, 30 seconds to 5 minutes) keeps
+  the last stretch of what you played. Press **R** in the video window (or **Ctrl+Alt+R** from anywhere) to save
+  it to your Videos folder, in SmoovPlay, as an MP4 at the frame rate you see, with the game's own sound (PS5
+  Remote Play and capture cards; window capture has none). Saving takes a second or two. **B** (**Ctrl+Alt+B**)
+  saves a **before & after** video instead: the game's own frames next to SmoovPlay's, split down the middle or
+  side by side, made in the background in about as long as the clip. The video encoder on your graphics card does
+  the recording, apart from the AI; a 1-minute replay at 1080p and 90 fps keeps about 310 MB in memory. Turning it
+  on during play pauses the picture for about 0.2 s once, while the encoders start.
+- **Looks** (the launcher's **Looks** page; off until you use one) put a grade on the picture. A look is a stack of
+  effects applied top to bottom, like the nodes of a color grading app, each with its own amount: color, color
+  wheels, split tone, black & white, LUTs (`.cube` files), bloom, halation, blur, clarity, chromatic aberration,
+  sharpening, film grain, vignette, scanlines, letterbox and color-blind assist. SmoovPlay comes with 14 (Cinematic,
+  Film, Vivid, Noir, Golden hour, Neon night, Retro VHS, Bleach bypass, Dreamy, Arctic, Sepia and three for color
+  blindness). Try any change on one of them, and **Save as mine** keeps it as a look of your own (**Reset** puts
+  SmoovPlay's back). The page draws the look on sample screenshots from Grand Theft
+  Auto VI and five other games as you change it (hold the picture to see it without the look, and the arrows go to
+  the next game). While you play, it shows your changes on the video as you make them, and in the video window **K** turns the look on and off and **J** goes to the next one (**Shift+J**
+  back). **Copy code** gives a short code (`SPL1-`, about 35 to 60 characters) that rebuilds the look on
+  anyone's SmoovPlay, through **Paste a code**. A look takes about 0.02 to 0.35 ms of graphics card time a frame at
+  1440p. Saved clips stay clean unless **Looks in clips** is on (Settings, Instant replay); then only SmoovPlay's
+  half of a before & after video gets the look.
+- **Measure the whole delay yourself** with a phone's 240 fps slow motion and `scripts/latency_video.py`: film
+  the controller and screen (`press`: button to screen), or the PS5's own HDMI picture beside SmoovPlay's
+  (`side`: what Remote Play and SmoovPlay add). The script's help says how to film it.
+- **60 fps games pass through unchanged.** There are no gaps to fill. To see what SmoovPlay would do with one
+  anyway, use [test mode](../README.md#only-have-60-fps-games-use-test-mode).
+- **Games between 40 and 60 fps** (unlocked performance modes) send their frames unevenly over a 60 Hz stream, so
+  they stutter. **Even out 40-60 fps** (on by default, Experimental) times each frame and draws evenly spaced ones
+  from them, for about one frame (17 ms) more delay. Tested with real footage played as 43 and 47 fps games, not yet
+  with a real one.
+- **One frame generator at a time.** Leave NVIDIA Smooth Motion, AMD Fluid Motion Frames and Lossless Scaling off
+  for SmoovPlay and chiaki-ng: on top of SmoovPlay they'd make frames out of its generated ones (more wobble) and
+  add delay. Your other games aren't affected.

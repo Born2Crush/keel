@@ -1,0 +1,18 @@
+# What SmoovPlay's installer pip-installs into its own Python, from the official package indexes
+# (PyPI, PyTorch's CUDA 12.8 index for torch, NVIDIA's index for TensorRT). Pinned to the versions tested on the
+# dev machine. Install with:
+#   python -m pip install -r requirements-runtime.txt --extra-index-url https://download.pytorch.org/whl/cu128
+#       --extra-index-url https://pypi.nvidia.com
+torch==2.11.0+cu128
+numpy==2.5.4
+opencv-python==5.0.0.93
+glfw==2.11.0
+PyOpenGL==3.1.10
+av==19.0.2
+sounddevice==0.5.6
+# DirectML: RIFE on AMD and Intel cards, which have no CUDA (framegen/dml.py, Experimental). Unused on NVIDIA.
+onnxruntime-directml==1.24.4
+# TensorRT (optional at run time: without it the PyTorch engine is used); onnx/onnxscript build its engines.
+tensorrt-cu12==11.4.0.106
+onnx==1.23.2
+onnxscript==0.7.2

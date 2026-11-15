@@ -1,0 +1,610 @@
+"""Capture cards (Experimental): a console's HDMI output through a capture card, read with FFmpeg's DirectShow input
+(PyAV, already installed), so nothing extra to download.
+
+How (research_notes/Expansion planning/sources.md, section 2):
+- Raw frames. The card's own NV12 or YUY2, straight off USB with no decoding, timed by the card's clock. MJPEG
+  (compressed; most cheap cards offer it) only when the card has nothing else at the size and rate asked for: it's
+  decoded on the GPU (NVDEC) where it can be, else on the CPU, which can stutter.
+- Converted to BGR on the GPU: one upload of the raw frame (3-4 MB at 1080p), then a few tensor operations, so the
+  pipeline gets CUDA frames as it does from Remote Play's GPU decoder, and RTX VSR works too. Without CUDA, OpenCV
+  converts on the CPU (BT.601, a slight colour shift on HD video).
+- Colours: HDMI video is limited range (16-235) unless the card says it's full range; BT.709 at 720 lines and up,
+  BT.601 below, as video players assume.
+- Sound: the card's own audio device, opened with the video (one DirectShow graph, so both are timed by the same
+  clock) and played on this PC through framegen/audio.py, held back to meet the picture. pick_audio() finds it by
+  name; --capture-audio names another, or "off".
+
+Untested with real cards. Written from FFmpeg's documentation and source and other viewers' notes (NitLink, MIT;
+CapturePlay and Veyra, GPL, ideas only), and tested with a raw video file standing in for a card
+(tests/test_capture.py). The launcher marks capture cards Experimental.
+
+    python -m framegen.capture --list [--json]   # the video and audio capture devices Windows has
+    python -m framegen.capture --formats NAME    # what a device offers, and the format SmoovPlay would pick
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import queue
+import re
+import sys
+import threading
+import time
+from collections import deque
+from dataclasses import asdict, dataclass
+
+import numpy as np
+
+# Raw formats, best first: NV12 is the smallest uncompressed format (4:2:0), YUY2/UYVY are 4:2:2 (more USB bandwidth,
+# same picture after 4:2:0 HDMI sources). Anything compressed comes after all of them, MJPEG last but one.
+RAW_RANK = {"nv12": 0, "yuyv422": 1, "uyvy422": 2, "yuv420p": 3, "bgr24": 4, "bgr0": 4, "rgb24": 4}
+COMPRESSED_RANK = {"mjpeg": 10}
+BYTES_PER_PIXEL = {"nv12": 1.5, "yuv420p": 1.5, "yuyv422": 2, "uyvy422": 2, "bgr24": 3, "rgb24": 3, "bgr0": 4}
+CONVERTIBLE = ("nv12", "yuyv422", "uyvy422")  # converted here; anything else raw goes through PyAV's own conversion
+
+
+@dataclass(frozen=True)
+class Device:
+    name: str  # what Windows calls it, and what to open it by
+    kind: str  # "video", "audio" or "unknown" (a device whose type FFmpeg couldn't tell, e.g. a virtual camera that
+    # isn't running)
+    alt: str = ""  # DirectShow's unique name, for when two devices share a name
+
+
+@dataclass(frozen=True)
+class Mode:
+    """One way a device can send video, as DirectShow lists it."""
+    fmt: str  # pixel format for raw video ("nv12", "yuyv422", ...), or the codec ("mjpeg", "h264")
+    raw: bool
+    w: int
+    h: int
+    fps_min: float
+    fps_max: float
+    range: str = ""  # "tv" (limited) or "pc" (full) when the card says; "" when it doesn't
+    space: str = ""  # colour matrix, when the card says ("bt709", "bt470bg", ...)
+
+    def label(self) -> str:
+        fps = f"{self.fps_max:g}" if abs(self.fps_max - self.fps_min) < 0.01 else f"{self.fps_min:g}-{self.fps_max:g}"
+        return f"{self.w}x{self.h} {fps} fps {self.fmt.upper() if not self.raw else self.fmt}"
+
+
+# ----------------------------------------------------------------------------- what Windows has
+def _dshow_log(url: str, options: dict) -> str:
+    """FFmpeg's DirectShow listings come out in its log, not as data: open with a listing option and read the log."""
+    import av
+    import av.logging
+    old = av.logging.get_level()
+    av.logging.set_level(av.logging.INFO)
+    try:
+        with av.logging.Capture() as logs:
+            try:
+                av.open(url, format="dshow", options=options).close()
+            except Exception:  # noqa: BLE001 - a listing always "fails": FFmpeg exits after printing it
+                pass
+    finally:
+        av.logging.set_level(old)
+    return "".join(msg for _, name, msg in logs if name == "dshow")
+
+
+def parse_devices(text: str) -> list[Device]:
+    """Devices from `-list_devices true` output. FFmpeg 5+ tags each device '"Name" (video)'; older versions put
+    them under "DirectShow video devices" / "DirectShow audio devices" headings. Both are read."""
+    out: list[Device] = []
+    heading = "unknown"
+    for line in text.splitlines():
+        line = re.sub(r"^\[dshow @ [0-9A-Fa-fx]+\]\s?", "", line)
+        if "DirectShow video devices" in line:
+            heading = "video"
+        elif "DirectShow audio devices" in line:
+            heading = "audio"
+        elif m := re.match(r'\s*Alternative name "(.*)"\s*$', line):
+            if out:
+                out[-1] = Device(out[-1].name, out[-1].kind, m.group(1))
+        elif m := re.match(r'\s*"(.*)"\s*(?:\((video|audio|none|video,audio|audio,video)\))?\s*$', line):
+            kind = m.group(2) or heading
+            kind = {"none": "unknown", "video,audio": "video", "audio,video": "video"}.get(kind, kind)
+            out.append(Device(m.group(1), kind))
+    return out
+
+
+def list_devices() -> list[Device]:
+    return parse_devices(_dshow_log("dummy", {"list_devices": "true"}))
+
+
+# Words in device names that say nothing about which card it is.
+_GENERIC = {"usb", "usb2", "usb3", "audio", "video", "capture", "device", "digital", "interface", "input", "hdmi",
+            "line", "microphone", "mic", "camera", "webcam", "stream", "streaming", "game", "high", "definition",
+            "the", "and", "for", "with", "pro", "plus"}
+
+
+def _words(name: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", name.lower()) if len(w) >= 3 and w not in _GENERIC}
+
+
+def pick_audio(video: str, devices: list[Device]) -> str | None:
+    """The capture card's own sound device: one named like the video device (e.g. "USB3.0 Capture" and "Digital
+    Audio Interface (USB3.0 Capture)", or "Cam Link 4K" for both), else None. A device whose name says nothing (only
+    generic words) matches only on the whole name."""
+    audio = [d.name for d in devices if d.kind == "audio"]
+    v = video.lower().strip()
+    whole = [a for a in audio if v and (v in a.lower() or a.lower() in v)]
+    if whole:
+        return min(whole, key=len)
+    vw = _words(video)
+    scored = [(len(vw & _words(a)), a) for a in audio]
+    best = max(scored, default=(0, None))
+    return best[1] if best[0] > 0 and sum(n == best[0] for n, _ in scored) == 1 else None
+
+
+_MODE = re.compile(r"(?:pixel_format=(?P<pix>\S+)|vcodec=(?P<codec>\S+))\s+"
+                   r"min s=(?P<w0>\d+)x(?P<h0>\d+) fps=(?P<f0>[\d.e+-]+)\s+"
+                   r"max s=(?P<w1>\d+)x(?P<h1>\d+) fps=(?P<f1>[\d.e+-]+)"
+                   r"(?:\s*\((?P<color>[^)]*)\))?")
+
+
+def parse_modes(text: str) -> list[Mode]:
+    """Video modes from `-list_options true` output, e.g.
+        pixel_format=nv12  min s=1920x1080 fps=60 max s=1920x1080 fps=60 (tv, bt709/bt709/bt709, topleft)
+        vcodec=mjpeg  min s=1920x1080 fps=30 max s=1920x1080 fps=60
+    Each line becomes one Mode at its largest size (cards list one line per size). Duplicates are dropped."""
+    modes: list[Mode] = []
+    for m in _MODE.finditer(text):
+        raw = m.group("pix") is not None
+        rng = space = ""
+        if m.group("color"):
+            parts = [p.strip() for p in m.group("color").split(",")]
+            rng = parts[0] if parts and parts[0] in ("tv", "pc") else ""
+            if len(parts) > 1:
+                space = parts[1].split("/")[0]
+                space = "" if space == "unknown" else space
+        mode = Mode(m.group("pix") or m.group("codec"), raw, int(m.group("w1")), int(m.group("h1")),
+                    float(m.group("f0")), float(m.group("f1")), rng, space)
+        if mode not in modes:
+            modes.append(mode)
+    return modes
+
+
+def list_modes(device: str) -> list[Mode]:
+    return parse_modes(_dshow_log(f"video={device}", {"list_options": "true"}))
+
+
+def pick_mode(modes: list[Mode], w: int = 1920, h: int = 1080, fps: float = 60.0) -> tuple[Mode | None, str]:
+    """The mode to ask for, and a note for the log when it isn't what we'd want ("" when it is).
+
+    The size asked for if the card has it (else the largest at or under it, else the smallest), at a rate that
+    reaches `fps` if possible, in the best format: raw before compressed, NV12 first."""
+    if not modes:
+        return None, "the card listed no video formats"
+    usable = [m for m in modes if m.fmt in RAW_RANK or m.fmt in COMPRESSED_RANK]
+    if not usable:
+        return None, "the card offers no format SmoovPlay can read (" + ", ".join(sorted({m.fmt for m in modes})) + ")"
+    sizes = {(m.w, m.h) for m in usable}
+    if (w, h) in sizes:
+        size = (w, h)
+    else:
+        under = [s for s in sizes if s[0] <= w and s[1] <= h]
+        size = max(under, key=lambda s: s[0] * s[1]) if under else min(sizes, key=lambda s: s[0] * s[1])
+    at = [m for m in usable if (m.w, m.h) == size]
+    fast = [m for m in at if m.fps_max >= fps - 0.5]
+    pool = fast or at
+    best = min(pool, key=lambda m: (RAW_RANK.get(m.fmt, COMPRESSED_RANK.get(m.fmt, 99)), -m.fps_max))
+    notes = []
+    if size != (w, h):
+        notes.append(f"no {w}x{h} mode, using {size[0]}x{size[1]}")
+    if not fast:
+        notes.append(f"no mode reaches {fps:g} fps at that size (best {best.fps_max:g})")
+    if not best.raw:
+        notes.append(f"only {best.fmt.upper()} (compressed) at that size and rate: decoded on the GPU where it can be")
+    return best, "; ".join(notes)
+
+
+def open_options(mode: Mode, fps: float = 60.0, queue_frames: int = 4) -> dict:
+    """av.open options for a mode. rtbufsize caps DirectShow's own queue at a few frames: it only fills when we fall
+    behind, and frames dropped there are counted by FFmpeg ("real-time buffer too full")."""
+    rate = min(fps, mode.fps_max) if mode.fps_max >= fps - 0.5 else mode.fps_max
+    opts = {"video_size": f"{mode.w}x{mode.h}", "framerate": f"{rate:g}",
+            "rtbufsize": str(int(mode.w * mode.h * BYTES_PER_PIXEL.get(mode.fmt, 3) * queue_frames))}
+    opts["pixel_format" if mode.raw else "vcodec"] = mode.fmt
+    return opts
+
+
+# ----------------------------------------------------------------------------- colour conversion
+def ycbcr_to_bgr(y, u, v, bt709: bool, full_range: bool):
+    """Full-resolution Y, Cb, Cr (float tensors, 0-255 scale) -> HxWx3 uint8 BGR, on whatever device they're on.
+    The same maths as framegen.chiaki_tap.cuda_frame_to_bgr (FFmpeg's)."""
+    import torch
+    kr, kb = (0.2126, 0.0722) if bt709 else (0.299, 0.114)
+    kg = 1.0 - kr - kb
+    ys, yo, cs = (1.0, 0.0, 1.0) if full_range else (255 / 219, 16.0, 255 / 224)
+    lum = (y - yo) * ys
+    u, v = (u - 128.0) * cs, (v - 128.0) * cs
+    b = lum + 2 * (1 - kb) * u
+    g = lum - (2 * kb * (1 - kb) / kg) * u - (2 * kr * (1 - kr) / kg) * v
+    r = lum + 2 * (1 - kr) * v
+    return torch.stack([b, g, r], -1).clamp_(0, 255).round_().to(torch.uint8)
+
+
+def raw_to_bgr(raw, fmt: str, w: int, h: int, bt709: bool, full_range: bool):
+    """One raw frame (a flat uint8 tensor: NV12, YUY2 or UYVY) -> HxWx3 uint8 BGR tensor on the same device."""
+    import torch.nn.functional as F
+
+    def up(c):  # chroma to full size (bilinear, as FFmpeg's default scaler does near enough)
+        return F.interpolate(c[None, None].float(), size=(h, w), mode="bilinear", align_corners=False)[0, 0]
+
+    if fmt == "nv12":
+        y = raw[: w * h].view(h, w).float()
+        uv = raw[w * h: w * h * 3 // 2].view(h // 2, w // 2, 2)
+        return ycbcr_to_bgr(y, up(uv[..., 0]), up(uv[..., 1]), bt709, full_range)
+    if fmt in ("yuyv422", "uyvy422"):
+        p = raw[: w * h * 2].view(h, w // 2, 4)
+        iy0, iu, iy1, iv = (0, 1, 2, 3) if fmt == "yuyv422" else (1, 0, 3, 2)
+        y = p[..., [iy0, iy1]].reshape(h, w).float()
+        return ycbcr_to_bgr(y, up(p[..., iu]), up(p[..., iv]), bt709, full_range)
+    raise ValueError(f"can't convert {fmt}")
+
+
+def raw_to_bgr_cpu(raw: np.ndarray, fmt: str, w: int, h: int) -> np.ndarray:
+    """The CPU fallback (no CUDA): OpenCV's converters, which are BT.601 limited range."""
+    import cv2
+    if fmt == "nv12":
+        return cv2.cvtColor(raw[: w * h * 3 // 2].reshape(h * 3 // 2, w), cv2.COLOR_YUV2BGR_NV12)
+    if fmt == "yuyv422":
+        return cv2.cvtColor(raw[: w * h * 2].reshape(h, w, 2), cv2.COLOR_YUV2BGR_YUY2)
+    if fmt == "uyvy422":
+        return cv2.cvtColor(raw[: w * h * 2].reshape(h, w, 2), cv2.COLOR_YUV2BGR_UYVY)
+    raise ValueError(f"can't convert {fmt}")
+
+
+# ----------------------------------------------------------------------------- the source
+class CardSource:
+    """Frames from a capture card as Ticks: read on a thread and queued (not "latest only", which would break repeat
+    detection); when the pipeline falls behind, the oldest frame goes and is counted in `dropped`.
+
+    Open a card with CardSource.open(name). Two kinds of file stand in for one, played at their own rate from when
+    the pipeline starts reading: CardSource.raw_file(path, w, h, fmt, fps), raw frames read exactly as a card's are
+    (every line of the card path but the av.open call), and CardSource.video_file(path), any video, decoded and
+    turned into NV12 first. test: a framegen.sources.TestMode, applied before the queue.
+    device: "cuda" (default when there is CUDA), "cpu" (torch on the CPU, for tests) or None (numpy and OpenCV).
+    colour: "auto", or (bt709, full_range) to override.
+    audio: what plays the sound, if the container has any: audio(rate, channels) -> an object with push(pcm bytes),
+    set_delay(seconds) and close() (framegen.audio.Player; a fake in tests), or None for no sound.
+    """
+
+    def __init__(self, container, name: str, live: bool, test=None, device: str | None = "auto",
+                 colour="auto", range_hint: str = "", queue_size: int = 3, decode_to: str = "", audio=None) -> None:
+        from .sources import source_info
+        self.container, self.live, self.test = container, live, test
+        self.stream = container.streams.video[0]
+        self.astream = container.streams.audio[0] if audio is not None and container.streams.audio else None
+        self._audio_out, self.player, self._resampler = audio, None, None
+        self._audio_wait: list = []  # a file's sound, held until the picture gets to it: (time, pcm)
+        self._replay_sound: deque = deque(maxlen=2000)  # the sound as it's played, for instant replay (read_sound)
+        # How late each stream arrives after its own timestamps (the same clock in one DirectShow graph), so the
+        # sound can be held back by the picture's delay less however much later it already comes.
+        self._late_v: list[float] = []
+        self._late_a: list[float] = []
+        cc = self.stream.codec_context
+        self.w, self.h = cc.width, cc.height
+        self.raw = cc.name == "rawvideo"
+        self.fmt = (cc.format.name if cc.format is not None else "") if self.raw else cc.name
+        self.decode_to = decode_to  # a video file standing in: decoded, then sent on as raw frames of this format
+        if decode_to:
+            self.raw, self.fmt = True, decode_to
+        rate = self.stream.average_rate or self.stream.base_rate or self.stream.guessed_rate
+        self.fps = float(rate) if rate else 60.0
+        if device == "auto":
+            device = _cuda_device()
+        self.device = device
+        self.bt709, self.full_range = (self.h >= 720, range_hint == "pc") if colour == "auto" else colour
+        self.info = source_info("capture", hz=self.fps, name=name)
+        self.dropped = 0
+        self._stop = False
+        self._go = threading.Event()
+        self.q: queue.Queue = queue.Queue(maxsize=queue_size)
+        self._host = None  # a reusable (pinned, with CUDA) buffer for raw frames on their way to the GPU
+        # MJPEG on the GPU: NVDEC decodes it and the frame stays there (as Remote Play's do). Made on the reader's
+        # thread, in PyTorch's CUDA context; if it fails, the CPU decodes instead.
+        self._gpu_jpeg = not self.raw and self.fmt == "mjpeg" and device == "cuda"
+        self._hw = None
+        how = (("GPU" if device == "cuda" else "CPU (torch)" if device else "CPU (OpenCV)")
+               if self.raw and self.fmt in CONVERTIBLE else "GPU (NVDEC)" if self._gpu_jpeg else "PyAV, CPU")
+        print(f"[capture] {name}: {self.w}x{self.h} {self.fmt} at {self.fps:g} fps; decoded and converted on {how}"
+              f" ({'BT.709' if self.bt709 else 'BT.601'}, {'full' if self.full_range else 'limited'} range)")
+        if not self.raw and not self._gpu_jpeg:
+            print(f"[capture] {self.fmt.upper()} is compressed: each frame is decoded on the CPU, which can stutter. "
+                  "If the card offers NV12 or YUY2 at this size, that's better.")
+        if self.astream is not None:
+            cc = self.astream.codec_context
+            print(f"[capture] sound: {cc.sample_rate} Hz, {cc.channels} channel(s), played on this PC, held back to "
+                  "meet the picture")
+        threading.Thread(target=self._reader, daemon=True, name="capture").start()
+
+    # ---- opening
+    @classmethod
+    def open(cls, device: str, w: int = 1920, h: int = 1080, fps: float = 60.0, mode: Mode | None = None,
+             audio_device: str | None = None, audio=None, **kw) -> "CardSource":
+        """audio_device: the card's sound device (pick_audio), opened with the video; audio: what plays it."""
+        import av
+        note = ""
+        if mode is None:
+            mode, note = pick_mode(list_modes(device), w, h, fps)
+            if mode is None:
+                raise RuntimeError(f"capture card {device!r}: {note}")
+        if note:
+            print(f"[capture] {note}")
+        opts = open_options(mode, fps)
+        container = None
+        if audio_device and audio is not None:
+            try:  # a small sound buffer: DirectShow's default is half a second or more
+                container = av.open(f"video={device}:audio={audio_device}", format="dshow",
+                                    options={**opts, "audio_buffer_size": "20"})
+            except Exception as e:  # noqa: BLE001 - busy or gone: the picture on its own
+                print(f"[capture] couldn't open the sound device ({str(e)[:120]}); playing without sound")
+        if container is None:
+            container = av.open(f"video={device}", format="dshow", options=opts)
+        return cls(container, f"Capture card ({device})", live=True, range_hint=mode.range, audio=audio, **kw)
+
+    @classmethod
+    def raw_file(cls, path: str, w: int, h: int, fmt: str, fps: float = 60.0, **kw) -> "CardSource":
+        import av
+        container = av.open(path, format="rawvideo",
+                            options={"video_size": f"{w}x{h}", "pixel_format": fmt, "framerate": f"{fps:g}"})
+        return cls(container, "Capture card (a raw file standing in)", live=False, **kw)
+
+    @classmethod
+    def video_file(cls, path: str, **kw) -> "CardSource":
+        import av
+        container = av.open(path)
+        container.streams.video[0].thread_type = "AUTO"
+        return cls(container, "Capture card (a recording standing in)", live=False, decode_to="nv12", **kw)
+
+    # ---- reading
+    def _gpu_decoder(self):
+        import av
+        import torch
+        from av.codec.hwaccel import HWAccel
+        torch.zeros(1, device="cuda")  # PyTorch's CUDA context, current on this thread (see ChiakiSource._new_decoder)
+        ctx = av.CodecContext.create("mjpeg", "r", hwaccel=HWAccel(
+            "cuda", options={"primary_ctx": "0", "current_ctx": "1"}, is_hw_owned=True))
+        ctx.flags |= av.codec.context.Flags.low_delay
+        return ctx
+
+    def _convert_gpu(self, packet):
+        """MJPEG through NVDEC; None (and the CPU from then on) if this card's JPEGs don't go that way."""
+        from .chiaki_tap import cuda_frame_to_bgr
+        try:
+            if self._hw is None:
+                self._hw = self._gpu_decoder()
+            frames = self._hw.decode(packet)
+            return cuda_frame_to_bgr(frames[-1]) if frames else None
+        except Exception as e:  # noqa: BLE001 - e.g. 4:2:2 JPEGs the GPU path can't hand over
+            print(f"[capture] MJPEG on the GPU didn't work ({str(e)[:120]}); decoding on the CPU instead")
+            self._gpu_jpeg, self._hw = False, None
+            return None
+
+    def _convert(self, packet):
+        if self._gpu_jpeg:
+            frame = self._convert_gpu(packet)
+            if frame is not None or self._gpu_jpeg:
+                return frame
+        if not self.raw or self.fmt not in CONVERTIBLE:
+            frames = self.stream.codec_context.decode(packet)
+            if not frames:
+                return None
+            bgr = frames[-1].to_ndarray(format="bgr24")
+            if self.device:
+                import torch
+                return torch.from_numpy(bgr).to(self.device)
+            return bgr
+        return self._convert_raw(np.frombuffer(packet, dtype=np.uint8))
+
+    def _convert_raw(self, data: np.ndarray):
+        n = int(self.w * self.h * BYTES_PER_PIXEL[self.fmt])
+        if data.size < n:
+            return None  # a short packet (a format change mid-stream): skip it
+        if self.device is None:
+            return raw_to_bgr_cpu(data, self.fmt, self.w, self.h)
+        import torch
+        if self._host is None:
+            t = torch.empty(n, dtype=torch.uint8, pin_memory=self.device == "cuda")
+            self._host = (t, t.numpy())
+        t, a = self._host
+        a[:] = data[:n]  # the one copy on the CPU; the upload below finishes before the next frame reuses it
+        return raw_to_bgr(t.to(self.device), self.fmt, self.w, self.h, self.bt709, self.full_range)
+
+    def _reader(self) -> None:
+        from .io import Tick
+        if not self.live:
+            self._go.wait()
+        t0, n = time.perf_counter(), 0
+        try:
+            for frame, t_arrival, t_src in self._frames():
+                if self._stop:
+                    break
+                if not self.live and (wait := t0 + n / self.fps - time.perf_counter()) > 0:
+                    time.sleep(wait)  # a card delivers on the HDMI clock
+                    t_arrival = time.perf_counter()
+                if self._audio_wait:  # a file: its sound goes out as the picture gets to it
+                    now_s = (t_src if t_src is not None else n / self.fps) + 1 / self.fps
+                    while self._audio_wait and self._audio_wait[0][0] <= now_s:
+                        self._play(self._audio_wait.pop(0)[1])
+                tick = Tick(frame, t_arrival, 0, t_source=t_src, t_ready=time.perf_counter())
+                n += 1
+                if self.test is not None and (tick := self.test(tick)) is None:
+                    continue
+                try:
+                    self.q.put_nowait(tick)
+                except queue.Full:
+                    self.q.get_nowait()
+                    self.dropped += 1
+                    self.q.put_nowait(tick)
+        except Exception as e:  # noqa: BLE001 - the card went away, or the file ended badly: end the stream
+            print(f"[capture] stopped: {str(e)[:200]}")
+        self.q.put(None)
+
+    def _frames(self):
+        """(frame, arrival time, the source's own time in seconds) for each frame, as it comes. Sound packets on the
+        way go to the player (a file's wait for the picture: _reader)."""
+        streams = [self.stream] + ([self.astream] if self.astream is not None else [])
+        if self.decode_to:
+            from av.video.reformatter import ColorRange, Colorspace
+            # into the colours the raw path will read them as (an MJPEG file is full range, a card's NV12 isn't)
+            space = Colorspace.ITU709 if self.bt709 else Colorspace.ITU601
+            rng = ColorRange.JPEG if self.full_range else ColorRange.MPEG
+            start = None
+            for packet in self.container.demux(*streams):
+                if packet.stream is not self.stream:
+                    self._sound(packet, time.perf_counter())
+                    continue
+                for fr in packet.decode():
+                    t_arrival = time.perf_counter()
+                    start = fr.time if start is None else start
+                    raw = fr.reformat(format=self.decode_to, dst_colorspace=space, dst_color_range=rng)
+                    frame = self._convert_raw(raw.to_ndarray().ravel())
+                    if frame is not None:
+                        yield frame, t_arrival, fr.time
+            return
+        for packet in self.container.demux(*streams):
+            if packet.size == 0:
+                continue
+            t_arrival = time.perf_counter()
+            if packet.stream is not self.stream:
+                self._sound(packet, t_arrival)
+                continue
+            frame = self._convert(packet)
+            if frame is not None:
+                t_src = float(packet.pts * packet.time_base) if packet.pts is not None else None
+                if t_src is not None:
+                    self._late_v = (self._late_v + [t_arrival - t_src])[-120:]
+                yield frame, t_arrival, t_src
+
+    # ---- sound
+    def _sound(self, packet, t_arrival: float) -> None:
+        """A sound packet: decoded to 16-bit PCM, then played (a card) or held for the picture (a file)."""
+        import av
+        if packet.size == 0:
+            return
+        try:
+            frames = packet.decode()
+        except Exception:  # noqa: BLE001 - a damaged packet: skip it
+            return
+        for fr in frames:
+            if self._resampler is None:
+                channels = min(2, fr.layout.nb_channels if hasattr(fr.layout, "nb_channels") else len(fr.layout.channels))
+                self._resampler = av.AudioResampler(format="s16", layout="stereo" if channels == 2 else "mono",
+                                                    rate=fr.sample_rate)
+                self._rate, self._channels = fr.sample_rate, channels
+            pcm = b"".join(o.to_ndarray().tobytes() for o in self._resampler.resample(fr))
+            if not pcm:
+                continue
+            if self.live:
+                if fr.time is not None:
+                    self._late_a = (self._late_a + [t_arrival - (fr.time + fr.samples / fr.sample_rate)])[-120:]
+                self._play(pcm)
+            else:
+                self._audio_wait.append((fr.time if fr.time is not None else 0.0, pcm))
+
+    def _play(self, pcm: bytes) -> None:
+        from .io import Sound
+        # Timed like the picture it goes with: a card's sound comes this much later than its picture.
+        self._replay_sound.append(Sound(time.perf_counter() - self.sound_late_s(), pcm, self._rate, self._channels))
+        if self._audio_out is None:
+            return
+        if self.player is None:
+            try:
+                self.player = self._audio_out(self._rate, self._channels)
+            except Exception as e:  # noqa: BLE001 - no output device: the picture on its own
+                print(f"[capture] can't play the sound ({str(e)[:120]}); playing without it")
+                self._audio_out, self.astream = None, None
+                return
+            if self._delay_s is not None:
+                self.player.set_delay(self._delay_s)
+        self.player.push(pcm)
+
+    _delay_s: float | None = None
+    _rate, _channels = 48000, 2
+
+    def read_sound(self) -> list:
+        """The sound played since the last call (framegen.io.Sound chunks), for instant replay."""
+        out = []
+        while self._replay_sound:
+            out.append(self._replay_sound.popleft())
+        return out
+
+    def sound_late_s(self) -> float:
+        """How much later the sound arrives than the picture, after their own timestamps (0 if not known)."""
+        if len(self._late_v) < 10 or len(self._late_a) < 10:
+            return 0.0
+        return float(np.median(self._late_a) - np.median(self._late_v))
+
+    # The pipeline's side (as for chiaki-ng, framegen.chiaki_tap.ChiakiSource): the sound is held back to meet the
+    # picture (Sound in sync); the delay test needs Remote Play.
+    def can_press(self) -> bool:
+        return False
+
+    def can_delay_audio(self) -> bool:
+        return self.astream is not None and self._audio_out is not None
+
+    def set_audio_delay(self, ms: float) -> None:
+        self._delay_s = max(0.0, ms / 1000 - self.sound_late_s())
+        if self.player is not None:
+            self.player.set_delay(self._delay_s)
+
+    def __iter__(self):
+        self.dropped = 0  # frames dropped while the pipeline was loading don't count
+        self._go.set()
+        from .io import queue_ticks
+        yield from queue_ticks(self.q, "the capture card")
+
+    def close(self) -> None:
+        self._stop = True
+        self._go.set()
+        try:
+            self.container.close()
+        except Exception:  # noqa: BLE001 - closing
+            pass
+        if self.player is not None:
+            self.player.close()
+        print(f"[capture] dropped frames: {self.dropped}")
+
+
+def _cuda_device() -> str | None:
+    try:
+        import torch
+        return "cuda" if torch.cuda.is_available() else None
+    except Exception:  # noqa: BLE001 - no torch: OpenCV on the CPU
+        return None
+
+
+# ----------------------------------------------------------------------------- command line
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--list", action="store_true", help="the capture devices Windows has")
+    ap.add_argument("--formats", metavar="NAME", help="what a video device offers, and what SmoovPlay would pick")
+    ap.add_argument("--json", action="store_true")
+    a = ap.parse_args(argv)
+    if a.formats:
+        modes = list_modes(a.formats)
+        best, note = pick_mode(modes)
+        if a.json:
+            print(json.dumps({"modes": [asdict(m) for m in modes], "pick": asdict(best) if best else None,
+                              "note": note}))
+        else:
+            for m in modes:
+                print(("* " if m == best else "  ") + m.label())
+            print(note or ("would use " + best.label() if best else "nothing usable"))
+        return 0
+    devices = list_devices()
+    if a.json:
+        print(json.dumps({"video": [asdict(d) for d in devices if d.kind in ("video", "unknown")],
+                          "audio": [asdict(d) for d in devices if d.kind == "audio"]}))
+    else:
+        for d in devices:
+            print(f"{d.kind:7}  {d.name}")
+        if not devices:
+            print("no capture devices found")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

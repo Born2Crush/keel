@@ -1,0 +1,1176 @@
+"""Frame sources (PS5 simulator, plain file, capture card) and sinks (window, file)."""
+
+from __future__ import annotations
+
+import os
+import queue
+import random
+import subprocess
+import sys
+import threading
+import time
+from collections import OrderedDict
+from dataclasses import dataclass, field
+from typing import NamedTuple
+
+import cv2
+import numpy as np
+
+TICK = 1.0 / 60.0
+
+
+@dataclass
+class Tick:
+    frame: np.ndarray  # HxWx3 uint8 BGR (or a CUDA tensor from a GPU decoder), never mutated after yield
+    t_arrival: float  # perf_counter() when the frame reached this PC (Remote Play: when chiaki-ng got it, before
+    # decoding); latency is measured from here
+    index: int  # tick number
+    # Ground truth, only known for simulated input (and test mode):
+    content: int | None = None  # source-frame index shown on this tick
+    truth_new: bool | None = None
+    # What the source knows about the frame (framegen.sources.SourceInfo says which a source fills in):
+    new_hint: bool | None = None  # new content (True) or a repeat (False), by the source's own account; None: the
+    # pipeline compares pictures
+    damaged: bool = False  # known to be corrupt (frames lost before it); held like a scene cut, not blended
+    t_ready: float | None = None  # when the pipeline could first have it (after decoding); None: t_arrival
+    t_source: float | None = None  # the source's own time for the frame, in seconds (a file's position; later, a
+    # capture card's timestamp), for timing frames by the source's clock rather than by arrival
+    extra: dict = field(default_factory=dict)  # anything else, for logs (e.g. Remote Play's per-frame facts)
+
+
+class Waiting(NamedTuple):
+    """What a live source yields instead of blocking when no frame has come for a moment (the stream stalled,
+    chiaki-ng is reconnecting, the card lost its signal). The pipeline then keeps the window answering: its keys, the
+    launcher's commands and Windows' "not responding" check, which closed SmoovPlay mid-session when a stream
+    stalled with the loop stuck waiting for a frame."""
+    since: float  # seconds since the last frame
+    what: str  # where frames come from, for the message on screen ("the PS5")
+    why: str = ""  # what the source knows about it, as a hint for the player ("" if nothing)
+
+
+WAIT_POLL_S = 0.1  # how long a source waits for a frame before saying so
+
+
+def queue_ticks(q: queue.Queue, what: str, why=None):
+    """A live source's ticks, as its reader thread puts them in `q` (None ends them), numbered from 0, with a
+    Waiting in between whenever none has come for WAIT_POLL_S. why: () -> the source's hint for the Waiting."""
+    i, last = 0, time.perf_counter()
+    while True:
+        try:
+            tick = q.get(timeout=WAIT_POLL_S)
+        except queue.Empty:
+            yield Waiting(time.perf_counter() - last, what, why() if why is not None else "")
+            continue
+        if tick is None:
+            return
+        tick.index = i
+        yield tick
+        i += 1
+        last = time.perf_counter()
+
+
+class Sound(NamedTuple):
+    """A chunk of the game's sound, for instant replay (framegen/replay.py): what a source's read_sound() returns."""
+    t: float  # perf_counter() when its first sample reached this PC
+    pcm: bytes  # interleaved signed 16-bit samples
+    rate: int
+    channels: int
+
+
+# ----------------------------------------------------------------------------- sources
+class _Decoder(threading.Thread):
+    """Decodes a video file on a background thread (cv2 releases the GIL while decoding)."""
+
+    def __init__(self, path: str, maxsize: int = 16) -> None:
+        super().__init__(daemon=True)
+        self.cap = cv2.VideoCapture(path)
+        if not self.cap.isOpened():
+            raise FileNotFoundError(path)
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 60.0
+        self.w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.q: queue.Queue = queue.Queue(maxsize)
+        self.start()
+
+    def run(self) -> None:
+        while True:
+            ok, f = self.cap.read()
+            self.q.put(f if ok else None)
+            if not ok:
+                return
+
+    def __iter__(self):
+        while (f := self.q.get()) is not None:
+            yield f
+
+
+class Ps5SimSource:
+    """Turns a native 60 fps recording into what a PS5 sends for a 30 fps game.
+
+    Source frames 0,2,4,... become the game's real frames; each is scanned out for two
+    60 Hz ticks (three with probability `hitch`, to mimic a dropped game frame). The
+    odd source frames are never shown, so they serve as ground truth for the
+    interpolated midpoints (`gt(i)`).
+
+    A ~30 fps file (e.g. real PS5 footage) is used frame-for-frame instead: every frame
+    is a game frame, there is no ground truth, and scoring is skipped.
+    """
+
+    def __init__(self, path: str, realtime: bool = False, hitch: float = 0.0, noise: float = 0.0,
+                 max_ticks: int | None = None, seed: int = 0) -> None:
+        from .sources import source_info
+        self.dec = _Decoder(path)
+        self.w, self.h = self.dec.w, self.dec.h
+        self.info = source_info("sim", live=realtime)
+        self.realtime, self.hitch, self.max_ticks = realtime, hitch, max_ticks
+        self.step = 2 if self.dec.fps > 45 else 1  # 60 fps source: drop odd frames; 30 fps: use all
+        if self.step == 1:
+            print(f"[sim] {self.dec.fps:.2f} fps source: using every frame as a game frame (no ground truth)")
+        self.rng = random.Random(seed)
+        self.history: OrderedDict[int, np.ndarray] = OrderedDict()
+        self._noise = None
+        if noise > 0:  # precomputed noise planes so adding noise stays cheap in realtime
+            r = np.random.default_rng(seed)
+            n = [np.clip(r.normal(0, noise, (self.h, self.w, 3)), -255, 255) for _ in range(6)]
+            self._noise = [(np.clip(x, 0, 255).astype(np.uint8), np.clip(-x, 0, 255).astype(np.uint8)) for x in n]
+
+    def gt(self, i: int) -> np.ndarray | None:
+        return self.history.get(i)
+
+    def __iter__(self):
+        t0 = time.perf_counter()
+        tick = 0
+        for i, f in enumerate(self.dec):
+            self.history[i] = f
+            while len(self.history) > 8:
+                self.history.popitem(last=False)
+            if i % self.step:
+                continue  # odd frames of a 60 fps source: the game "never rendered" these
+            repeats = 3 if self.rng.random() < self.hitch else 2
+            for r in range(repeats):
+                if self.max_ticks is not None and tick >= self.max_ticks:
+                    return
+                out = f
+                if self._noise is not None:
+                    pos, neg = self._noise[self.rng.randrange(len(self._noise))]
+                    out = cv2.subtract(cv2.add(f, pos), neg)
+                if self.realtime:
+                    # A capture card delivers on the HDMI clock whether or not we keep up, so
+                    # latency is measured from the scheduled arrival (includes any backlog).
+                    t_arr = t0 + tick * TICK
+                    if (wait := t_arr - time.perf_counter()) > 0:
+                        time.sleep(wait)
+                else:
+                    t_arr = time.perf_counter()
+                yield Tick(out, t_arr, tick, content=i if self.step == 2 else None,
+                           truth_new=(r == 0) if self.step == 2 else None, t_source=i / self.dec.fps)
+                tick += 1
+
+    def close(self) -> None:
+        pass
+
+
+class FileSource:
+    """Plays a file's frames as-is, e.g. a raw recording from the capture card. test: a framegen.sources.TestMode,
+    to play a 60 fps recording as a 30 fps game."""
+
+    def __init__(self, path: str, realtime: bool = False, max_ticks: int | None = None, test=None) -> None:
+        from .sources import source_info
+        self.dec = _Decoder(path)
+        self.w, self.h = self.dec.w, self.dec.h
+        self.realtime, self.max_ticks, self.test = realtime, max_ticks, test
+        self.info = source_info("file", live=realtime, hz=self.dec.fps)
+
+    def __iter__(self):
+        t0 = time.perf_counter()
+        for i, f in enumerate(self.dec):
+            if self.max_ticks is not None and i >= self.max_ticks:
+                return
+            if self.realtime and (wait := t0 + i * TICK - time.perf_counter()) > 0:
+                time.sleep(wait)
+            tick = Tick(f, time.perf_counter(), i, t_source=i / self.dec.fps)
+            if self.test is None or (tick := self.test(tick)) is not None:
+                yield tick
+
+    def close(self) -> None:
+        pass
+
+
+class CaptureSource:
+    """Live capture card via OpenCV (DirectShow). Experimental: not tested with a real card yet, and not offered in the
+    launcher until it is.
+
+    Frames are read on a thread and queued (not "latest only"), because dropping a
+    frame would break duplicate detection. If processing can't keep up the queue
+    overflows and the oldest frame is dropped, which is reported as `dropped`.
+
+    device: the card's DirectShow index, or a video file that stands in for one (played at its own frame rate on
+    the same thread-and-queue path), to test the capture path and test mode without a card. A file waits for the
+    pipeline to start reading, so all of it is played; a card is live, and what comes before is dropped.
+    test: a framegen.sources.TestMode, applied before the queue.
+    """
+
+    def __init__(self, device: int | str, width: int = 1920, height: int = 1080, fps: int = 60,
+                 fourcc: str = "MJPG", backend: int = cv2.CAP_DSHOW, test=None) -> None:
+        from .sources import source_info
+        self.stand_in = isinstance(device, str)
+        if self.stand_in:
+            self.cap = cv2.VideoCapture(device)
+            if not self.cap.isOpened():
+                raise FileNotFoundError(device)
+        else:
+            self.cap = cv2.VideoCapture(device, backend)
+            if not self.cap.isOpened():
+                raise RuntimeError(f"could not open capture device {device}")
+            self.cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*fourcc))
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            self.cap.set(cv2.CAP_PROP_FPS, fps)
+            self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        self.w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self.h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.fps = self.cap.get(cv2.CAP_PROP_FPS) or 60.0
+        print(f"[capture] {self.w}x{self.h} @ {self.fps:.2f} fps"
+              + (f", a file standing in for a capture card: {device}" if self.stand_in else f" requested {fourcc}"))
+        self.info = source_info("capture", hz=self.fps,
+                                name="Capture card" + (" (a file standing in)" if self.stand_in else ""))
+        self.test = test
+        self.q: queue.Queue = queue.Queue(maxsize=3)
+        self.dropped = 0
+        self._stop = False
+        self._go = threading.Event()
+        threading.Thread(target=self._reader, daemon=True).start()
+
+    def _reader(self) -> None:
+        if self.stand_in:
+            self._go.wait()
+        t0, n = time.perf_counter(), 0
+        while not self._stop:
+            ok, f = self.cap.read()
+            if not ok:
+                self.q.put(None)
+                return
+            if self.stand_in and (wait := t0 + n / self.fps - time.perf_counter()) > 0:
+                time.sleep(wait)  # a card delivers on the HDMI clock
+            tick = Tick(f, time.perf_counter(), 0, t_source=n / self.fps if self.stand_in else None)
+            n += 1
+            if self.test is not None and (tick := self.test(tick)) is None:
+                continue
+            try:
+                self.q.put_nowait(tick)
+            except queue.Full:
+                self.q.get_nowait()
+                self.dropped += 1
+                self.q.put_nowait(tick)
+
+    def __iter__(self):
+        self.dropped = 0  # frames dropped while RIFE was loading don't count
+        self._go.set()
+        yield from queue_ticks(self.q, "the capture card")
+
+    def close(self) -> None:
+        self._stop = True
+        self._go.set()
+        self.cap.release()
+        print(f"[capture] dropped frames: {self.dropped}")
+
+
+
+
+# ----------------------------------------------------------------------------- sinks
+def _is_cuda(frame) -> bool:
+    return getattr(frame, "is_cuda", False)
+
+
+def _host(frame) -> np.ndarray:
+    """A frame as a numpy array (CUDA tensors are copied to the CPU)."""
+    return frame.cpu().numpy() if _is_cuda(frame) else frame
+
+
+# Low delay (DXGI) is for windowed play. Fullscreen already skips the compositor's copy with the standard presentation,
+# and Low delay in fullscreen could freeze (Present blocked for seconds, or for good), so by default ("none") a session
+# that starts fullscreen uses the standard presentation, and a Low delay window stays a window until the next Play.
+# Under test (scripts/dxgi_smoke.py): "monitor", GLFW's fullscreen (an always-on-top window exactly over the monitor);
+# "borderless", a plain borderless window over it, as games' borderless mode. See framegen/dxgi_present.py.
+FULLSCREEN_STYLE = os.environ.get("FRAMEGEN_FULLSCREEN_STYLE", "none")
+
+
+def _say_if_slow(what: str, t0: float, limit_ms: float = 250.0) -> None:
+    """A line in the log when a window call took far longer than a frame (a stall worth reporting)."""
+    ms = (time.perf_counter() - t0) * 1000
+    if ms > limit_ms:
+        print(f"[display] {what} took {ms:.0f} ms")
+
+
+def _draw_text(frame: np.ndarray, text: str) -> np.ndarray:
+    frame = frame.copy()
+    for i, line in enumerate(text.split("\n")):
+        y = 40 + 40 * i
+        cv2.putText(frame, line, (20, y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 0), 5, cv2.LINE_AA)
+        cv2.putText(frame, line, (20, y), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
+    return frame
+
+
+class _Panel:
+    """A BGR image in a GL texture of its own, blitted 1:1 over the frame (menu, messages)."""
+
+    def __init__(self, GL) -> None:
+        self.GL, self.w, self.h = GL, 0, 0
+        self.tex, self.fbo = GL.glGenTextures(1), GL.glGenFramebuffers(1)
+
+    def update(self, img: np.ndarray) -> None:
+        GL = self.GL
+        h, w = img.shape[:2]
+        img = np.ascontiguousarray(img)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, self.tex)
+        if (w, h) != (self.w, self.h):
+            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_NEAREST)
+            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_NEAREST)
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_BGR, GL.GL_UNSIGNED_BYTE, img)
+            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
+            GL.glFramebufferTexture2D(GL.GL_READ_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.tex, 0)
+            self.w, self.h = w, h
+        else:
+            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, w, h, GL.GL_BGR, GL.GL_UNSIGNED_BYTE, img)
+
+    def blit(self, x: int, top: int) -> None:
+        """top: GL y of the image's top edge (GL y grows upwards; image rows go down)."""
+        GL = self.GL
+        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
+        GL.glBlitFramebuffer(0, 0, self.w, self.h, x, top, x + self.w, top - self.h, GL.GL_COLOR_BUFFER_BIT,
+                             GL.GL_NEAREST)
+
+    def close(self) -> None:
+        self.GL.glDeleteFramebuffers(1, [self.fbo])
+        self.GL.glDeleteTextures([self.tex])
+
+
+def _pill(text: str, ui: float, color=(238, 238, 238)) -> np.ndarray:
+    """A short message (one line, or a few split by newlines) on a dark rounded-off box."""
+    fs, th = 0.7 * ui, 1 if ui < 1.4 else 2
+    lines = text.split("\n")
+    sizes = [cv2.getTextSize(t, cv2.FONT_HERSHEY_SIMPLEX, fs, th)[0] for t in lines]
+    tw, tht = max(w for w, _ in sizes), max(h for _, h in sizes)
+    padx, pady, gap = int(18 * ui), int(14 * ui), int(12 * ui)
+    img = np.full((len(lines) * (tht + gap) - gap + 2 * pady + int(6 * ui), tw + 2 * padx, 3), (34, 30, 28),
+                  np.uint8)
+    img[:, : max(2, int(5 * ui))] = (40, 170, 255)
+    for k, t in enumerate(lines):
+        cv2.putText(img, t, (padx, pady + tht + k * (tht + gap)), cv2.FONT_HERSHEY_SIMPLEX, fs, color, th,
+                    cv2.LINE_AA)
+    return img
+
+
+class GLWindowSink:
+    """OpenGL window (GLFW): texture upload + draw, ~1-2 ms per 1080p frame, with an in-video settings menu.
+
+    Display settings come from `settings` (framegen.settings) and apply live; see SPECS there for what each
+    does. vsync off presents immediately (lowest latency, may tear); on a G-Sync/FreeSync display vsync on lets
+    VRR follow our frame timing instead of tearing. When the window is bigger than the frame it upscales: "fsr"
+    with AMD FSR 1 (~0.1 ms GPU at 1440p), "vsr" with NVIDIA RTX Video Super Resolution (needs the RTX Video SDK,
+    see framegen/rtxvsr.py, and frames on the GPU), "bilinear" with a plain filtered blit. A look (framegen/looks.py,
+    drawn by framegen/looks_gl.py) goes on after that, at the window's size.
+    Keys: m/Tab = settings menu (arrows + Enter in it), i = interpolation on/off for this session, s = stats
+    overlay, f = fullscreen, u = next upscaler, k = look on/off, j = next look (Shift+J: the one before), l = delay
+    test (PS5 Remote Play), r = save the instant replay, b = save a before & after video of it (framegen/replay.py),
+    q/Esc = quit.
+
+    restart_reasons(): labels of pending restart-only changes (the menu then offers "Restart now", which makes
+    write() return "restart"). choices: {key: allowed values} for options the program can't use right now;
+    unavailable: {key: reason} greys out a whole row. remote: a framegen.remote.Remote (the launcher's Settings
+    page), polled with the window's own events so its changes apply like the menu's.
+
+    overlay_of (window capture, framegen/window.py): () -> (the app's picture area, its monitor) in screen pixels, or
+    None while it's minimised. The window then sits over the app's picture (fullscreen: over its monitor), clicks
+    and keys go through to the app, it never takes the focus, and it's left out of the capture. Settings change on
+    the launcher's Settings page, since the keys go to the app.
+    """
+
+    NAMES = {"fsr": "FSR 1", "vsr": "RTX VSR", "bilinear": "bilinear"}
+
+    def __init__(self, w: int, h: int, settings=None, restart_reasons=None, choices: dict | None = None,
+                 unavailable: dict | None = None, overlay_of=None) -> None:
+        import glfw
+        from OpenGL import GL
+
+        from .menu import Menu
+        from .settings import Settings
+
+        self.settings = st = settings if settings is not None else Settings()
+        scaler, sharpness, vsr_quality = st.scaler, st.fsr_sharpness, st.vsr_quality
+        self.glfw, self.GL, self.w, self.h = glfw, GL, w, h
+        if not glfw.init():
+            raise RuntimeError("glfw init failed")
+        self.dx = None  # a DxgiPresenter when the window presents through DXGI (settings "present")
+        self.overlay_of = overlay_of
+        if st.present == "dxgi" and overlay_of is not None:
+            print("[display] window capture: standard presentation (the overlay draws with OpenGL)")
+        elif st.present == "dxgi" and (not st.fullscreen or FULLSCREEN_STYLE != "none"):
+            self._open_dxgi(w, h)
+        elif st.present == "dxgi":
+            print("[display] fullscreen: standard presentation (Low delay is for windowed play; fullscreen already "
+                  "skips the compositor)")
+        if self.dx is None:
+            if overlay_of is not None:  # borderless, on top, click-through, and not focused when it opens
+                for hint, value in ((glfw.DECORATED, glfw.FALSE), (glfw.FLOATING, glfw.TRUE),
+                                    (glfw.FOCUSED, glfw.FALSE), (glfw.FOCUS_ON_SHOW, glfw.FALSE),
+                                    (glfw.MOUSE_PASSTHROUGH, glfw.TRUE)):
+                    glfw.window_hint(hint, value)
+            self.win = self.glwin = glfw.create_window(min(w, 1600), min(h, 900), "SmoovPlay", None, None)
+            glfw.default_window_hints()
+            glfw.make_context_current(self.win)
+        glfw.swap_interval(1 if st.vsync else 0)
+        # Fullscreen stays up when another window takes the focus (a click on a second display, a notification), as
+        # borderless fullscreen does in games. GLFW's default minimises it, which with DXGI could also stall Present.
+        glfw.set_window_attrib(self.win, glfw.AUTO_ICONIFY, glfw.FALSE)
+        self._set_icon(glfw)
+        self.overlay, self.cmd, self.windowed_pos, self.remote = st.overlay, None, None, None
+        self._borderless = False  # fullscreen as a borderless window (FRAMEGEN_FULLSCREEN_STYLE, under test)
+        glfw.set_key_callback(self.win, self._on_key)
+
+        self.tex = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, self.tex)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE)  # FSR samples past edges
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)
+        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_BGR, GL.GL_UNSIGNED_BYTE, None)
+        GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
+        self.fbo = GL.glGenFramebuffers(1)
+        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
+        GL.glFramebufferTexture2D(GL.GL_READ_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.tex, 0)
+
+        # Stats text: a small strip of its own, blitted over the frame (no full-frame copy to draw on). Room for two
+        # lines (the second is the test-mode line); _ov_th is the height the current text uses.
+        self.ov_w, self.ov_h, self._ov_text, self._ov_tw, self._ov_th = 1600, 96, None, 0, 56
+        self.ov_tex = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, self.ov_tex)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
+        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, self.ov_w, self.ov_h, 0, GL.GL_BGR, GL.GL_UNSIGNED_BYTE,
+                        None)
+        self.ov_fbo = GL.glGenFramebuffers(1)
+        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.ov_fbo)
+        GL.glFramebufferTexture2D(GL.GL_READ_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.ov_tex, 0)
+
+        # Frames that are already on the GPU (CUDA tensors) are copied into the texture directly.
+        self.interop = None
+        renderer = GL.glGetString(GL.GL_RENDERER).decode(errors="replace")
+        try:
+            from .glcuda import CudaGLTexture
+            self.interop = CudaGLTexture(int(self.tex), w, h)
+            print(f"[display] {renderer}: frames go to the screen straight from the GPU")
+        except Exception as e:  # noqa: BLE001 - any failure just means the CPU upload path
+            print(f"[display] {renderer}: GPU->screen copy unavailable ({e}); uploading frames from the CPU")
+        self.gpu = self.interop is not None
+
+        from .fsr import FsrScaler, GpuTimer
+        self.fsr = self.vsr = self.vsr_out = None
+        try:
+            self.fsr = FsrScaler(GL, sharpness)
+        except Exception as e:  # noqa: BLE001 - shader trouble just means another scaler
+            print(f"[display] FSR 1 unavailable ({str(e)[:200]})")
+        self.vsr_why = "it needs frames decoded on the GPU (the default for PS5 Remote Play)"
+        if self.gpu:  # RTX VSR works on frames that are already CUDA tensors
+            from .rtxvsr import RtxVsr, unavailable_reason
+            why = unavailable_reason()
+            if why is None:
+                try:
+                    self.vsr = RtxVsr(w, h, vsr_quality)
+                except Exception as e:  # noqa: BLE001 - VSR is optional
+                    why = str(e)[:200]
+            self.vsr_why = why
+            if self.vsr is None and scaler == "vsr":
+                print(f"[display] RTX VSR unavailable ({why})")
+        self.modes = [m for m, ok in (("fsr", self.fsr), ("vsr", self.vsr), ("bilinear", True)) if ok]
+        self.mode = scaler if scaler in self.modes else self.modes[0]
+        details = {"fsr": f" (sharpness {sharpness:g})", "vsr": f" (quality {vsr_quality})", "bilinear": ""}
+        print(f"[display] upscaling with {self._name(self.mode)}{details[self.mode]}; u cycles "
+              + " / ".join(self._name(m) for m in self.modes) + "; m opens the settings menu")
+        self.timer = GpuTimer(GL)  # GPU time of the scale/draw step, reported on close
+
+        # Looks: which one is on (the settings, or the launcher's Looks page while it edits one) and its drawing.
+        from .looks import LookState
+        from .looks_gl import LookRenderer
+        self.looks = LookState(st)
+        self.look_gl = None
+        try:
+            self.look_gl = LookRenderer(GL, self.looks.library.lut)
+        except Exception as e:  # noqa: BLE001 - looks are optional
+            print(f"[display] Looks unavailable ({str(e)[:200]})")
+        self._frame_no = 0
+        self._bake = None  # instant replay with "Looks in clips": (texture, framebuffer, CudaGLReader)
+        self._bake_said = False
+
+        self.choices, self.unavailable = dict(choices or {}), dict(unavailable or {})
+        self.menu = Menu(st, allowed=self.allowed, disabled=self.disabled, restart_reasons=restart_reasons)
+        self.menu_panel, self.toast_panel = _Panel(GL), _Panel(GL)
+        self._menu_state = self._toast_state = None
+        self._toast_text, self._toast_until = "Press M for settings", time.perf_counter() + 8.0
+        self._waited = -1  # wait(): the whole second the "no picture" note last said (-1: no wait going on)
+        self._unwatch = st.watch(self._apply)
+        self._overlay_at, self._overlay_check = None, 0.0
+        if overlay_of is not None:
+            self._make_overlay()
+            self._toast_text = "Settings: on SmoovPlay's Settings page (keys go to the app)"
+        else:
+            if st.fullscreen:
+                self._set_fullscreen(True)
+            self.take_focus()
+
+    def take_focus(self) -> None:
+        """The keys (M, R, K...) go to this window from the start, without a click on it first: the program in front
+        when it opens is usually chiaki-ng, where the player just connected (framegen/winutil.bring_to_front). Not
+        for window capture's overlay, which never takes the focus."""
+        if self.overlay_of is not None or sys.platform != "win32":
+            return
+        from .winutil import bring_to_front
+        try:
+            if not bring_to_front(self.glfw.get_win32_window(self.win)):
+                print("[display] couldn't bring the video window to the front; click it once so the keys go to it")
+        except Exception as e:  # noqa: BLE001 - only the focus: the video goes on
+            print(f"[display] couldn't bring the video window to the front ({str(e)[:160]})")
+
+    def _name(self, mode: str) -> str:
+        return f"RTX VSR q{self.vsr.quality}" if mode == "vsr" else self.NAMES[mode]
+
+    # ---- presentation ----------------------------------------------------------
+    def _set_icon(self, glfw) -> None:
+        """SmoovPlay's logo in the title bar and on the taskbar instead of Python's: the plain SP at 16-32 px, the
+        full logo at 48 and 64 (framegen/assets, from docs/brand). A missing icon never stops a session."""
+        try:
+            from pathlib import Path
+            images = []
+            for n in (16, 24, 32, 48, 64):
+                bgra = cv2.imread(str(Path(__file__).with_name("assets") / f"icon_{n}.png"), cv2.IMREAD_UNCHANGED)
+                if bgra is not None and bgra.shape == (n, n, 4):
+                    images.append((n, n, bgra[..., [2, 1, 0, 3]]))
+            if images:
+                glfw.set_window_icon(self.win, len(images), images)
+        except Exception as e:
+            print(f"[display] window icon not set: {e}")
+
+    def _open_dxgi(self, w: int, h: int) -> None:
+        """Settings "present" = "dxgi" (Experimental): the video window gets a DXGI flip-model swap chain and no OpenGL
+        context of its own (GLFW NO_API); OpenGL draws on a hidden window (framegen/dxgi_present.py). In a window that
+        skips the compositor's copy: less delay, and G-Sync/FreeSync work. Leaves self.dx None (and no windows) if
+        any of it fails, so the caller opens the usual OpenGL window."""
+        glfw = self.glfw
+        from .dxgi_present import DxgiPresenter
+        win = glwin = None
+        try:
+            glfw.window_hint(glfw.VISIBLE, glfw.FALSE)
+            glwin = glfw.create_window(64, 64, "framegen (OpenGL)", None, None)
+            glfw.default_window_hints()
+            if not glwin:
+                raise RuntimeError("couldn't open an OpenGL context")
+            glfw.window_hint(glfw.CLIENT_API, glfw.NO_API)
+            win = glfw.create_window(min(w, 1600), min(h, 900), "SmoovPlay", None, None)
+            glfw.default_window_hints()
+            if not win:
+                raise RuntimeError("couldn't open the window")
+            glfw.make_context_current(glwin)
+            fw, fh = glfw.get_framebuffer_size(win)
+            self.dx = DxgiPresenter(self.GL, glfw.get_win32_window(win), fw, fh)
+            self.win, self.glwin = win, glwin
+            from .dxgi_present import BUFFERS
+            test = ("direct", 2) != (self.dx.mode, BUFFERS) or FULLSCREEN_STYLE != "none"
+            print("[display] window presentation: DXGI flip model"
+                  + (", tearing allowed with VSync off" if self.dx.tearing else "") + " (Experimental)"
+                  + (f" [testing: {self.dx.mode}, {BUFFERS} buffers, fullscreen {FULLSCREEN_STYLE}]" if test else ""))
+        except Exception as e:  # noqa: BLE001 - any failure: OpenGL's own presentation
+            glfw.default_window_hints()
+            glfw.make_context_current(None)
+            for wnd in (win, glwin):
+                if wnd:
+                    glfw.destroy_window(wnd)
+            self.dx = None
+            print(f"[display] low-delay window presentation unavailable ({str(e)[:200]}); using OpenGL's own")
+
+    def _target(self) -> int:
+        """The framebuffer the picture is drawn into: the window's own, or DXGI's offscreen one."""
+        return self.dx.fbo if self.dx is not None else 0
+
+    def _present(self) -> None:
+        if self.dx is not None:
+            if self.glfw.get_window_attrib(self.win, self.glfw.ICONIFIED):
+                return  # minimised: nothing to show, and a flip-model Present can wait for a window nobody sees
+            t0 = time.perf_counter()
+            self.dx.present(self.settings.vsync)
+            _say_if_slow("DXGI Present", t0)
+        else:
+            self.glfw.swap_buffers(self.win)
+
+    # ---- settings ------------------------------------------------------------
+    def allowed(self, key: str, value) -> bool:
+        if key == "scaler":
+            return value in self.modes
+        return value in self.choices.get(key, (value,))
+
+    def disabled(self, key: str) -> str | None:
+        if key == "vsr_quality" and self.vsr is None:
+            return f"RTX VSR isn't available: {self.vsr_why}."
+        if key == "fsr_sharpness" and self.fsr is None:
+            return "FSR 1 couldn't start on this GPU."
+        return self.unavailable.get(key)
+
+    def _apply(self, key: str) -> None:
+        """A setting changed (menu, hotkey or elsewhere): apply the ones the window owns."""
+        st, glfw = self.settings, self.glfw
+        if key == "scaler" and st.scaler in self.modes:
+            self.mode = st.scaler
+        elif key == "fsr_sharpness" and self.fsr is not None:
+            self.fsr.sharpness = st.fsr_sharpness
+        elif key == "vsr_quality" and self.vsr is not None:
+            self.vsr.quality = st.vsr_quality
+        elif key == "overlay":
+            self.overlay = st.overlay
+        elif key == "fullscreen":
+            if self.dx is not None and st.fullscreen and FULLSCREEN_STYLE == "none":
+                self.toast("Fullscreen starts next time you press Play: Low delay works in a window only", 5.0)
+                return
+            self._set_fullscreen(st.fullscreen)
+        elif key == "vsync":
+            glfw.swap_interval(1 if st.vsync else 0)
+        elif key in ("look", "look_on"):
+            if not self.menu.open:
+                self.toast(f"Look: {self.looks.name() if st.look_on else 'Off'}")
+            return
+        if not self.menu.open:  # a hotkey: say what it did
+            from .settings import BY_KEY
+            spec = BY_KEY[key]
+            self.toast(f"{spec.label}: {spec.name(getattr(st, key))}")
+
+    def _make_overlay(self) -> None:
+        """Window capture: no focus ever (WS_EX_NOACTIVATE: the app keeps it, and some apps stop drawing without it),
+        and out of the capture, which then sees the app underneath (framegen/window.py)."""
+        import ctypes
+
+        from .window import exclude_from_capture
+        hwnd = self.glfw.get_win32_window(self.win)
+        if not exclude_from_capture(hwnd):
+            print("[display] couldn't leave this window out of the capture (that needs Windows 10 version 2004 or "
+                  "newer); it would capture itself. Put the app's window on another monitor.")
+        u32 = ctypes.windll.user32
+        u32.GetWindowLongW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        u32.SetWindowLongW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_long]
+        u32.SetWindowLongW(hwnd, -20, u32.GetWindowLongW(hwnd, -20) | 0x08000000)  # GWL_EXSTYLE |= WS_EX_NOACTIVATE
+        self._follow()
+
+    def _follow(self) -> None:
+        """Window capture: keeps the overlay over the app's picture (fullscreen: its monitor), four times a second."""
+        now = time.perf_counter()
+        if now < self._overlay_check:
+            return
+        self._overlay_check = now + 0.25
+        where = self.overlay_of()
+        if where is None:  # minimised: stay put until it's back
+            return
+        client, monitor = where
+        r = monitor if self.settings.fullscreen else client
+        at = (r.x, r.y, r.w, r.h)
+        if at != self._overlay_at:
+            self._overlay_at = at
+            self.glfw.set_window_pos(self.win, r.x, r.y)
+            self.glfw.set_window_size(self.win, r.w, r.h)
+
+    def _set_fullscreen(self, on: bool) -> None:
+        glfw, win = self.glfw, self.win
+        if self.overlay_of is not None:  # over the app's monitor, as a borderless window: no fullscreen mode change
+            self._overlay_at, self._overlay_check = None, 0.0
+            self._follow()
+            return
+        if self.dx is not None and FULLSCREEN_STYLE == "borderless":
+            self._set_borderless(on)
+            return
+        if bool(glfw.get_window_monitor(win)) == on:
+            return
+        t0 = time.perf_counter()
+        if not on:
+            x, y, ww, wh = self.windowed_pos or (80, 80, min(self.w, 1600), min(self.h, 900))
+            glfw.set_window_monitor(win, None, x, y, ww, wh, 0)
+        else:
+            self.windowed_pos = (*glfw.get_window_pos(win), *glfw.get_window_size(win))
+            mon = glfw.get_primary_monitor()
+            mode = glfw.get_video_mode(mon)
+            glfw.set_window_monitor(win, mon, 0, 0, mode.size.width, mode.size.height, mode.refresh_rate)
+        _say_if_slow("fullscreen " + ("on" if on else "off"), t0)
+        glfw.swap_interval(1 if self.settings.vsync else 0)
+
+    def _set_borderless(self, on: bool) -> None:
+        """Fullscreen as a borderless window over the monitor (FRAMEGEN_FULLSCREEN_STYLE=borderless, DXGI only, under
+        test): no GLFW fullscreen monitor, so no always-on-top window and no video mode request."""
+        glfw, win = self.glfw, self.win
+        if self._borderless == on:
+            return
+        t0 = time.perf_counter()
+        if on:
+            self.windowed_pos = (*glfw.get_window_pos(win), *glfw.get_window_size(win))
+            mon = glfw.get_primary_monitor()
+            mx, my = glfw.get_monitor_pos(mon)
+            mode = glfw.get_video_mode(mon)
+            glfw.set_window_attrib(win, glfw.DECORATED, glfw.FALSE)
+            glfw.set_window_pos(win, mx, my)
+            glfw.set_window_size(win, mode.size.width, mode.size.height)
+        else:
+            x, y, ww, wh = self.windowed_pos or (80, 80, min(self.w, 1600), min(self.h, 900))
+            glfw.set_window_attrib(win, glfw.DECORATED, glfw.TRUE)
+            glfw.set_window_pos(win, x, y)
+            glfw.set_window_size(win, ww, wh)
+        self._borderless = on
+        _say_if_slow("borderless fullscreen " + ("on" if on else "off"), t0)
+
+    def toast(self, text: str, seconds: float = 2.0) -> None:
+        """A short message in the top-right corner."""
+        self._toast_text, self._toast_until = text, time.perf_counter() + seconds
+
+    _NAV = {"UP": "up", "DOWN": "down", "LEFT": "left", "RIGHT": "right", "ENTER": "enter", "KP_ENTER": "enter",
+            "BACKSPACE": "back"}
+
+    def _on_key(self, win, key, scancode, action, mods) -> None:
+        glfw, st = self.glfw, self.settings
+        nav = {getattr(glfw, "KEY_" + k): v for k, v in self._NAV.items()}
+        if action == glfw.REPEAT and not (self.menu.open and key in nav):
+            return
+        if action not in (glfw.PRESS, glfw.REPEAT):
+            return
+        if self.menu.open and key in nav:
+            r = self.menu.key(nav[key])
+            if r == "close":
+                self.menu.open = False
+            elif r == "restart":
+                self.menu.open = False
+                self.cmd = "restart"
+            return
+        if key in (glfw.KEY_M, glfw.KEY_TAB):
+            self.menu.open = not self.menu.open
+            self._toast_until = 0.0
+        elif key == glfw.KEY_ESCAPE and self.menu.open:
+            self.menu.open = False
+        elif key in (glfw.KEY_Q, glfw.KEY_ESCAPE):
+            self.cmd = "quit"
+        elif key == glfw.KEY_I:
+            st.override("interp", not st.interp)  # a quick A/B, not saved
+        elif key == glfw.KEY_S:
+            st.set("overlay", not st.overlay)
+        elif key == glfw.KEY_U:
+            st.step("scaler", 1, self.allowed)
+        elif key == glfw.KEY_K:
+            self.looks.toggle()
+        elif key == glfw.KEY_J:
+            self.looks.next(-1 if mods & glfw.MOD_SHIFT else 1)
+        elif key == glfw.KEY_F:
+            st.set("fullscreen", not st.fullscreen)
+        elif key == glfw.KEY_L:
+            self.cmd = "delay_test"  # the pipeline runs it (PS5 Remote Play only)
+        elif key == glfw.KEY_R:
+            self.cmd = "save_replay"  # instant replay (framegen/replay.py), through the pipeline
+        elif key == glfw.KEY_B:
+            self.cmd = "save_compare"
+
+    # ---- drawing -------------------------------------------------------------
+    def _layout(self) -> tuple[int, int, float, int, int, int, int]:
+        fw, fh = self.glfw.get_framebuffer_size(self.win)
+        if self.dx is not None:
+            self.dx.resize(fw, fh)  # cheap when the size hasn't changed
+        s = min(fw / self.w, fh / self.h)  # letterbox, keep aspect
+        dw, dh = int(self.w * s), int(self.h * s)
+        return fw, fh, s, dw, dh, (fw - dw) // 2, (fh - dh) // 2
+
+    def _draw_ui(self, x0: int, y0: int, dw: int, dh: int) -> None:
+        """Menu and messages, on top of everything else. Images are redrawn only when they change."""
+        ui = max(0.5, dh / 1080)
+        if self.menu.open:
+            state = (self.menu.state(), round(ui, 3))
+            if state != self._menu_state:
+                self.menu_panel.update(self.menu.render(ui))
+                self._menu_state = state
+            p = self.menu_panel
+            self.menu_panel.blit(x0 + int(32 * ui), y0 + (dh + p.h) // 2)
+        elif time.perf_counter() < self._toast_until:
+            state = (self._toast_text, round(ui, 3))
+            if state != self._toast_state:
+                self.toast_panel.update(_pill(self._toast_text, ui))
+                self._toast_state = state
+            p = self.toast_panel
+            m = int(16 * ui)
+            p.blit(x0 + dw - p.w - m, y0 + dh - m)
+
+    def busy(self, fn, text: str):
+        """Run fn() on a worker thread while the window stays responsive, showing the last frame and `text`.
+        Returns fn()'s result (or raises its exception). Keys pressed meanwhile (e.g. q) take effect after."""
+        GL, glfw = self.GL, self.glfw
+        out: list = []
+
+        def work() -> None:
+            try:
+                out.append((True, fn()))
+            except BaseException as e:  # noqa: BLE001 - handed back to the caller
+                out.append((False, e))
+
+        self.menu.open = False
+        worker = threading.Thread(target=work, daemon=True)
+        worker.start()
+        t0 = time.perf_counter()
+        while worker.is_alive():
+            fw, fh, s, dw, dh, x0, y0 = self._layout()
+            GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, self._target())
+            GL.glViewport(0, 0, fw, fh)
+            GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
+            GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT,
+                                 GL.GL_LINEAR)
+            dots = "." * (1 + int(time.perf_counter() - t0) % 3)
+            self.toast(f"{text}{dots:<3}", 1.0)
+            self._draw_ui(x0, y0, dw, dh)
+            self._present()
+            glfw.poll_events()
+            if self.remote is not None:
+                self.remote.poll()  # live settings still apply; a restart is already under way
+            worker.join(0.05)
+        self._toast_until = 0.0
+        ok, value = out[0]
+        if not ok:
+            raise value
+        return value
+
+    def wait(self, w: Waiting) -> str | None:
+        """No new frame for a moment (framegen/io.Waiting): the window keeps answering Windows, its keys and the
+        launcher, and from 2 s on says so over the last picture. Returns "quit" or "restart" when asked for; any other
+        key waits for the next frame (write() hands it on)."""
+        glfw = self.glfw
+        n = int(w.since)
+        if n >= 2 and (n != self._waited or self.menu.open) and self.overlay_of is None:
+            self._waited = n
+            self.toast(f"No picture from {w.what} for {n} s. Q quits" + (f"\n{w.why}" if w.why else ""), 1.5)
+            fw, fh, s, dw, dh, x0, y0 = self._layout()
+            GL = self.GL
+            GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, self._target())
+            GL.glViewport(0, 0, fw, fh)
+            GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)  # the last frame, plain (no upscaler or look)
+            GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
+            self._draw_ui(x0, y0, dw, dh)
+            self._present()
+        glfw.poll_events()
+        if self.remote is not None and self.remote.poll() == "restart" and self.cmd is None:
+            self.cmd = "restart"
+        if glfw.window_should_close(self.win):
+            return "quit"
+        if self.cmd in ("quit", "restart"):
+            cmd, self.cmd = self.cmd, None
+            return cmd
+        return None
+
+    def write(self, frame, text: str | None = None) -> str | None:
+        """frame: HxWx3 uint8 BGR, a numpy array or a CUDA tensor."""
+        GL, glfw = self.GL, self.glfw
+        if self._waited >= 0:  # a picture again after a wait: its note goes
+            self._waited, self._toast_until = -1, 0.0
+        if self.overlay_of is not None:
+            self._follow()
+        on_gpu = _is_cuda(frame) and self.interop is not None
+        if on_gpu:
+            self.interop.upload(frame)
+        else:
+            GL.glBindTexture(GL.GL_TEXTURE_2D, self.tex)
+            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, self.w, self.h, GL.GL_BGR, GL.GL_UNSIGNED_BYTE,
+                               np.ascontiguousarray(_host(frame)))
+        fw, fh, s, dw, dh, x0, y0 = self._layout()
+        target = self._target()
+        GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, target)
+        GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+        upscale = dw > self.w or dh > self.h
+        mode = self.mode
+        if mode == "vsr" and not on_gpu:  # a CPU frame: VSR needs it on the GPU
+            mode = "fsr" if self.fsr is not None else "bilinear"
+        label = self._name(mode) if upscale else "no upscale"
+        self._frame_no += 1
+        plan = self.look_gl.plan(self.looks.current(), self.looks.rev) if self.look_gl is not None else None
+        q = self.timer.begin()
+        if plan is not None:  # the upscaler draws into the look's input, and the look onto the screen
+            if upscale and mode == "fsr":
+                src, fbo = self.look_gl.input_target(dw, dh)
+                self.fsr.draw(self.tex, self.w, self.h, fbo, 0, 0, dw, dh)
+                flip_in = True  # (FSR draws upright)
+            elif upscale and mode == "vsr":
+                src, flip_in = self._vsr_render(dw, dh)[0], False
+            else:
+                src, flip_in = self.tex, False  # the look's first pass resizes it
+            self.look_gl.draw(plan, src, flip_in, target, x0, y0, dw, dh, True, self._frame_no)
+            GL.glViewport(0, 0, fw, fh)
+            label += " + look"
+        elif upscale and mode == "fsr":
+            self.fsr.draw(self.tex, self.w, self.h, target, x0, y0, dw, dh)
+            GL.glViewport(0, 0, fw, fh)
+        elif upscale and mode == "vsr":
+            self._vsr_draw(x0, y0, dw, dh)
+        else:
+            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
+            # Image row 0 is the top; GL row 0 is the bottom, so blit with destination Y flipped.
+            GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT,
+                                 GL.GL_LINEAR)
+        self.timer.end(q, f"{label} {dw}x{dh}")
+        if self.overlay and text:
+            first, nl, rest = text.partition("\n")  # the upscaler goes on the first line; a second is the test line
+            self._blit_text(f"{first}  {label}{nl}{rest}", x0, y0 + dh, s)
+        self._draw_ui(x0, y0, dw, dh)
+        self._present()
+        glfw.poll_events()
+        if self.remote is not None and self.remote.poll() == "restart" and self.cmd is None:
+            self.cmd = "restart"
+        if glfw.window_should_close(self.win):
+            return "quit"
+        cmd, self.cmd = self.cmd, None
+        return cmd
+
+    def _vsr_draw(self, x0: int, y0: int, dw: int, dh: int) -> None:
+        """RTX VSR from the staged RGBA frame straight into a window-sized GL texture, then a 1:1 blit."""
+        GL = self.GL
+        fbo = self._vsr_render(dw, dh)[1]
+        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, fbo)
+        GL.glBlitFramebuffer(0, 0, dw, dh, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT, GL.GL_NEAREST)
+
+    def _vsr_render(self, dw: int, dh: int) -> tuple[int, int]:
+        """RTX VSR into the window-sized texture (row 0 = the image's top); returns (texture, framebuffer)."""
+        if self.vsr_out is None or self.vsr_out[3:] != (dw, dh):
+            self._vsr_target(dw, dh)
+        tex, fbo, img = self.vsr_out[:3]
+        stream = self.vsr.stream.cuda_stream
+        arr = img.map(stream)
+        try:
+            self.vsr(self.interop.rgba, arr, dw, dh)
+        finally:
+            img.unmap(stream)  # orders GL's read after VSR's write, no CPU wait
+        return tex, fbo
+
+    def _vsr_target(self, w: int, h: int) -> None:
+        """(Re)make the VSR output texture at the window's image size."""
+        from .glcuda import CudaGLImage
+
+        GL = self.GL
+        self._vsr_target_free()
+        tex = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_NEAREST)
+        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_NEAREST)
+        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
+        fbo = GL.glGenFramebuffers(1)
+        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, fbo)
+        GL.glFramebufferTexture2D(GL.GL_READ_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, tex, 0)
+        self.vsr_out = (tex, fbo, CudaGLImage(int(tex)), w, h)
+
+    def _vsr_target_free(self) -> None:
+        if self.vsr_out is not None:
+            tex, fbo, img = self.vsr_out[:3]
+            if img.array.value:
+                self.vsr.forget(img.array)
+            img.close()
+            self.GL.glDeleteFramebuffers(1, [fbo])
+            self.GL.glDeleteTextures([tex])
+            self.vsr_out = None
+
+    def _blit_text(self, text: str, x0: int, top: int, s: float) -> None:
+        GL = self.GL
+        if text != self._ov_text:
+            img = np.zeros((self.ov_h, self.ov_w, 3), np.uint8)
+            lines = text.split("\n")[:2]
+            for i, line in enumerate(lines):
+                cv2.putText(img, line, (12, 38 + 40 * i), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
+            # The box only grows, so it doesn't jitter as the numbers change width.
+            tw = max(cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0][0] for line in lines) + 24
+            self._ov_tw = min(self.ov_w, max(self._ov_tw, tw))
+            self._ov_th = 16 + 40 * len(lines)
+            GL.glBindTexture(GL.GL_TEXTURE_2D, self.ov_tex)
+            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, self.ov_w, self.ov_h, GL.GL_BGR, GL.GL_UNSIGNED_BYTE, img)
+            self._ov_text = text
+        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.ov_fbo)
+        x, y = x0 + int(8 * s), top - int(8 * s)
+        GL.glBlitFramebuffer(0, 0, self._ov_tw, self._ov_th, x, y, x + int(self._ov_tw * s), y - int(self._ov_th * s),
+                             GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
+
+    # ---- looks
+    def remote_commands(self) -> dict:
+        """The launcher's Looks page, through framegen/remote.py: `look-show <look JSON>` shows a look it's editing,
+        `look-hide` goes back to the settings' look, `looks-reload` reads the user's looks again after a change."""
+        import json
+
+        def show(text: str) -> None:
+            try:
+                self.looks.show(json.loads(text))
+            except ValueError as e:
+                print(f"[looks] can't show that look: {e}")
+
+        def reload(_text: str) -> None:
+            self.looks.reload()
+            if self.remote is not None:
+                self.remote.publish()  # the new list of looks
+
+        return {"look-show": show, "look-hide": lambda _text: self.looks.show(None), "looks-reload": reload}
+
+    def baked(self, frame):
+        """The frame just shown, with the look drawn on at the stream's size: for instant replay with "Looks in
+        clips" on (framegen/replay.py). Call right after write(), on its thread. The frame itself when no look is on,
+        or when the frames aren't on the graphics card (then it says so, once)."""
+        plan = self.look_gl.plan(self.looks.current(), self.looks.rev) if self.look_gl is not None else None
+        if plan is None:
+            return frame
+        if not (_is_cuda(frame) and self.interop is not None):
+            if not self._bake_said:
+                self._bake_said = True
+                print("[looks] Looks in clips needs the frames on the graphics card; clips are saved without it")
+                self.toast("Clips are saved without the look (it needs the frames on the graphics card)", 5.0)
+            return frame
+        import torch
+        GL = self.GL
+        if self._bake is None:
+            from .glcuda import CudaGLReader
+            tex = GL.glGenTextures(1)
+            GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, self.w, self.h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
+            fbo = GL.glGenFramebuffers(1)
+            GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, fbo)
+            GL.glFramebufferTexture2D(GL.GL_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, tex, 0)
+            self._bake = (tex, fbo, CudaGLReader(int(tex), self.w, self.h))
+        tex, fbo, reader = self._bake
+        self.look_gl.draw(plan, self.tex, False, fbo, 0, 0, self.w, self.h, False, self._frame_no, "bake")
+        GL.glViewport(0, 0, *self.glfw.get_framebuffer_size(self.win))
+        rgba = torch.empty((self.h, self.w, 4), dtype=torch.uint8, device=frame.device)
+        reader.read(rgba)
+        return rgba[..., [2, 1, 0]]  # BGR, like the frame
+
+    def close(self) -> None:
+        self.GL.glFinish()
+        self.timer._collect()
+        if self.timer.ms:
+            parts = [f"{k} p50 {np.median(v):.2f} / p95 {np.percentile(v, 95):.2f} ms (n={len(v)})"
+                     for k, v in sorted(self.timer.ms.items(), key=lambda kv: -len(kv[1]))]
+            print("[display] GPU time to draw each frame: " + "; ".join(parts))
+        self.timer.close()
+        self._unwatch()
+        self.menu_panel.close()
+        self.toast_panel.close()
+        if self.vsr is not None:
+            self._vsr_target_free()
+            self.vsr.close()
+            v = self.vsr.gpu_ms
+            if v:
+                print(f"[display] RTX VSR q{self.vsr.quality} GPU time per frame: p50 {np.median(v):.2f} / "
+                      f"p95 {np.percentile(v, 95):.2f} ms (n={len(v)})")
+        if self.fsr is not None:
+            self.fsr.close()
+        if self._bake is not None:
+            self._bake[2].close()
+            self.GL.glDeleteFramebuffers(1, [self._bake[1]])
+            self.GL.glDeleteTextures([self._bake[0]])
+        if self.look_gl is not None:
+            self.look_gl.close()
+        self.looks.close()
+        if self.interop is not None:
+            self.interop.close()
+        if self.dx is not None:
+            self.dx.close()
+            self.glfw.destroy_window(self.glwin)
+        self.glfw.destroy_window(self.win)
+        self.glfw.terminate()
+
+
+class WindowSink:
+    """OpenCV window (fallback; its GDI paint costs 5-12 ms/frame, too slow for 60 Hz on Windows).
+    Keys: i = toggle interpolation, s = stats overlay, f = fullscreen, r/b = save the instant replay (plain or
+    before & after), q/Esc = quit."""
+
+    NAME = "SmoovPlay"
+
+    def __init__(self, w: int, h: int) -> None:
+        cv2.namedWindow(self.NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+        cv2.resizeWindow(self.NAME, min(w, 1600), min(h, 900))
+        self.full = False
+        self.overlay = True
+
+    gpu = False
+
+    def write(self, frame, text: str | None = None) -> str | None:
+        frame = _host(frame)
+        if self.overlay and text:
+            frame = _draw_text(frame, text)
+        cv2.imshow(self.NAME, frame)
+        k = cv2.waitKey(1) & 0xFF
+        if k in (ord("q"), 27):
+            return "quit"
+        if k == ord("f"):
+            self.full = not self.full
+            cv2.setWindowProperty(self.NAME, cv2.WND_PROP_FULLSCREEN,
+                                  cv2.WINDOW_FULLSCREEN if self.full else cv2.WINDOW_NORMAL)
+        if k == ord("s"):
+            self.overlay = not self.overlay
+        if k == ord("i"):
+            return "toggle_interp"
+        if k in (ord("r"), ord("b")):
+            return "save_replay" if k == ord("r") else "save_compare"
+        return None
+
+    def close(self) -> None:
+        cv2.destroyWindow(self.NAME)
+
+
+class FileSink:
+    """Encodes output frames to a 60 fps file with NVENC (falls back to x264)."""
+
+    def __init__(self, path: str, w: int, h: int, fps: float = 60.0) -> None:
+        enc = ["-c:v", "h264_nvenc", "-preset", "p5", "-cq", "18"] if _has_nvenc() else \
+              ["-c:v", "libx264", "-preset", "veryfast", "-crf", "16"]
+        self.p = subprocess.Popen(
+            ["ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{w}x{h}",
+             "-r", str(fps), "-i", "-", *enc, "-pix_fmt", "yuv420p", path],
+            stdin=subprocess.PIPE)
+
+    gpu = False
+
+    def write(self, frame, text: str | None = None) -> None:
+        self.p.stdin.write(memoryview(np.ascontiguousarray(_host(frame))))
+
+    def close(self) -> None:
+        self.p.stdin.close()
+        self.p.wait()
+
+
+class MultiSink:
+    def __init__(self, *sinks) -> None:
+        self.sinks = [s for s in sinks if s is not None]
+        # Hand out CUDA tensors if any sink can use them directly; the others copy to the CPU themselves.
+        self.gpu = any(getattr(s, "gpu", False) for s in self.sinks)
+
+    def write(self, frame, text: str | None = None):
+        cmd = None
+        for s in self.sinks:
+            cmd = s.write(frame, text) or cmd
+        return cmd
+
+    def wait(self, w: Waiting) -> str | None:
+        cmd = None
+        for s in self.sinks:
+            if hasattr(s, "wait"):
+                cmd = s.wait(w) or cmd
+        return cmd
+
+    def toast(self, text: str, seconds: float = 2.0) -> None:
+        for s in self.sinks:
+            if hasattr(s, "toast"):
+                s.toast(text, seconds)
+
+    def close(self) -> None:
+        for s in self.sinks:
+            s.close()
+
+
+_nvenc: bool | None = None
+
+
+def _has_nvenc() -> bool:
+    global _nvenc
+    if _nvenc is None:
+        r = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=s=256x256:d=0.1",
+                            "-c:v", "h264_nvenc", "-f", "null", "-"], capture_output=True)
+        _nvenc = r.returncode == 0
+    return _nvenc

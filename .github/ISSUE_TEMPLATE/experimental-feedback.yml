@@ -1,0 +1,46 @@
+name: Feedback on an Experimental feature
+description: How an Experimental feature worked for you (Low delay window presentation now; capture cards, AMD Radeon and Intel Arc cards, and window capture as they arrive)
+title: "[Experimental] "
+labels: ["experimental", "feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying it. Experimental features are built from the best information we have, without the
+        hardware to test every setup, so reports like yours are how they get better. Whether it worked or not, it
+        helps. SmoovPlay's **Send feedback** button has already copied your diagnostics: paste them at the end.
+  - type: input
+    id: feature
+    attributes:
+      label: Feature
+      description: Which Experimental feature you tried.
+      placeholder: Capture card
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: How did it go?
+      options:
+        - It worked well
+        - It worked, with problems (below)
+        - It didn't work
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Your hardware
+      description: Model names of what you used (capture card, graphics card, console), and the console's video output if you know it.
+      placeholder: "Capture card model, console at 1080p 60 Hz, HDR off"
+  - type: textarea
+    id: details
+    attributes:
+      label: What happened
+      description: What you saw, what you expected, and anything you tried. A screenshot or a short clip helps.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: Paste what Send feedback (or Copy diagnostics, on SmoovPlay's Help page) put on your clipboard. It leaves out your Windows user name, but have a look before posting.
+      render: text

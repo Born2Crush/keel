@@ -1,0 +1,12 @@
+# Install CUDA PyTorch first (the plain PyPI wheel is CPU-only on Windows):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+torch>=2.6
+numpy
+opencv-python
+glfw
+PyOpenGL
+av
+sounddevice
+# TensorRT engines (optional): tensorrt-cu12, onnx, onnxscript; see installer/requirements-runtime.txt
+# AMD / Intel cards (DirectML, Experimental): onnxruntime-directml, onnx
+pytest

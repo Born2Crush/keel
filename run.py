@@ -1,0 +1,680 @@
+"""SmoovPlay's pipeline: real-time frame generation (a 30 fps game shown at 60, 90 or 120 fps) and upscaling, for
+PS5 Remote Play, a capture card (Experimental) or a video file.
+
+Examples
+--------
+  # Simulate PS5 output from a native-60fps recording, watch it in a window at real speed:
+  python run.py testdata/clip_1080p60.mp4 --display --realtime
+
+  # Same, as fast as possible, write the result and score it against the real dropped frames:
+  python run.py testdata/clip_1080p60.mp4 --out out/clip_interp.mp4 --score
+
+  # A capture card (Experimental, not tested with a real card yet): by name or number from --list-devices, or a
+  # recording standing in for one:
+  python run.py --capture "USB3.0 Capture" --display
+  python run.py --capture 0 --display
+  python run.py --capture testdata/clip_1080p60.mp4 --test-mode --display
+
+  # Another app's window (Experimental): Sony's PS Remote Play app, the Xbox app, Moonlight, a browser... by preset,
+  # program, handle or part of its title (python -m framegen.window --list):
+  python run.py --source window --window ps-remote-play --display
+  python run.py --source window --window "exe:XboxPcApp.exe" --display
+
+  # PS5 Remote Play through chiaki-ng's frame tap (start chiaki-ng with CHIAKI_FRAMETAP=1, see chiaki_tap/):
+  python run.py --chiaki --display --chiaki-log out/session.csv
+
+  # Test mode: a 60 fps PS5 game played as if it were 30 fps, each generated frame scored against the real
+  # one, with a plain-language report (also in the window's menu: Simulate a 30 fps game):
+  python run.py --chiaki --test-mode --display --results out/results.txt
+
+  # NVIDIA VFG in place of RIFE (RTX 40/50; set up with framegen/vfg_setup.py, folder in FRAMEGEN_VFX_PATH):
+  python run.py --chiaki --display --model vfg --vfg-quality medium
+
+  # The sources, for the launcher (--source picks one: chiaki, capture, window or file):
+  python run.py --list-sources --json
+
+Settings (frame rate, upscaler, ...) are chosen in the window's menu (key M) and saved to
+%APPDATA%\\framegen\\settings.json. Command-line flags override them for one run without saving.
+"""
+
+from __future__ import annotations
+
+import sys
+
+if __name__ == "__main__" and "--list-sources" in sys.argv:  # answered before the heavy imports below
+    from framegen.sources import main as list_sources
+    sys.exit(list_sources(sys.argv[1:]))
+
+import argparse
+import gc
+import threading
+import time
+from pathlib import Path
+
+import cv2
+import torch
+
+from framegen.interpolator import MODELS, RifeInterpolator
+from framegen.io import (TICK, CaptureSource, FileSink, FileSource, GLWindowSink, MultiSink, Ps5SimSource,
+                         WindowSink)
+from framegen.pipeline import Pipeline
+from framegen.settings import BY_KEY, DEFAULT_PATH, Settings
+from framegen.sources import TestMode, make_detector
+from framegen.vfg import vfg_unavailable
+
+# Test mode's report says this when it includes NVIDIA VFG: the launcher shows it, but Copy diagnostics leaves it
+# out (installer/launcher Diagnostics looks for this text), because NVIDIA's licence forbids sharing VFG's results.
+PRIVATE_RESULTS = ("These results include NVIDIA VFG. NVIDIA's licence doesn't allow sharing them, so they stay on "
+                   "this PC: Copy diagnostics leaves them out.")
+WATCHDOG_S = 8.0  # the video loop stuck this long while playing: the log gets where each thread is
+
+
+def _mmss(seconds: float) -> str:
+    return f"{int(seconds) // 60}:{int(seconds) % 60:02d}"
+
+
+def gpu_name() -> str:
+    """The graphics card doing the work: CUDA's, or (without it) the one DirectML picks."""
+    if torch.cuda.is_available():
+        return torch.cuda.get_device_name(0)
+    try:
+        from framegen.dml import pick_adapter
+        return pick_adapter()["name"]
+    except Exception:  # noqa: BLE001
+        return "unknown"
+
+
+def write_results(path: str, sessions: list, size: str, settings: Settings) -> bool:
+    """Test mode's report, in plain words (the launcher shows it after a session and adds it to Copy diagnostics).
+    sessions: (session config, Stats) for each session of this run that was tested; a settings change that needs
+    a restart (e.g. 120 fps) starts a new one. Written whole each time, via a temporary file, so it's never seen
+    half-written."""
+    sessions = [(cfg, st) for cfg, st in sessions if st is not None and (st.simulated or st.psnr_interp)]
+    if not sessions:
+        return False
+    played = sum(len(st.busy_ms) for _, st in sessions) * TICK
+    simulated = sum(st.simulated for _, st in sessions) * TICK
+    lines = [f"SmoovPlay test results, {time.strftime('%Y-%m-%d %H:%M')}",
+             f"Stream: {size}, played {_mmss(played)}"
+             + (f", {_mmss(simulated)} of it as a simulated 30 fps game" if simulated else ""),
+             f"Graphics card: {gpu_name()}",
+             f"Upscaler: {BY_KEY['scaler'].name(settings.scaler)}"]
+    if any(cfg["model"] == "vfg" for cfg, _ in sessions):
+        lines += [PRIVATE_RESULTS]
+    for i, (cfg, st) in enumerate(sessions, 1):
+        head = f"{f'Part {i}' if len(sessions) > 1 else 'AI engine'}: "
+        if cfg.get("engine") == "dml":
+            lines += ["", head + f"DirectML (Experimental), motion detail {cfg['motion']}, RIFE {cfg['model']}"]
+            continue
+        if cfg["model"] == "vfg":
+            lines += ["", head + f"NVIDIA VFG, quality {BY_KEY['vfg_quality'].name(cfg['vfg_quality'])}"]
+            lines += st.results(full_motion=False)  # no motion detail setting: the advice suggests a lower rate
+            continue
+        engine = "TensorRT" if cfg["engine"] == "trt" else "PyTorch"
+        motion = {1.0: "Full", 0.5: "Half"}.get(cfg["motion"], f"{cfg['motion']:g}x")
+        lines += ["", head + f"{engine}, motion detail {motion}, RIFE {cfg['model']}"]
+        lines += st.results(full_motion=cfg["motion"] >= 1)
+    try:
+        out = Path(path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        tmp = out.with_name(out.name + ".tmp")
+        tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        tmp.replace(out)
+        return True
+    except OSError as e:
+        print(f"[results] couldn't write {path}: {e}")
+        return False
+
+
+def write_stream_check(src, results: str | None) -> None:
+    """Remote Play: how well the size check read this game (framegen.streamcheck), into the log (so Copy
+    diagnostics has it) and, when the launcher asked for results, beside them as stream-check-<stamp>.txt."""
+    check = getattr(src, "check", None)
+    lines = check.report() if check is not None else []
+    if not lines:
+        return
+    print("\n".join(lines))
+    if not results:
+        return
+    out = Path(results)
+    path = out.with_name(out.name.replace("results-", "stream-check-", 1) if "results-" in out.name
+                         else "stream-check.txt")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"SmoovPlay stream check, {time.strftime('%Y-%m-%d %H:%M')}\n" + "\n".join(lines) + "\n",
+                        encoding="utf-8")
+        print(f"[results] stream check -> {path}")
+    except OSError as e:
+        print(f"[results] couldn't write {path}: {e}")
+
+
+def open_capture(a, w: int, h: int, test):
+    """--capture: a card by name or number (framegen.capture), or a file standing in for one."""
+    if a.capture_backend == "opencv":
+        device = int(a.capture) if a.capture.isdigit() else a.capture
+        return CaptureSource(device, w, h, fourcc=a.capture_fourcc, test=test)
+    from framegen import capture
+    colour = {"auto": "auto", "709-limited": (True, False), "709-full": (True, True), "601-limited": (False, False),
+              "601-full": (False, True)}[a.capture_colour]
+    sound = None if a.capture_audio == "off" else sound_player()
+    if Path(a.capture).is_file():  # a recording standing in for a card: decoded, sent through the raw NV12 path
+        return capture.CardSource.video_file(a.capture, test=test, colour=colour, audio=sound)
+    name = a.capture
+    devices = capture.list_devices()
+    if name.isdigit():
+        video = [d for d in devices if d.kind in ("video", "unknown")]
+        if int(name) >= len(video):
+            sys.exit(f"[capture] no capture device {name}: Windows lists {len(video)} (see --list-devices)")
+        name = video[int(name)].name
+    audio_device = None
+    if sound is not None:
+        audio = [d.name for d in devices if d.kind == "audio"]
+        if a.capture_audio == "auto":
+            audio_device = capture.pick_audio(name, devices)
+            if audio_device is None:
+                print("[capture] no sound device named like the card, so no sound: pick one with --capture-audio "
+                      "(see --list-devices)")
+        elif a.capture_audio.isdigit() and int(a.capture_audio) < len(audio):
+            audio_device = audio[int(a.capture_audio)]
+        else:
+            audio_device = a.capture_audio
+    mode = None
+    if a.capture_format != "auto":
+        modes = [m for m in capture.list_modes(name) if m.fmt == a.capture_format]
+        mode, note = capture.pick_mode(modes, w, h, a.capture_fps)
+        if mode is None:
+            sys.exit(f"[capture] {name} has no {a.capture_format} mode ({note})")
+    return capture.CardSource.open(name, w, h, a.capture_fps, mode=mode, test=test, colour=colour,
+                                   audio_device=audio_device, audio=sound)
+
+
+def sound_player():
+    """What plays a capture card's sound (framegen.audio.Player), or None when sounddevice isn't installed."""
+    try:
+        import sounddevice  # noqa: F401
+    except Exception as e:  # noqa: BLE001 - not installed, or PortAudio missing
+        print(f"[capture] no sound: sounddevice isn't available ({str(e)[:80]})")
+        return None
+    from framegen.audio import Player
+    return Player
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("video", nargs="?", help="input video file")
+    ap.add_argument("--source", choices=["chiaki", "capture", "window", "file"],
+                    help="where frames come from (default: from the flags below; a video file if one is given)")
+    ap.add_argument("--list-sources", action="store_true",
+                    help="list the sources and exit; with --json, as JSON for the launcher")
+    ap.add_argument("--json", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--window", metavar="APP",
+                    help="--source window: the app's window, as a preset (ps-remote-play, xbox, moonlight), exe:NAME, "
+                         "hwnd:N or part of its title (framegen/window.py, Experimental)")
+    ap.add_argument("--capture", metavar="NAME|N|FILE",
+                    help="a capture card by name or number (from --list-devices), or a video file standing in for "
+                         "one (played in real time through the capture path, to test it without a card)")
+    ap.add_argument("--capture-size", default="1920x1080")
+    ap.add_argument("--capture-fps", type=float, default=60.0)
+    ap.add_argument("--capture-format", default="auto",
+                    help="auto (NV12, then YUY2, then MJPEG: framegen/capture.py) or one the card lists")
+    ap.add_argument("--capture-colour", default="auto", choices=["auto", "709-limited", "709-full", "601-limited",
+                                                                    "601-full"],
+                    help="how to read the card's colours (auto: limited range unless the card says full; BT.709 "
+                         "from 720p up)")
+    ap.add_argument("--capture-audio", default="auto", metavar="auto|off|NAME|N",
+                    help="the card's sound, played on this PC in step with the picture: auto (the sound device named "
+                         "like the card), off, or a sound device by name or number from --list-devices")
+    ap.add_argument("--capture-backend", default="pyav", choices=["pyav", "opencv"],
+                    help="pyav: FFmpeg's DirectShow input, raw frames converted on the GPU (default); opencv: the "
+                         "older OpenCV path, for comparison")
+    ap.add_argument("--capture-fourcc", default="MJPG", help="[opencv backend] MJPG, YUY2 or NV12")
+    ap.add_argument("--list-devices", action="store_true", help="list capture devices and exit")
+    ap.add_argument("--chiaki", action="store_true", help="PS5 Remote Play frames from chiaki-ng's frame tap")
+    ap.add_argument("--chiaki-decoder", default="cuda", choices=["cuda", "sw", "d3d11va"],
+                    help="how to decode the Remote Play stream (default cuda: NVDEC, frames stay on the GPU, ~1.5 ms "
+                         "a frame; sw takes ~10 ms a frame on gameplay)")
+    ap.add_argument("--chiaki-log", metavar="CSV", help="write one row per tick: stream facts and pipeline decisions")
+    ap.add_argument("--minimize-chiaki", action=argparse.BooleanOptionalAction, default=None,
+                    help="minimise chiaki-ng's window while ours is up (it keeps streaming but stops drawing video "
+                         "nobody sees, freeing GPU time); restored on exit. Default: the saved setting (on)")
+    ap.add_argument("--test-mode", "--chiaki-as-30", dest="test_mode", action="store_true",
+                    help="test mode: play a 60 fps game as if it were 30 fps by keeping every other frame, and rate "
+                         "each generated frame against the real one that was left out (also in the window's menu: "
+                         "Simulate a 30 fps game). Remote Play, a capture card, or a video file with --raw")
+    ap.add_argument("--chiaki-tap", default=None, help=argparse.SUPPRESS)  # another shared-memory name, for tests
+    ap.add_argument("--raw", action="store_true",
+                    help="play the file's frames as-is (a real capture recording) instead of simulating PS5 30fps")
+    ap.add_argument("--realtime", action="store_true", help="pace file input at 60 Hz like a capture card")
+    ap.add_argument("--max-ticks", type=int)
+    ap.add_argument("--hitch", type=float, default=0.0, help="[sim] probability a game frame is held 3 ticks")
+    ap.add_argument("--noise", type=float, default=0.0, help="[sim] gaussian noise sigma added per tick")
+    ap.add_argument("--model", default=None, choices=list(MODELS) + ["vfg"],
+                    help="RIFE version, or vfg for NVIDIA VFG (default: the saved setting, 4.22.lite). The other "
+                         "RIFE versions are for testing")
+    ap.add_argument("--vfg-quality", default=None, choices=list(BY_KEY["vfg_quality"].choices),
+                    help="NVIDIA VFG's quality mode (default: the saved setting, medium)")
+    ap.add_argument("--scale", type=float, default=None, help="flow resolution scale (default 1.0, 0.5 above 1440p)")
+    ap.add_argument("--fp32", action="store_true")
+    ap.add_argument("--engine", choices=["auto", "trt", "torch"], default=None,
+                    help="run the flow network with TensorRT (engine built once per resolution, cached in models/trt) "
+                         "or PyTorch; auto = TensorRT at full motion detail if installed, PyTorch at half (faster "
+                         "there). Default: the saved setting (auto)")
+    ap.add_argument("--trt", action="store_true", help="same as --engine trt")
+    ap.add_argument("--no-graph", action="store_true", help="disable CUDA graphs")
+    ap.add_argument("--dup-threshold", type=float, default=2.0)
+    ap.add_argument("--off", action="store_true", help="start with interpolation disabled (toggle with 'i')")
+    ap.add_argument("--display", action="store_true", help="show output in an OpenGL window")
+    ap.add_argument("--settings", default=str(DEFAULT_PATH), metavar="JSON",
+                    help="settings file the menu loads and saves (default %(default)s); 'none' = defaults, unsaved")
+    # These override the saved settings for this run (not saved); the menu can change them live.
+    ap.add_argument("--vsync", action=argparse.BooleanOptionalAction, default=None,
+                    help="vsync the window (use with G-Sync/FreeSync displays)")
+    ap.add_argument("--fullscreen", action=argparse.BooleanOptionalAction, default=None, help="start fullscreen")
+    ap.add_argument("--present", default=None, choices=BY_KEY["present"].choices,
+                    help="how the window presents: gl = OpenGL's own, dxgi = DXGI flip model (Experimental: less "
+                         "delay in a window, G-Sync in a window). Default: the saved setting")
+    ap.add_argument("--steady-hud", action=argparse.BooleanOptionalAction, default=None,
+                    help="keep unchanged parts of the picture (HUD, map) as the game drew them. Default: the saved setting")
+    ap.add_argument("--scaler", default=None, choices=["fsr", "vsr", "bilinear"],
+                    help="how the window upscales when it is bigger than the frame (cycle live with 'u'); "
+                         "vsr = NVIDIA RTX Video Super Resolution, needs the RTX Video SDK (framegen/rtxvsr.py)")
+    ap.add_argument("--vsr-quality", type=int, default=None, choices=[1, 2, 3, 4],
+                    help="RTX VSR quality: 1 low ... 4 ultra (more GPU time per frame)")
+    ap.add_argument("--fsr-sharpness", type=float, default=None, choices=BY_KEY["fsr_sharpness"].choices,
+                    help="FSR 1 sharpening, in stops below maximum: 0 = sharpest, 1 = half, 2 = quarter")
+    ap.add_argument("--hz", type=int, default=None, choices=[60, 90, 120],
+                    help="output rate for a 30 fps game: 120 = 3 generated frames per real one (half-res flow by "
+                         "default), 90 = 2 (needs a VRR/G-Sync screen or a 90 Hz mode to look even). Needs --display; "
+                         "falls back to 60 Hz output whenever it can't keep up")
+    ap.add_argument("--display-cv", action="store_true", help="use the (slow) OpenCV window instead of OpenGL")
+    ap.add_argument("--out", help="write output video")
+    ap.add_argument("--score", action="store_true", help="[sim] PSNR of interpolated frames vs real dropped frames")
+    ap.add_argument("--save-worst", metavar="JPG", help="[with --score] save prev | RIFE | real | next for the worst frame")
+    ap.add_argument("--control", action="store_true",
+                    help="take settings commands on stdin and print [settings-state] lines (the launcher's Settings "
+                         "page; see framegen/remote.py)")
+    ap.add_argument("--results", metavar="TXT",
+                    help="when test mode (a simulated 30 fps game) or --score was used, write a plain-language report "
+                         "of performance and quality here: every 10 s while playing, and at the end")
+    a = ap.parse_args()
+
+    if a.list_devices:
+        from framegen.capture import main as capture_main
+        return capture_main(["--list"] + (["--json"] if a.json else []))
+    # Without NVIDIA's CUDA (an AMD or Intel card), RIFE runs through DirectML (framegen/dml.py, Experimental): frames
+    # stay on the CPU between steps, and Remote Play is decoded with Direct3D 11 instead of NVDEC.
+    dml_mode = not torch.cuda.is_available()
+    if dml_mode:
+        from framegen import dml
+        why = dml.unavailable_reason()
+        if why:
+            print("SmoovPlay needs an NVIDIA RTX card (CUDA), or DirectML for AMD and Intel cards (Experimental), and "
+                  f"neither works here: {why}. Update the graphics driver, then try again.", file=sys.stderr)
+            return 1
+        print(f"[run] no NVIDIA CUDA here: RIFE runs through DirectML (Experimental) on {dml.pick_adapter()['name']}")
+        if a.chiaki_decoder == "cuda":
+            a.chiaki_decoder = "d3d11va"
+
+    kind = a.source or ("chiaki" if a.chiaki else "capture" if a.capture is not None else "file" if a.video else None)
+    # Test mode ("Simulate a 30 fps game") works with any 60 Hz source; a video file simulates a PS5 by itself
+    # unless --raw plays it as-is.
+    test = TestMode(a.test_mode) if kind in ("chiaki", "capture") or (kind == "file" and a.raw) else None
+    if a.test_mode and test is None:
+        ap.error("--test-mode needs Remote Play, a capture card, or a video file with --raw")
+    if kind == "chiaki":
+        from framegen.chiaki_tap import NAME, ChiakiSource
+        src = ChiakiSource(a.chiaki_decoder, wait_s=600, log_path=a.chiaki_log, tap_name=a.chiaki_tap or NAME,
+                           test=test)
+    elif kind == "capture":
+        if a.capture is None:
+            ap.error("--source capture needs --capture N (a device) or --capture FILE")
+        cw, ch = map(int, a.capture_size.split("x"))
+        src = open_capture(a, cw, ch, test)
+    elif kind == "window":
+        if not a.window:
+            ap.error("--source window needs --window APP (python -m framegen.window --list shows the windows)")
+        from framegen.sources import Clock60
+        from framegen.window import open_window
+        try:
+            src = Clock60(open_window(a.window))  # the app draws when it likes: put it on a 60 Hz beat
+        except RuntimeError as e:
+            print(f"[window] {e}", file=sys.stderr)
+            return 1
+    elif kind == "file" and a.video:
+        src = (FileSource(a.video, a.realtime, a.max_ticks, test=test) if a.raw else
+               Ps5SimSource(a.video, a.realtime, a.hitch, a.noise, a.max_ticks))
+    else:
+        ap.error("give a video file, --capture N or --chiaki")
+    print(f"[run] source: {src.info.name}")
+
+    settings = Settings() if a.settings.lower() == "none" else Settings.load(Path(a.settings))
+    for key, value in (("hz", a.hz), ("scaler", a.scaler), ("vsr_quality", a.vsr_quality),
+                       ("fsr_sharpness", a.fsr_sharpness), ("engine", "trt" if a.trt else a.engine),
+                       ("interp", False if a.off else None), ("vsync", a.vsync), ("fullscreen", a.fullscreen),
+                       ("minimize_chiaki", a.minimize_chiaki), ("simulate_30", True if a.test_mode else None),
+                       ("steady_hud", a.steady_hud), ("vfg_quality", a.vfg_quality), ("present", a.present)):
+        if value is not None:
+            settings.override(key, value)
+    # --model: one of the settings' choices, or another RIFE version for testing (not something the menu offers)
+    test_model = a.model if a.model is not None and a.model not in BY_KEY["model"].choices else None
+    if a.model is not None and test_model is None:
+        settings.override("model", a.model)
+    if test is not None:  # the menu's "Simulate a 30 fps game" switches test mode live
+        settings.watch(lambda key: test.set_on(settings.simulate_30) if key == "simulate_30" else None)
+    if settings.hz > 60 and (a.out or not a.display):
+        if a.hz is not None:
+            ap.error("--hz 90/120 needs --display, and doesn't write --out yet")
+        print(f"[run] output {settings.hz} Hz needs --display without --out; 60 Hz this run")
+        settings.override("hz", 60)
+
+    from framegen.trt import auto_engine, trt_available
+    has_trt = trt_available()
+    if settings.engine == "trt" and not has_trt:
+        print("[run] TensorRT isn't installed (see framegen/trt.py); using PyTorch")
+    vfg_why = [vfg_unavailable()]  # why NVIDIA VFG can't be used ("" if it can); a failed start sets it too
+    rife = BY_KEY["model"].default
+    if settings.model == "vfg" and vfg_why[0]:
+        print(f"[run] {vfg_why[0]} Using {BY_KEY['model'].name(rife)}.")
+        settings.override("model", rife)  # this run only: the saved choice comes back once VFG is set up
+
+    def session_config() -> dict:
+        """What a session is built from; a restart is needed when this changes (keys: settings.SPECS)."""
+        if (test_model or settings.model) == "vfg" and not dml_mode:
+            return {"model": "vfg", "vfg_quality": settings.vfg_quality}
+        if a.scale is not None:
+            scale = a.scale
+        else:  # At 120 Hz three frames per 33 ms don't fit at full-resolution flow on an RTX 4070 Ti SUPER (~54 ms).
+            scale = {"full": 1.0, "half": 0.5}.get(settings.motion) or (
+                0.5 if src.h > 1440 or settings.hz == 120 else 1.0)
+        engine = auto_engine(scale) if settings.engine == "auto" else settings.engine
+        if dml_mode:
+            engine = "dml"
+        elif not has_trt:
+            engine = "torch"
+        model = test_model or settings.model
+        return {"engine": engine, "motion": scale, "model": BY_KEY["model"].default if model == "vfg" else model}
+
+    started: dict = {}
+
+    def restart_reasons() -> list[str]:
+        cfg_ = session_config()
+        if cfg_["model"] != started.get("model"):  # RIFE <-> VFG: the other's settings don't count as reasons
+            return [BY_KEY["model"].label]
+        return [BY_KEY[k].label for k, v in cfg_.items() if v != started.get(k)]
+
+    def build(cfg: dict):
+        if cfg["model"] == "vfg":
+            from framegen.vfg import VfgInterpolator
+            return VfgInterpolator(src.w, src.h, cfg["vfg_quality"])
+        if cfg["engine"] == "dml":
+            from framegen.dml import DmlInterpolator
+            return DmlInterpolator(src.w, src.h, cfg["model"], cfg["motion"])
+        return RifeInterpolator(src.w, src.h, cfg["model"], cfg["motion"], fp16=not a.fp32, cuda_graph=not a.no_graph,
+                                backend=cfg["engine"])
+
+    def build_or_rife(cfg: dict, busy=lambda fn, text: fn()):
+        """build(cfg); if NVIDIA VFG fails to start (e.g. a broken install or driver), RIFE instead, so play goes on.
+        Returns (cfg, interpolator)."""
+        try:
+            return cfg, busy(lambda: build(cfg), "Starting NVIDIA VFG" if cfg["model"] == "vfg" else None)
+        except Exception as e:  # noqa: BLE001
+            if cfg["model"] != "vfg":
+                raise
+            vfg_why[0] = f"NVIDIA VFG couldn't start: {str(e)[:200]}"
+            print(f"[run] {vfg_why[0]}; using {BY_KEY['model'].name(rife)}")
+            settings.override("model", rife)
+            model_rows()
+            cfg = session_config()
+            return cfg, busy(lambda: build(cfg), f"Starting {BY_KEY['model'].name(rife)}")
+
+    def describe(cfg: dict) -> str:
+        if cfg["model"] == "vfg":
+            return f"NVIDIA VFG quality={cfg['vfg_quality']}"
+        if cfg["engine"] == "dml":
+            return f"RIFE {cfg['model']} scale={cfg['motion']}  DirectML"
+        return (f"RIFE {cfg['model']} scale={cfg['motion']} {'fp32' if a.fp32 else 'fp16'} "
+                f"graphs={'off' if a.no_graph else 'on'}  {'TensorRT' if cfg['engine'] == 'trt' else 'PyTorch'}")
+
+    def label_of(cfg: dict) -> str:  # the overlay's first words
+        if cfg["model"] == "vfg":
+            return f"VFG {cfg['vfg_quality']}"
+        engine = {"trt": " TRT", "dml": " DML"}.get(cfg["engine"], "")
+        return f"RIFE {cfg['model']}{engine}{' half' if cfg['motion'] < 1 else ''}"
+
+    window = None
+
+    def model_rows(key: str = "model") -> None:
+        """Grey out the rows the chosen model doesn't use (the window's menu and the launcher's Settings page)."""
+        rows = getattr(window, "unavailable", None)
+        if key not in ("model", "vfg_quality") or rows is None:
+            return
+        rows.clear()
+        rows.update(unavailable)
+        if (test_model or settings.model) == "vfg":
+            for k in ("engine", "motion", "steady_hud"):
+                rows.setdefault(k, "Not used with NVIDIA VFG.")
+        else:
+            rows.setdefault("vfg_quality", vfg_why[0] or "Only used with NVIDIA VFG.")
+        if hasattr(window, "choices"):
+            window.choices["model"] = tuple(m for m in BY_KEY["model"].choices if m != "vfg" or not vfg_why[0])
+
+    cfg = session_config()
+    print(f"[run] {src.w}x{src.h}  {describe(cfg)}  output {settings.hz} Hz")
+    cfg, interp = build_or_rife(cfg)
+
+    unavailable = {}
+    if kind != "chiaki":
+        unavailable["minimize_chiaki"] = "Only used with PS5 Remote Play."
+    if test is None:
+        unavailable["simulate_30"] = ("Not with window capture yet." if kind == "window" else
+                                      "Video files already play as a 30 fps game.")
+    if kind == "window":
+        unavailable["present"] = "Window capture draws its picture over the app's with the standard presentation."
+    if a.scale is not None:
+        unavailable["motion"] = f"Set to {a.scale} by --scale on the command line."
+    if test_model:
+        unavailable["model"] = f"RIFE {test_model}, set by --model on the command line, for testing."
+    if dml_mode:
+        unavailable["engine"] = "Without an NVIDIA card, RIFE runs through DirectML (Experimental)."
+        unavailable["steady_hud"] = "Not with DirectML yet."
+        unavailable.setdefault("model", "NVIDIA VFG needs an NVIDIA RTX card.")
+    choices = {"engine": ("auto", "trt", "torch") if has_trt else ("auto", "torch"),
+               "model": tuple(m for m in BY_KEY["model"].choices if m != "vfg" or not vfg_why[0])}
+    if a.out:
+        choices["hz"] = (60,)
+        unavailable["hz"] = "90/120 fps can't be recorded with --out yet."
+    window = (WindowSink(src.w, src.h) if a.display_cv else
+              GLWindowSink(src.w, src.h, settings, restart_reasons, choices, unavailable,
+                           overlay_of=src.where if kind == "window" else None) if a.display else None)
+    sink = MultiSink(window, FileSink(a.out, src.w, src.h) if a.out else None)
+    settings.watch(model_rows)  # before Remote's own watcher, so what it publishes is already up to date
+    model_rows()
+    remote = None
+    if a.control and isinstance(window, GLWindowSink):
+        from framegen.remote import Remote
+        window.remote = remote = Remote(settings, window.allowed, window.disabled, restart_reasons,
+                                        handlers=window.remote_commands())
+
+    hidden: list[int] = []
+
+    def minimize_chiaki(key: str = "minimize_chiaki") -> None:
+        if key != "minimize_chiaki" or not (kind == "chiaki" and window is not None):
+            return
+        from framegen.winutil import SW_MINIMIZE, SW_SHOWNOACTIVATE, show, windows_of
+        if settings.minimize_chiaki and not hidden:
+            hidden[:] = windows_of("chiaki.exe")
+            show(hidden, SW_MINIMIZE)
+            print(f"[run] minimised chiaki-ng ({len(hidden)} window{'s' if len(hidden) != 1 else ''}); "
+                  "restored on exit")
+        elif not settings.minimize_chiaki and hidden:
+            show(hidden, SW_SHOWNOACTIVATE)  # back, without taking focus from our window
+            hidden.clear()
+
+    settings.watch(minimize_chiaki)
+    minimize_chiaki()
+
+    # Instant replay (framegen/replay.py): only while playing on screen. It lasts across restarts, so a restart for a
+    # setting doesn't lose what's held.
+    replay = None
+    if sink.sinks:
+        from framegen.replay import Recorder
+        replay = Recorder(settings.replay, clip=settings.replay_save, layout=settings.replay_layout,
+                          notify=getattr(sink, "toast", None), hotkeys=True, size=(src.w, src.h))
+        replay.warm_up()  # its encoders open now, not during play
+        if hasattr(src, "read_sound"):
+            replay.attach_sound(src.read_sound)
+
+        def replay_settings(key: str = "look_clips") -> None:
+            if key == "replay":
+                replay.set_length(settings.replay)
+            elif key == "replay_save":
+                replay.clip = settings.replay_save
+            elif key == "replay_layout":
+                replay.layout = settings.replay_layout
+            elif key == "look_clips":  # the look in the SmoovPlay video too, drawn by the window at the stream's size
+                replay.look = window.baked if settings.look_clips and isinstance(window, GLWindowSink) else None
+
+        settings.watch(replay_settings)
+        replay_settings()
+
+    # --results: rewritten every 10 s while playing (the launcher's Stop ends the process without warning) and at
+    # the end. `done` holds finished sessions; `live` the running Pipeline (dropped before a restart frees its GPU
+    # memory) and what it runs with.
+    done: list = []
+    live: list = [None, None]
+    size = f"{src.w}x{src.h}"
+
+    def results_now() -> bool:
+        try:
+            pipe_, cfg_ = live  # one read; the session loop clears it before moving the stats into `done`
+            running = [(cfg_, pipe_.stats)] if pipe_ is not None else []
+            return write_results(a.results, list(done) + running, size, settings)
+        except Exception as e:  # noqa: BLE001 - a report must never take the stream down
+            print(f"[results] {e}")
+            return False
+
+    stop_results = threading.Event()
+
+    def results_loop() -> None:
+        while not stop_results.wait(10):
+            results_now()
+
+    results_thread = threading.Thread(target=results_loop, name="results", daemon=True)
+    if a.results:
+        results_thread.start()
+
+    def watchdog() -> None:
+        """If the video loop stops going round while playing (it should several times a second, even with no frames
+        coming), or no frame has come for a while, says where every thread is, once per stall, so a freeze or a
+        black screen in the log says what it was stuck on."""
+        import traceback
+        home = str(Path.home())
+
+        def where(headline: str) -> None:
+            names = {t.ident: t.name for t in threading.enumerate()}
+            lines = [f"{headline} Where each thread is:"]
+            for ident, frame in sys._current_frames().items():
+                if ident == threading.get_ident():
+                    continue
+                lines.append(f"  thread {names.get(ident, ident)}:")
+                lines += ["    " + s.rstrip().replace("\n", "\n    ") for s in traceback.format_stack(frame)[-12:]]
+            print("\n".join(lines).replace(home, "~"), flush=True)  # (no user name in Copy diagnostics)
+
+        stuck = starved = False
+        while not stop_results.wait(1.0):
+            pipe_ = live[0]
+            age = time.perf_counter() - pipe_.beat if pipe_ is not None else 0.0
+            w = pipe_.waiting if pipe_ is not None else None
+            if age >= WATCHDOG_S and not stuck:
+                stuck = True
+                where(f"[watchdog] the video loop hasn't moved for {age:.0f} s.")
+            elif age < WATCHDOG_S and stuck:
+                stuck = False
+                print("[watchdog] the video loop is going again", flush=True)
+            if w is not None and w.since >= WATCHDOG_S and not starved:
+                starved = True
+                why = w.why.replace("\n", " ")
+                where(f"[watchdog] no picture from {w.what} for {w.since:.0f} s" + (f" ({why})." if why else "."))
+            elif w is None and starved:
+                starved = False
+                print("[watchdog] pictures again", flush=True)
+
+    if sink.sinks:
+        threading.Thread(target=watchdog, name="watchdog", daemon=True).start()
+
+    ticks = iter(src)  # one stream for every session, so a restart doesn't reconnect or reopen anything
+    if sink.sinks:  # playing on screen: keep frames on time when other programs are busy
+        from framegen.winutil import boost_gpu, boost_thread
+        print(f"[run] scheduling: MMCSS {'on' if boost_thread() else 'off'}, "
+              f"GPU priority {'high' if boost_gpu() else 'normal'}")
+    try:
+        while True:
+            started.clear()
+            started.update(cfg)
+            print("[run] playing")  # the launcher's cue that the video is up again after a restart
+            if remote is not None:
+                remote.publish()  # the restart list starts empty again
+            label = label_of(cfg)
+            pipe = Pipeline(interp, make_detector(src.info, a.dup_threshold))
+            live[:] = [pipe, cfg]
+            stats = pipe.run(ticks, sink if sink.sinks else None, score=a.score, label=label,
+                             on_tick=getattr(src, "log_tick", None), settings=settings,
+                             gt=test.gt if test is not None else getattr(src, "gt", None),
+                             remote=src if kind in ("chiaki", "capture") and hasattr(src, "can_press") else None,
+                             replay=replay)
+            live[:] = [None, None]  # first, so a report written meanwhile never counts this session twice
+            if a.results:
+                done.append((cfg, stats))
+            if stats.exit != "restart":
+                break
+            print(stats.summary())
+            reasons = ", ".join(restart_reasons()) or "settings"
+            if hasattr(src, "hold"):
+                src.hold(True)  # no decoding on the GPU while the pipeline is rebuilt
+            del pipe
+            interp = None
+            gc.collect()
+            torch.cuda.empty_cache()
+            cfg = session_config()
+            print(f"[run] restarting for {reasons}: {describe(cfg)}")
+            try:
+                cfg, interp = build_or_rife(cfg, lambda fn, text: window.busy(fn, f"Restarting ({reasons})"))
+            except Exception as e:  # noqa: BLE001 - e.g. a TensorRT build failure: carry on with PyTorch
+                if session_config().get("engine") != "trt":
+                    raise
+                print(f"[run] TensorRT failed ({str(e)[:300]}); using PyTorch")
+                settings.override("engine", "torch")
+                cfg = session_config()
+                interp = window.busy(lambda: build(cfg), "Restarting with PyTorch")
+            if hasattr(src, "hold"):
+                src.hold(False)
+    finally:
+        if replay is not None:
+            replay.close(wait_saves=30)  # a clip being saved is finished first
+        sink.close()
+        if kind == "chiaki" and hasattr(src, "set_audio_delay"):
+            src.set_audio_delay(0)  # chiaki-ng's sound back on time (it would also lapse once we stop)
+        if hidden:
+            from framegen.winutil import SW_RESTORE, show
+            show(hidden, SW_RESTORE)
+        src.close()
+        stop_results.set()
+        if results_thread.is_alive():
+            results_thread.join(timeout=5)  # so the last write below isn't racing one already under way
+    print(stats.summary())
+    if a.results and results_now():
+        print(f"[results] test results -> {a.results}")
+    write_stream_check(src, a.results)
+    if a.save_worst and stats.worst is not None:
+        p, tick, *imgs = stats.worst
+        tiles = [cv2.resize(im, (im.shape[1] // 2, im.shape[0] // 2), interpolation=cv2.INTER_AREA) for im in imgs]
+        for t, name in zip(tiles, ("previous real", f"RIFE ({p:.1f} dB)", "actual in-between", "next real")):
+            cv2.putText(t, name, (15, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 5, cv2.LINE_AA)
+            cv2.putText(t, name, (15, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.imwrite(a.save_worst, cv2.vconcat([cv2.hconcat(tiles[:2]), cv2.hconcat(tiles[2:])]))
+        print(f"[run] worst frame (tick {tick}) -> {a.save_worst}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

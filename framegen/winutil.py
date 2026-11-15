@@ -1,0 +1,134 @@
+"""Minimise and restore another program's windows (Windows; does nothing elsewhere).
+
+Used to minimise chiaki-ng while the pipeline's window is in front: chiaki-ng keeps streaming, decoding and
+reading the controller, but stops drawing video nobody sees, which otherwise takes GPU time from RIFE.
+"""
+from __future__ import annotations
+
+import ctypes
+import os
+import sys
+
+SW_SHOWNOACTIVATE, SW_MINIMIZE, SW_RESTORE = 4, 6, 9
+
+
+def windows_of(exe: str) -> list[int]:
+    """Visible top-level windows whose process image is `exe` (e.g. "chiaki.exe")."""
+    if sys.platform != "win32":
+        return []
+    from ctypes import wintypes as wt
+    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
+    u32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
+    u32.IsWindowVisible.argtypes = [wt.HWND]
+    k32.OpenProcess.restype = wt.HANDLE
+    k32.QueryFullProcessImageNameW.argtypes = [wt.HANDLE, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD)]
+    k32.CloseHandle.argtypes = [wt.HANDLE]
+    names: dict[int, str] = {}
+    found: list[int] = []
+
+    def image(pid: int) -> str:
+        if pid not in names:
+            names[pid] = ""
+            h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+            if h:
+                buf, n = ctypes.create_unicode_buffer(1024), wt.DWORD(1024)
+                if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)):
+                    names[pid] = os.path.basename(buf.value).lower()
+                k32.CloseHandle(h)
+        return names[pid]
+
+    @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+    def visit(hwnd, _):
+        pid = wt.DWORD()
+        u32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if u32.IsWindowVisible(hwnd) and image(pid.value) == exe.lower():
+            found.append(hwnd)
+        return True
+
+    u32.EnumWindows(visit, 0)
+    return found
+
+
+def show(hwnds: list[int], cmd: int) -> None:
+    if sys.platform == "win32":
+        for h in hwnds:
+            ctypes.windll.user32.ShowWindow(ctypes.c_void_p(h), cmd)
+
+
+def bring_to_front(hwnd: int) -> bool:
+    """Puts our window in front with the keyboard focus, so its keys work without a click first. Windows only lets
+    the program that's in front hand the focus on (SetForegroundWindow from anyone else just flashes the taskbar
+    button), and when the video window opens, the program in front is chiaki-ng, where the player just pressed
+    connect. So this briefly shares that program's input queue (AttachThreadInput), which lets the focus move.
+    Call it from the window's own thread. Returns whether our window ended up in front."""
+    if sys.platform != "win32" or not hwnd:
+        return False
+    from ctypes import wintypes as wt
+    u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
+    u32.GetForegroundWindow.restype = wt.HWND
+    u32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
+    u32.GetWindowThreadProcessId.restype = wt.DWORD
+    u32.AttachThreadInput.argtypes = [wt.DWORD, wt.DWORD, wt.BOOL]
+    for f in (u32.BringWindowToTop, u32.SetForegroundWindow, u32.SetFocus):
+        f.argtypes = [wt.HWND]
+    fg = u32.GetForegroundWindow()
+    if fg == hwnd:
+        return True
+    me = k32.GetCurrentThreadId()
+    other = u32.GetWindowThreadProcessId(fg, None) if fg else 0
+    joined = bool(other and other != me and u32.AttachThreadInput(me, other, True))
+    try:
+        u32.BringWindowToTop(hwnd)
+        u32.SetForegroundWindow(hwnd)
+        u32.SetFocus(hwnd)
+    finally:
+        if joined:
+            u32.AttachThreadInput(me, other, False)
+    return u32.GetForegroundWindow() == hwnd
+
+
+# ----------------------------------------------------------------------------- scheduling priority
+# Keeps frames on time when other programs are busy (a browser, a download, a game launcher updating). Set
+# FRAMEGEN_NO_BOOST=1 to turn both off, e.g. to measure the difference.
+_AVRT_PRIORITY_HIGH = 1
+_D3DKMT_PRIORITY_HIGH = 4  # D3DKMT_SCHEDULINGPRIORITYCLASS: idle 0, below 1, normal 2, above 3, high 4, realtime 5
+
+
+def _boost_off() -> bool:
+    return sys.platform != "win32" or os.environ.get("FRAMEGEN_NO_BOOST") == "1"
+
+
+def boost_thread(task: str = "Games") -> bool:
+    """Registers the calling thread with Windows' multimedia class scheduler (MMCSS) under `task`, at high
+    priority, so it gets the CPU on time. Lasts until the thread ends. Returns whether it worked."""
+    if _boost_off():
+        return False
+    try:
+        avrt = ctypes.WinDLL("avrt")
+        avrt.AvSetMmThreadCharacteristicsW.restype = ctypes.c_void_p
+        avrt.AvSetMmThreadCharacteristicsW.argtypes = [ctypes.c_wchar_p, ctypes.POINTER(ctypes.c_uint32)]
+        avrt.AvSetMmThreadPriority.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        index = ctypes.c_uint32(0)
+        h = avrt.AvSetMmThreadCharacteristicsW(task, ctypes.byref(index))
+        if not h:
+            return False
+        avrt.AvSetMmThreadPriority(h, _AVRT_PRIORITY_HIGH)
+        return True
+    except OSError:
+        return False
+
+
+def boost_gpu() -> bool:
+    """Raises this process's GPU scheduling priority to high (what games and video players use), so other
+    programs' GPU work doesn't delay ours. Returns whether it worked."""
+    if _boost_off():
+        return False
+    try:
+        gdi = ctypes.WinDLL("gdi32")
+        gdi.D3DKMTSetProcessSchedulingPriorityClass.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        k32 = ctypes.WinDLL("kernel32")
+        k32.GetCurrentProcess.restype = ctypes.c_void_p
+        status = gdi.D3DKMTSetProcessSchedulingPriorityClass(k32.GetCurrentProcess(), _D3DKMT_PRIORITY_HIGH)
+        return status == 0
+    except (OSError, AttributeError):
+        return False
