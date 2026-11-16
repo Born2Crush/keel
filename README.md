@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/smoovplay/smoovplay/releases/latest"><b>⬇ Download for Windows</b></a>
+  &nbsp;·&nbsp; <a href="https://smoovplay.github.io/compare/"><b>▶ Watch it at full frame rate</b></a>
   &nbsp;·&nbsp; <a href="#what-it-does">What it does</a>
   &nbsp;·&nbsp; <a href="#get-it">Install</a>
   &nbsp;·&nbsp; <a href="#how-it-works">How it works</a>
@@ -25,7 +26,12 @@
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3A4250?style=flat-square"></a>
 </p>
 
-<!-- HERO CLIP: 30 fps as sent | SmoovPlay at 90 fps, side by side -->
+<p align="center">
+  <a href="https://smoovplay.github.io/compare/"><img src="https://smoovplay.github.io/compare/media/poster60.jpg" width="880" alt="A 30 fps PS5 Remote Play stream left of a dividing line and SmoovPlay's output right of it. Opens the comparison page."></a><br>
+  <a href="https://smoovplay.github.io/compare/"><b>▶ See six clips at full frame rate</b></a>: split, side by side, or flip between the 30 fps stream
+  and SmoovPlay at 60 or 90 fps, played at their real frame rate. Most social sites play video at 60 fps or less.<br>
+  <sub>GTA VI gameplay © Rockstar Games (An Extended Look), run through SmoovPlay as a simulated Remote Play stream.</sub>
+</p>
 
 <p align="center">
   <img src="docs/media/smoothness.svg" width="880" alt="Two dots cross the same track. The top one, labelled Your console, moves 30 times a second, like a 30 fps game; the bottom one moves 60, 90 or 120 times a second, as fast as your screen shows SmoovPlay.">
