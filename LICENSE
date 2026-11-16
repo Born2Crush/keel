@@ -19,8 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-The chiaki_tap/ folder holds a patch for chiaki-ng, which is licensed under the
-GNU AGPL 3.0; the patched chiaki-ng is a separate program under that licence.
-Vendored code keeps its own licence: framegen/rife (MIT, HolyWu) and
-framegen/shaders/fsr1 (MIT, Advanced Micro Devices).

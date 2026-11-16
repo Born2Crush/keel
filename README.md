@@ -303,7 +303,7 @@ and skate. (© Electronic Arts), included only to show what a look does. The REA
 Rockstar Games' published Grand Theft Auto VI footage. They belong to their publishers and aren't covered by
 SmoovPlay's MIT licence.
 
-SmoovPlay's own code is MIT licensed ([LICENSE](LICENSE)); [installer/THIRD_PARTY_NOTICES.txt](installer/THIRD_PARTY_NOTICES.txt)
+SmoovPlay's own code is MIT licensed ([LICENSE](LICENSE), with notes on bundled code in [NOTICE](NOTICE)); [installer/THIRD_PARTY_NOTICES.txt](installer/THIRD_PARTY_NOTICES.txt)
 lists everything it bundles or downloads. SmoovPlay is an independent project, not made, supported or endorsed by
 Sony Interactive Entertainment, NVIDIA or AMD. PlayStation and PS5 are trademarks of Sony Interactive Entertainment;
 NVIDIA and RTX are trademarks of NVIDIA Corporation; AMD and FidelityFX are trademarks of Advanced Micro Devices, Inc.
