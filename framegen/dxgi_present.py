@@ -16,14 +16,23 @@ NVIDIA only (the interop extension), with Direct3D 11 on the NVIDIA adapter Open
 setting up raises, and the caller falls back to OpenGL's own presentation. COM is called through ctypes; the vtable
 slots below are from the Windows SDK headers (dxgi.h, dxgi1_2.h, dxgi1_5.h, d3d11.h).
 
+HDR output (settings "hdr" = "hdr10", framegen/hdr.py): hdr=True makes the swap chain 10-bit (R10G10B10A2) in HDR10's
+colour space (PQ, BT.2020: DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020), so Windows shows the PQ values OpenGL draws as
+they are, on a display with Windows' HDR on. It refuses (OSError) when the display can't take that colour space, unless
+FRAMEGEN_HDR_FORCE=1 (testing on an SDR display: the 10-bit chain is made anyway, and read_back() shows what it holds).
+display_hdr() says whether a monitor has Windows' HDR on, and how bright it goes.
+
 Testing: FRAMEGEN_PRESENT_SNAP=<folder> saves the back buffer as Direct3D is about to show it (read back, so it's
 what the window gets, upright or not) every SNAP_EVERY presents and after each resize (scripts/dxgi_smoke.py).
 
-Under test (the fullscreen stall: going fullscreen could block for 2 s or more):
-  FRAMEGEN_DXGI_MODE=direct  OpenGL draws straight into the swap chain's back buffer (shared with the interop).
-                     copy    OpenGL draws into a texture of our own (shared instead), and Direct3D copies that into
-                             the back buffer before Present. The interop then never holds a swap chain buffer, which
-                             Windows may be scanning out in fullscreen (Independent Flip). One extra GPU copy.
+How OpenGL's picture gets into the swap chain (FRAMEGEN_DXGI_MODE, for testing):
+  copy    (the default) OpenGL draws into a texture of our own (shared with the interop), and Direct3D copies that
+          into the back buffer before Present: one extra GPU copy. Direct3D 11's buffer 0 is always the buffer to draw
+          into next (it moves round the swap chain's buffers with each Present), so the copy lands where it should.
+  direct  OpenGL draws straight into the swap chain's back buffer, shared with the interop. Read back before each
+          Present, that held the new frame only every other Present (2 buffers; 1 in 3 with 3), and on the others a
+          buffer OpenGL never drew into (black): the interop keeps the buffer that was buffer 0 when it was shared.
+          Kept to compare (the fullscreen-stall tests ran both).
   FRAMEGEN_DXGI_BUFFERS=2|3  the swap chain's buffer count.
 A lock or Present over 250 ms is logged separately, to show which one waits.
 """
@@ -38,6 +47,12 @@ from ctypes import POINTER, WINFUNCTYPE, byref, c_char_p, c_int, c_long, c_size_
 # ---------------------------------------------------------------------------------------------- Windows constants
 DXGI_FORMAT_UNKNOWN = 0
 DXGI_FORMAT_B8G8R8A8_UNORM = 87
+DXGI_FORMAT_R10G10B10A2_UNORM = 24
+DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709 = 0
+DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020 = 12
+DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT = 1
+DXGI_HDR_METADATA_TYPE_HDR10 = 1
+HDR_FORCE = os.environ.get("FRAMEGEN_HDR_FORCE", "") == "1"  # testing: HDR output on a display without HDR
 DXGI_USAGE_RENDER_TARGET_OUTPUT = 0x20
 DXGI_SCALING_STRETCH = 0
 DXGI_SWAP_EFFECT_FLIP_DISCARD = 4
@@ -61,7 +76,7 @@ D3D11_CPU_ACCESS_READ = 0x20000
 D3D11_MAP_READ = 1
 SNAP_DIR = os.environ.get("FRAMEGEN_PRESENT_SNAP")
 SNAP_EVERY, SNAP_MAX = 90, 80
-MODE = os.environ.get("FRAMEGEN_DXGI_MODE", "direct")  # see the module docstring
+MODE = os.environ.get("FRAMEGEN_DXGI_MODE", "copy")  # see the module docstring
 BUFFERS = min(3, max(2, int(os.environ.get("FRAMEGEN_DXGI_BUFFERS", "2") or 2)))
 SLOW_MS = 250.0
 
@@ -70,10 +85,17 @@ IID_IDXGIFactory2 = "50c83a1c-e072-4c48-87b0-3630fa36a6d0"
 IID_IDXGIFactory5 = "7632e1f5-ee65-4dca-87fd-84cd75f8838d"
 IID_IDXGIDevice1 = "77db970f-6276-48ba-ba28-070143b4392c"
 IID_ID3D11Texture2D = "6f15aaf2-d208-4e89-9ab4-489535d34f9c"
+IID_IDXGISwapChain3 = "94d99bdb-f1f8-4ab0-b236-7da0170edab1"
+IID_IDXGISwapChain4 = "3d585d5a-bd4a-489e-b1f4-3dbcb6452ffb"
+IID_IDXGIOutput6 = "068346e8-aaec-4b84-add7-137f513f77a1"
 
 # vtable slots (0-2 are IUnknown's QueryInterface, AddRef, Release)
 QUERY_INTERFACE, RELEASE = 0, 2
 FACTORY_ENUM_ADAPTERS1, FACTORY_MAKE_WINDOW_ASSOCIATION = 12, 8
+ADAPTER_ENUM_OUTPUTS = 7
+OUTPUT6_GET_DESC1 = 27
+SWAP_CHAIN3_CHECK_COLOR_SPACE_SUPPORT, SWAP_CHAIN3_SET_COLOR_SPACE1 = 37, 38
+SWAP_CHAIN4_SET_HDR_METADATA = 40
 FACTORY2_CREATE_SWAP_CHAIN_FOR_HWND = 15
 FACTORY5_CHECK_FEATURE_SUPPORT = 28
 ADAPTER1_GET_DESC1 = 10
@@ -105,6 +127,29 @@ class Texture2DDesc(ctypes.Structure):  # D3D11_TEXTURE2D_DESC
 
 class MappedSubresource(ctypes.Structure):  # D3D11_MAPPED_SUBRESOURCE
     _fields_ = [("pData", c_void_p), ("RowPitch", c_uint), ("DepthPitch", c_uint)]
+
+
+class OutputDesc1(ctypes.Structure):  # DXGI_OUTPUT_DESC1
+    _fields_ = [("DeviceName", ctypes.c_wchar * 32), ("Left", c_long), ("Top", c_long), ("Right", c_long),
+                ("Bottom", c_long), ("AttachedToDesktop", c_int), ("Rotation", c_uint), ("Monitor", c_void_p),
+                ("BitsPerColor", c_uint), ("ColorSpace", c_uint), ("Primaries", ctypes.c_float * 8),
+                ("MinLuminance", ctypes.c_float), ("MaxLuminance", ctypes.c_float),
+                ("MaxFullFrameLuminance", ctypes.c_float)]
+
+
+class HdrMetadataHdr10(ctypes.Structure):  # DXGI_HDR_METADATA_HDR10
+    _fields_ = [("Primaries", ctypes.c_uint16 * 8), ("MaxMasteringLuminance", c_uint),
+                ("MinMasteringLuminance", c_uint), ("MaxContentLightLevel", ctypes.c_uint16),
+                ("MaxFrameAverageLightLevel", ctypes.c_uint16)]
+
+    @classmethod
+    def hdr10(cls, peak_nits: float, average_nits: float = 400.0) -> "HdrMetadataHdr10":
+        """BT.2020 primaries and D65 white (in 0.00002 units), mastered up to peak_nits (whole nits; black in
+        0.0001-nit units)."""
+        xy = (0.708, 0.292, 0.170, 0.797, 0.131, 0.046, 0.3127, 0.3290)
+        peak = int(min(max(peak_nits, 1), 10000))
+        return cls((ctypes.c_uint16 * 8)(*(round(v * 50000) for v in xy)), peak, 1,
+                   min(peak, 65535), int(min(average_nits, peak)))
 
 
 class Luid(ctypes.Structure):
@@ -183,20 +228,87 @@ def _nvidia_adapter(factory: c_void_p) -> c_void_p:
         i += 1
 
 
+def outputs() -> list[dict]:
+    """Every display Windows has, from DXGI: {"name", "monitor" (HMONITOR), "hdr" (Windows' HDR is on for it),
+    "bits", "max_nits", "min_nits", "full_frame_nits", "rect" (left, top, right, bottom)}. [] if DXGI can't say."""
+    found = []
+    try:
+        dxgi = ctypes.WinDLL("dxgi")
+        factory = c_void_p()
+        _check(dxgi.CreateDXGIFactory1(byref(GUID.of(IID_IDXGIFactory1)), byref(factory)), "CreateDXGIFactory1")
+    except OSError:
+        return found
+    try:
+        i = 0
+        while True:
+            adapter = c_void_p()
+            if _com(factory, FACTORY_ENUM_ADAPTERS1, [c_uint, POINTER(c_void_p)], i, byref(adapter)) < 0:
+                break
+            try:
+                j = 0
+                while True:
+                    out = c_void_p()
+                    if _com(adapter, ADAPTER_ENUM_OUTPUTS, [c_uint, POINTER(c_void_p)], j, byref(out)) < 0:
+                        break
+                    out6 = _query(out, IID_IDXGIOutput6)
+                    _release(out)
+                    if out6 is not None:
+                        d = OutputDesc1()
+                        if _com(out6, OUTPUT6_GET_DESC1, [POINTER(OutputDesc1)], byref(d)) >= 0:
+                            found.append({"name": d.DeviceName, "monitor": d.Monitor or 0,
+                                          "hdr": d.ColorSpace == DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020,
+                                          "bits": d.BitsPerColor, "max_nits": float(d.MaxLuminance),
+                                          "min_nits": float(d.MinLuminance),
+                                          "full_frame_nits": float(d.MaxFullFrameLuminance),
+                                          "rect": (d.Left, d.Top, d.Right, d.Bottom)})
+                        _release(out6)
+                    j += 1
+            finally:
+                _release(adapter)
+            i += 1
+    finally:
+        _release(factory)
+    return found
+
+
+class _Point(ctypes.Structure):
+    _fields_ = [("x", c_long), ("y", c_long)]
+
+
+def display_hdr(hwnd=None) -> dict | None:
+    """The display a window is on (most of it), or without one the main display, from outputs(); None if unknown."""
+    u32 = ctypes.WinDLL("user32")
+    if hwnd is not None:
+        u32.MonitorFromWindow.argtypes, u32.MonitorFromWindow.restype = [c_void_p, c_uint], c_void_p
+        mon = u32.MonitorFromWindow(c_void_p(hwnd_value(hwnd)), 2)  # MONITOR_DEFAULTTONEAREST
+    else:
+        u32.MonitorFromPoint.argtypes, u32.MonitorFromPoint.restype = [_Point, c_uint], c_void_p
+        mon = u32.MonitorFromPoint(_Point(0, 0), 1)  # MONITOR_DEFAULTTOPRIMARY
+    for o in outputs():
+        if o["monitor"] == (mon or 0):
+            return o
+    return None
+
+
 class DxgiPresenter:
     """A flip-model swap chain on `hwnd`, fed by OpenGL. Draw into `fbo` (sized with resize()), then present().
 
     Needs the OpenGL context that will draw to be current. Raises OSError (or RuntimeError) if anything is missing.
     """
 
-    def __init__(self, GL, hwnd: int, w: int, h: int) -> None:
+    def __init__(self, GL, hwnd: int, w: int, h: int, hdr: bool = False, peak_nits: float = 1000.0) -> None:
+        """hdr: a 10-bit swap chain in HDR10's colour space (see the module docstring); peak_nits goes in its HDR
+        metadata, as the brightest the picture gets."""
         self.GL, self.hwnd = GL, hwnd
+        self.hdr, self.peak_nits = hdr, peak_nits
+        self.format = DXGI_FORMAT_R10G10B10A2_UNORM if hdr else DXGI_FORMAT_B8G8R8A8_UNORM
+        self.color_space = DXGI_COLOR_SPACE_RGB_FULL_G22_NONE_P709  # HDR10's once _set_hdr_color_space sets it
         self.w = self.h = 0
         self.factory = self.factory2 = self.adapter = self.device = self.context = self.swap_chain = None
         self.back = self.shared = self.obj = self.hdev = None
         self.tex = self.fbo = self.rb = self.back_fbo = None
         self.presents, self.snaps, self.snap_next = 0, 0, False
-        self.mode = MODE if MODE in ("direct", "copy") else "direct"
+        self.mode = MODE if MODE in ("direct", "copy") else "copy"
         try:
             self._open(w, h)
         except BaseException:
@@ -230,7 +342,7 @@ class DxgiPresenter:
                 self.tearing = bool(allow.value)
             _release(factory5)
         self.flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING if self.tearing else 0
-        desc = SwapChainDesc1(Width=max(w, 1), Height=max(h, 1), Format=DXGI_FORMAT_B8G8R8A8_UNORM, SampleCount=1,
+        desc = SwapChainDesc1(Width=max(w, 1), Height=max(h, 1), Format=self.format, SampleCount=1,
                               BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT, BufferCount=BUFFERS,
                               Scaling=DXGI_SCALING_STRETCH,
                               SwapEffect=DXGI_SWAP_EFFECT_FLIP_DISCARD, AlphaMode=DXGI_ALPHA_MODE_IGNORE,
@@ -242,6 +354,8 @@ class DxgiPresenter:
                "CreateSwapChainForHwnd")
         _com(self.factory2, FACTORY_MAKE_WINDOW_ASSOCIATION, [c_void_p, c_uint], c_void_p(hwnd_value(self.hwnd)),
              DXGI_MWA_NO_ALT_ENTER)  # Alt+Enter is ours (F), not DXGI's exclusive fullscreen
+        if self.hdr:
+            self._set_hdr_color_space()
         device1 = _query(self.device, IID_IDXGIDevice1)
         if device1 is not None:  # at most one frame queued ahead: no extra delay when the GPU is ahead
             _com(device1, DEVICE1_SET_MAXIMUM_FRAME_LATENCY, [c_uint], 1)
@@ -254,17 +368,46 @@ class DxgiPresenter:
         self.resize(max(w, 1), max(h, 1))
         self.present(True, check=True)  # fails here, not mid-session, if the driver can't do it
 
+    def _set_hdr_color_space(self) -> None:
+        """HDR10's colour space (PQ, BT.2020) and its metadata on the swap chain. Raises OSError if the display can't
+        show it (Windows' HDR off), unless FRAMEGEN_HDR_FORCE=1."""
+        sc3 = _query(self.swap_chain, IID_IDXGISwapChain3)
+        if sc3 is None:
+            raise OSError("DXGI 1.4 (IDXGISwapChain3) isn't available, so no HDR colour space")
+        try:
+            support = c_uint(0)
+            _check(_com(sc3, SWAP_CHAIN3_CHECK_COLOR_SPACE_SUPPORT, [c_uint, POINTER(c_uint)],
+                        DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020, byref(support)), "CheckColorSpaceSupport")
+            ok = bool(support.value & DXGI_SWAP_CHAIN_COLOR_SPACE_SUPPORT_FLAG_PRESENT)
+            if not ok and not HDR_FORCE:
+                raise OSError("this display can't show HDR10 (is Use HDR on in Windows' display settings?)")
+            hr = _com(sc3, SWAP_CHAIN3_SET_COLOR_SPACE1, [c_uint], DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020)
+            if hr >= 0:
+                self.color_space = DXGI_COLOR_SPACE_RGB_FULL_G2084_NONE_P2020
+            elif not HDR_FORCE:
+                _check(hr, "SetColorSpace1")
+            else:
+                print(f"[display] (testing) HDR10 colour space refused (0x{hr & 0xFFFFFFFF:08X}); 10-bit chain kept")
+        finally:
+            _release(sc3)
+        sc4 = _query(self.swap_chain, IID_IDXGISwapChain4)
+        if sc4 is not None:  # optional: lets the display fit the picture to itself
+            meta = HdrMetadataHdr10.hdr10(self.peak_nits)
+            _com(sc4, SWAP_CHAIN4_SET_HDR_METADATA, [c_uint, c_uint, c_void_p], DXGI_HDR_METADATA_TYPE_HDR10,
+                 ctypes.sizeof(meta), byref(meta))
+            _release(sc4)
+
     def _attach(self, w: int, h: int) -> None:
-        """Shares a w x h buffer with OpenGL: the swap chain's back buffer ("direct"), or a texture of our own that
-        present() copies into it ("copy"). Direct3D 11 keeps buffer 0 as the one to draw into next, whichever buffer
-        that is, so this lasts until the next resize."""
+        """Shares a w x h buffer with OpenGL: a texture of our own that present() copies into the back buffer
+        ("copy"), or the swap chain's back buffer itself ("direct": see the module docstring). Direct3D 11 keeps
+        buffer 0 as the one to draw into next, whichever buffer that is, so self.back lasts until the next resize."""
         GL = self.GL
         self.back = c_void_p()
         _check(_com(self.swap_chain, SWAP_CHAIN_GET_BUFFER, [c_uint, POINTER(GUID), POINTER(c_void_p)], 0,
                     byref(GUID.of(IID_ID3D11Texture2D)), byref(self.back)), "GetBuffer")
         target = self.back
         if self.mode == "copy":
-            desc = Texture2DDesc(Width=w, Height=h, MipLevels=1, ArraySize=1, Format=DXGI_FORMAT_B8G8R8A8_UNORM,
+            desc = Texture2DDesc(Width=w, Height=h, MipLevels=1, ArraySize=1, Format=self.format,
                                  SampleCount=1, Usage=D3D11_USAGE_DEFAULT,
                                  BindFlags=D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE)
             self.shared = c_void_p()
@@ -296,7 +439,10 @@ class DxgiPresenter:
                         DXGI_FORMAT_UNKNOWN, self.flags), "ResizeBuffers")
         self._attach(w, h)
         GL.glBindTexture(GL.GL_TEXTURE_2D, self.tex)
-        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
+        if self.hdr:  # half floats until the last copy, so the 10 bits on screen are the picture's own
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA16F, w, h, 0, GL.GL_RGBA, GL.GL_HALF_FLOAT, None)
+        else:
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
         GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, self.fbo)
         GL.glFramebufferTexture2D(GL.GL_DRAW_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.tex, 0)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)  # black until the first frame, not whatever the memory held
@@ -337,10 +483,10 @@ class DxgiPresenter:
             print(f"[display] DXGI {what} took {ms:.0f} ms ({self.mode}, {BUFFERS} buffers, {self.w}x{self.h})")
 
     def read_back(self):
-        """The back buffer as Direct3D will show it (rows top-down), as BGR. Waits for the GPU: for testing only, between
-        drawing and Present."""
+        """The back buffer as Direct3D will show it (rows top-down), as BGR: uint8, or with hdr uint16 10-bit values
+        (0..1023). Waits for the GPU: for testing only, between drawing and Present."""
         import numpy as np
-        desc = Texture2DDesc(Width=self.w, Height=self.h, MipLevels=1, ArraySize=1, Format=DXGI_FORMAT_B8G8R8A8_UNORM,
+        desc = Texture2DDesc(Width=self.w, Height=self.h, MipLevels=1, ArraySize=1, Format=self.format,
                              SampleCount=1, Usage=D3D11_USAGE_STAGING, CPUAccessFlags=D3D11_CPU_ACCESS_READ)
         staging = c_void_p()
         _check(_com(self.device, DEVICE_CREATE_TEXTURE2D, [POINTER(Texture2DDesc), c_void_p, POINTER(c_void_p)],
@@ -352,6 +498,9 @@ class DxgiPresenter:
                         staging, 0, D3D11_MAP_READ, 0, byref(m)), "Map")
             try:
                 buf = (ctypes.c_ubyte * (m.RowPitch * self.h)).from_address(m.pData)
+                if self.hdr:  # R in bits 0-9, G 10-19, B 20-29
+                    v = np.frombuffer(buf, np.uint32).reshape(self.h, m.RowPitch // 4)[:, :self.w]
+                    return np.stack([(v >> 20) & 1023, (v >> 10) & 1023, v & 1023], -1).astype(np.uint16)
                 return np.frombuffer(buf, np.uint8).reshape(self.h, m.RowPitch // 4, 4)[:, :self.w, :3].copy()
             finally:
                 _com(self.context, CONTEXT_UNMAP, [c_void_p, c_uint], staging, 0, restype=None)
@@ -364,7 +513,8 @@ class DxgiPresenter:
         try:
             os.makedirs(SNAP_DIR, exist_ok=True)
             name = f"dxgi_{self.presents:06d}_{self.w}x{self.h}_vsync-{'on' if vsync else 'off'}.png"
-            cv2.imwrite(os.path.join(SNAP_DIR, name), self.read_back())
+            img = self.read_back()
+            cv2.imwrite(os.path.join(SNAP_DIR, name), img << 6 if self.hdr else img)  # (HDR: a 16-bit PNG of PQ)
             self.snaps += 1
         except Exception as e:  # noqa: BLE001 - testing aid: say so, keep presenting
             print(f"[display] couldn't save the back buffer: {e}")

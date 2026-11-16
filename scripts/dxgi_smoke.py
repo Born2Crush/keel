@@ -105,7 +105,7 @@ def main() -> int:
     ap.add_argument("--no-snap", action="store_true", help="don't read the back buffer back (rules it out)")
     ap.add_argument("--diag", action="store_true", help="dump every thread's stack every 2 s to out/dxgi_smoke/stacks.txt")
     # the fullscreen-stall candidates (framegen/dxgi_present.py, framegen/io.py)
-    ap.add_argument("--mode", default="direct", choices=["direct", "copy"], help="FRAMEGEN_DXGI_MODE")
+    ap.add_argument("--mode", default="copy", choices=["direct", "copy"], help="FRAMEGEN_DXGI_MODE")
     ap.add_argument("--buffers", type=int, default=2, choices=[2, 3], help="FRAMEGEN_DXGI_BUFFERS")
     ap.add_argument("--fs-style", default="monitor", choices=["monitor", "borderless"],
                     help="FRAMEGEN_FULLSCREEN_STYLE")
@@ -192,16 +192,21 @@ def main() -> int:
     frames = frames[::3]
     snaps = sorted(out.glob("dxgi_*.png"))
     sizes: dict[str, int] = {}
-    flipped = 0
+    flipped = black = 0
     for s in snaps:
         img = cv2.imread(str(s))
+        if img.max() == 0:  # a buffer nothing was drawn into (direct mode did this: see framegen/dxgi_present.py)
+            black += 1
+            print(f"  black: {s.name}")
+            continue
         up, down = upright_score(img, frames)
         size = re.search(r"_(\d+x\d+)_", s.name).group(1)
         sizes[size] = sizes.get(size, 0) + 1
         if down < up:
             flipped += 1
             print(f"  looks upside down: {s.name} (upright {up:.1f}, flipped {down:.1f})")
-    print(f"snapshots: {len(snaps)} at sizes {sizes}; upright: {len(snaps) - flipped}/{len(snaps)}")
+    print(f"snapshots: {len(snaps)} at sizes {sizes}; upright: {len(snaps) - flipped - black}/{len(snaps)}; "
+          f"black: {black}")
     stalls = [ln.strip() for ln in lines if " took " in ln and "[display]" in ln]
     print(f"slow presents or mode switches (over 250 ms): {len(stalls)}")
     # frames drawn at each window size, from the closing stats ("... 3440x1440 p50 ... (n=180)"): the biggest size is
@@ -212,10 +217,10 @@ def main() -> int:
     print(f"RESULT {a.present} {a.mode} {a.buffers} {a.fs_style} vsync-fullscreen={'on' if a.vsync_fullscreen else 'off'}"
           f" | stalls {len(stalls)} | worst {max([int(m) for m in re.findall(r'took (\d+) ms', ' '.join(stalls))] or [0])} ms"
           f" | fullscreen frames {drawn.get(big, 0) if big and not a.no_fullscreen else '-'} | stuck {'yes' if hung else 'no'}"
-          f" | flipped {flipped}/{len(snaps)}")
+          f" | flipped {flipped}/{len(snaps)} | black {black}/{len(snaps)}")
     if a.present == "gl":  # snapshots are DXGI-only: here only the run itself is checked
         return 0 if p.returncode == 0 and not stalls and not hung else 1
-    return 0 if dxgi and (snaps or a.no_snap) and not flipped and not stalls and not hung else 1
+    return 0 if dxgi and (snaps or a.no_snap) and not flipped and not black and not stalls and not hung else 1
 
 
 def matrix(a) -> int:

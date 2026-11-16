@@ -64,8 +64,10 @@ def _source(defines: str, body: str) -> str:
 class FsrScaler:
     """FSR 1 upscaling of a GL texture into a rectangle of a framebuffer. Needs a current GL 4.5 context."""
 
-    def __init__(self, GL, sharpness: float = 0.5, denoise: bool = True) -> None:
-        self.GL, self.sharpness = GL, float(sharpness)
+    def __init__(self, GL, sharpness: float = 0.5, denoise: bool = True, hdr: bool = False) -> None:
+        """hdr: the picture is HDR10 (PQ values, framegen/hdr.py), so EASU's output is kept in half floats rather
+        than 8 bits. FSR 1 is made for perceptual values, which PQ's are, as SDR's gamma ones are."""
+        self.GL, self.sharpness, self.hdr = GL, float(sharpness), hdr
         rcas_defs = "#define FSR_RCAS_F 1\n" + ("#define FSR_RCAS_DENOISE 1\n" if denoise else "")
         self.easu = self._program(_source("#define FSR_EASU_F 1\n", _EASU))
         self.rcas = self._program(_source(rcas_defs, _RCAS))
@@ -85,7 +87,8 @@ class FsrScaler:
                                       shaders.compileShader(frag, GL.GL_FRAGMENT_SHADER), validate=False)
 
     def _mid(self, w: int, h: int) -> None:
-        """The EASU output: an RGBA8 texture at the upscaled size, re-made when the window size changes."""
+        """The EASU output: an RGBA8 (HDR: RGBA16F) texture at the upscaled size, re-made when the window size
+        changes."""
         GL = self.GL
         if self.mid_size == (w, h):
             return
@@ -97,7 +100,10 @@ class FsrScaler:
         for p, v in ((GL.GL_TEXTURE_MIN_FILTER, GL.GL_NEAREST), (GL.GL_TEXTURE_MAG_FILTER, GL.GL_NEAREST),
                      (GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE), (GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)):
             GL.glTexParameteri(GL.GL_TEXTURE_2D, p, v)
-        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
+        if self.hdr:
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA16F, w, h, 0, GL.GL_RGBA, GL.GL_HALF_FLOAT, None)
+        else:
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
         self.mid_fbo = GL.glGenFramebuffers(1)
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, self.mid_fbo)
         GL.glFramebufferTexture2D(GL.GL_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.mid_tex, 0)

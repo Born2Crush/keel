@@ -60,7 +60,8 @@ Re-running only rebuilds chiaki-ng. For a newer chiaki-ng, check out its tag in 
    PS5: sign in to PSN in chiaki-ng (or paste your account ID), then enter the 8-digit code from
    PS5 Settings → System → Remote Play → Link Device.
 3. **chiaki-ng settings:** resolution 1080p, FPS **60** (the pipeline expects the PS5's 60 Hz output with
-   repeats), codec H.265, **HDR off** (the pipeline is 8-bit SDR), bitrate as high as your network allows.
+   repeats), codec H.265 (H.265 HDR only with SmoovPlay's HDR setting on: `--hdr sdr` or `--hdr hdr10`, see
+   [`framegen/hdr.py`](../framegen/hdr.py)), bitrate as high as your network allows.
 4. **Start the pipeline**, ideally before connecting in chiaki-ng:
    ```powershell
    .venv\Scripts\python run.py --chiaki --display --chiaki-log out\session_GAME.csv

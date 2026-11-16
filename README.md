@@ -172,8 +172,12 @@ The timeline shows 90 fps. At 60 fps there's one AI frame between each pair of r
 - **About 36 ms of delay at 90 fps** (about 20 ms at 60 fps), on top of Remote Play's own. About 22 ms of it is the
   wait every frame generator has: each real frame is held back while the in-between frames before it are shown.
   Press **L** in the video window to measure your setup.
-- **1080p and SDR.** Remote Play arrives at 1080p, so the picture is a little softer than HDMI straight from the
-  console. Turn HDR off in chiaki-ng's stream settings.
+- **1080p.** Remote Play arrives at 1080p, so the picture is a little softer than HDMI straight from the console.
+- **HDR** (Settings → HDR, off by default). For a PS5 streaming in HDR: pick the H.265 HDR codec in chiaki-ng,
+  then turn HDR on. **On, shown in SDR** gives the stream its real colours on any monitor. **On, HDR output**
+  (Experimental) keeps it HDR all the way to a monitor with Windows' HDR on; it's been checked by reading back the
+  10-bit picture it sends, not yet on an HDR screen, and Looks and RTX VSR are off with it. Instant replay clips are
+  saved in SDR either way.
 - **Some wobble.** HUD text over fast motion, very fast camera turns and thin objects crossing each other can wobble
   a little. Press **I** to compare with frame generation off.
 - **Sound stays in step.** chiaki-ng holds the sound back by as long as the picture spends in SmoovPlay.

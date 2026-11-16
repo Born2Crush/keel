@@ -429,8 +429,9 @@ class ChiakiSource:
         if h.max_fps < 60:
             print("[chiaki] WARNING: the stream is set to 30 fps. Set chiaki-ng's frame rate to 60 so the "
                   "pipeline sees the PS5's 60 Hz output (it expects repeats, not every other frame missing).")
-        if h.codec == 2:
-            print("[chiaki] WARNING: HDR stream; the pipeline is 8-bit SDR, colours will be off. Turn HDR off.")
+        self.hdr_stream = h.codec == 2  # chiaki-ng's H.265 HDR codec: 10-bit HDR10 from the PS5
+        self.convert = None  # set_hdr(): a framegen.hdr.StreamConverter, when SmoovPlay's HDR setting is on
+        self._hdr_told = False
         self.q: queue.Queue = queue.Queue(maxsize=3)
         self.dropped = 0  # decoded frames dropped because the pipeline fell behind
         self.skipped = 0  # stream frames never decoded (ring overrun or waiting for a keyframe)
@@ -625,7 +626,36 @@ class ChiakiSource:
             damaged_left = max(0, damaged_left - 1)
 
     def _image(self, fr):
+        if self.convert is not None:
+            img = self.convert(fr)
+            if not self.convert.said:
+                self.convert.said = True
+                print(f"[chiaki] HDR: the stream is {self.convert.describe()}")
+            return img
         return cuda_frame_to_bgr(fr) if self.decoder_kind == "cuda" else fr.to_ndarray(format="bgr24")
+
+    def set_hdr(self, out: str | None, display_peak: float | None = None, why: str = "") -> None:
+        """SmoovPlay's HDR setting (framegen/hdr.py), before the frames start: out "sdr8" (tone-mapped to SDR),
+        "pq16" (kept HDR10, for HDR output) or None (off: as before; why: the reason, if it's on but can't be used).
+        Only an HDR stream is converted."""
+        self._hdr_told = True
+        if out is None:
+            if self.hdr_stream and why:
+                print(f"[chiaki] WARNING: this stream is HDR, but {why}, so its colours look washed out. Pick a codec "
+                      "without HDR in chiaki-ng's Video settings.")
+            elif self.hdr_stream:
+                print("[chiaki] WARNING: this stream is HDR, and HDR is off in SmoovPlay's settings, so its colours "
+                      "look washed out. Turn on HDR in SmoovPlay's Settings (Picture), or pick a codec without HDR in "
+                      "chiaki-ng.")
+            return
+        if not self.hdr_stream:
+            print("[chiaki] HDR is on in SmoovPlay's settings, but this stream isn't HDR: shown as usual. (For HDR, "
+                  "pick chiaki-ng's H.265 HDR codec.)")
+            return
+        from .hdr import StreamConverter
+        import torch
+        self.convert = StreamConverter(out, "cuda" if torch.cuda.is_available() else "cpu", display_peak=display_peak)
+        print("[chiaki] HDR stream: " + ("kept HDR for the HDR display" if out == "pq16" else "shown in SDR"))
 
     def _ask_idr(self) -> None:
         now = time.perf_counter()
@@ -711,6 +741,8 @@ class ChiakiSource:
         return ""
 
     def __iter__(self):
+        if not self._hdr_told:  # nobody said what to do with HDR: as with the setting off
+            self.set_hdr(None)
         self.dropped = 0  # frames dropped while RIFE was loading don't count
         self._go.set()  # the pipeline is ready: start decoding
         from .io import queue_ticks

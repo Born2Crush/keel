@@ -11,6 +11,7 @@ import torch
 
 from . import delaytest
 from .cadence import Action, CadenceScheduler, CutDetector, DuplicateDetector, FrameTimeline
+from .hdr import level8, to_u8
 from .interpolator import STEADY_HUD_THRESHOLD, RifeInterpolator
 from .io import TICK, Waiting
 
@@ -50,8 +51,10 @@ def hud_mask(a: torch.Tensor, b: torch.Tensor, gt: torch.Tensor, still: torch.Te
 
 
 def _np(frame) -> np.ndarray:
-    """A private numpy copy of a frame (numpy array or CUDA tensor)."""
-    return frame.cpu().numpy() if torch.is_tensor(frame) else frame.copy()
+    """A private numpy copy of a frame (numpy array or CUDA tensor), as 8 bits (an HDR frame's 8-bit stand-in)."""
+    if torch.is_tensor(frame):
+        return to_u8(frame).cpu().numpy() if frame.is_floating_point() else frame.cpu().numpy()
+    return frame.copy()
 
 
 def _db(mse: float) -> float:
@@ -309,8 +312,9 @@ class Pipeline:
         self.cut_threshold = cut_threshold  # see CutDetector
         h, w = interp.h, interp.w
         pin = torch.cuda.is_available()  # (pinned memory needs CUDA; DirectML's frames are plain CPU tensors)
-        self._in_pinned = torch.empty((h, w, 3), dtype=torch.uint8, pin_memory=pin)
-        self._out_pinned = torch.empty((h, w, 3), dtype=torch.uint8, pin_memory=pin)
+        dt = getattr(interp, "frame_dtype", torch.uint8)  # float16 with HDR output (framegen/hdr.py)
+        self._in_pinned = torch.empty((h, w, 3), dtype=dt, pin_memory=pin)
+        self._out_pinned = torch.empty((h, w, 3), dtype=dt, pin_memory=pin)
         self._in_np = self._in_pinned.numpy()
         self._out_np = self._out_pinned.numpy()
         self.stats: Stats | None = None  # the running session's, for reports written while it plays
@@ -739,9 +743,10 @@ class Pipeline:
         gt_np = gt_fn(prev_content + 1)
         if gt_np is None:
             return
-        gt = (gt_np if torch.is_tensor(gt_np) else torch.from_numpy(gt_np).to(self.interp.device)).float()
+        # In 8-bit levels: HDR frames (float16) through hdr.level8, so thresholds and dB read as for SDR ones.
+        gt = level8(gt_np if torch.is_tensor(gt_np) else torch.from_numpy(gt_np).to(self.interp.device))
         b = self.interp.in_u8
-        out = self.interp.out_u8
+        out = level8(self.interp.out_u8)
         blend = ((a.float() + b.float()) * 0.5).round_()
         still = ((b.float() - a.float()).abs().amax(-1, keepdim=True) <= STILL_LEVELS).float()
         n_still = still.sum().clamp_min(1.0) * 3
@@ -764,4 +769,4 @@ class Pipeline:
             st.hud_off.append((off * hud).sum().item() / n_hud)
             st.hud_frac.append(n_hud / hud.numel())
         if keep_worst and (st.worst is None or p < st.worst[0]):
-            st.worst = (p, tick.index, _np(prev), self.interp.out_u8.cpu().numpy(), _np(gt_np), _np(tick.frame))
+            st.worst = (p, tick.index, _np(prev), _np(self.interp.out_u8), _np(gt_np), _np(tick.frame))

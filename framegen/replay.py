@@ -408,6 +408,9 @@ class Recorder:
         # Settings "Looks in clips": fn(frame) -> the frame with the look drawn on (the video window's baked()), for
         # the SmoovPlay video only; the before frames stay as the game sent them. None: clips as the game looked.
         self.look = None
+        # HDR output (framegen/hdr.py): frames come as float16 HDR10, and this turns them into the 8-bit SDR frames
+        # clips are made of (hdr.pq16_to_sdr8), the same way "shown in SDR" would show them. None: frames are SDR.
+        self.hdr_to_sdr = None
         self._resampler = None
         self._a_next: float | None = None  # the time (perf_counter) the next sound sample written is heard
         self._a_pts = 0
@@ -482,6 +485,8 @@ class Recorder:
     def _put(self, name: str, frame, t: float) -> None:
         self._zero(t)
         try:
+            if self.hdr_to_sdr is not None and getattr(frame, "is_floating_point", lambda: False)():
+                frame = self.hdr_to_sdr(frame)
             item = self._convert(name, frame)
         except Exception as e:  # noqa: BLE001 - a replay must never take the stream down
             self._warn("convert", f"[replay] can't take frames ({str(e)[:200]})")

@@ -57,7 +57,7 @@ class VfgInterpolator:
     float round trip, and the whole run stays on our stream) or "rgb8" (float32 planes, the simpler path)."""
 
     def __init__(self, width: int, height: int, quality: str = "medium", device: str = "cuda",
-                 encoding: str = "rgb10a2") -> None:
+                 encoding: str = "rgb10a2", hdr: bool = False) -> None:
         nvvfx = import_vfx()
         self.w, self.h = width, height
         self.device = torch.device(device)
@@ -69,8 +69,13 @@ class VfgInterpolator:
                                              device=self.device.index or 0, image_encoding=enc)
         self.fx.input_width, self.fx.input_height = width, height
         self.fx.load()
-        self.in_u8 = torch.zeros((height, width, 3), dtype=torch.uint8, device=self.device)
-        self.out_u8 = torch.zeros((height, width, 3), dtype=torch.uint8, device=self.device)
+        # hdr: frames are float16 PQ (framegen/hdr.py pq16); in_u8 is then their 8-bit stand-in for the pipeline's
+        # checks, and out_u8 holds float16 frames. RGB10A2 carries the stream's 10 bits as they are.
+        self.hdr = hdr
+        self.frame_dtype = torch.float16 if hdr else torch.uint8
+        self.inp = torch.zeros((height, width, 3), dtype=self.frame_dtype, device=self.device)
+        self.out_u8 = torch.zeros((height, width, 3), dtype=self.frame_dtype, device=self.device)
+        self.in_u8 = torch.zeros((height, width, 3), dtype=torch.uint8, device=self.device) if hdr else self.inp
         if encoding == "rgb10a2":
             self.slots = [torch.zeros((height, width), dtype=torch.int32, device=self.device) for _ in range(2)]
         else:
@@ -78,16 +83,21 @@ class VfgInterpolator:
 
     # ---- the RifeInterpolator interface --------------------------------------------------------------------
     def load(self, frame_u8: torch.Tensor) -> None:
-        """Copy an HxWx3 uint8 BGR frame (GPU or pinned CPU) into the static input."""
-        self.in_u8.copy_(frame_u8, non_blocking=True)
+        """Copy an HxWx3 BGR frame (GPU or pinned CPU; uint8, or float16 if hdr) into the static input."""
+        self.inp.copy_(frame_u8, non_blocking=True)
+        if self.hdr:
+            from .hdr import to_u8
+            to_u8(self.inp, self.in_u8)
 
     @torch.no_grad()
     def prepare(self, slot: int) -> None:
-        """Convert `in_u8` into slot `slot` (0/1) in VFG's input format."""
+        """Convert the input into slot `slot` (0/1) in VFG's input format."""
         if self.encoding == "rgb10a2":
-            self.slots[slot].copy_(pack_rgb10a2(self.in_u8))
+            self.slots[slot].copy_(pack_rgb10a2(self.inp))
+        elif self.hdr:
+            self.slots[slot].copy_(self.inp.permute(2, 0, 1).flip(0).float())
         else:
-            self.slots[slot].copy_(self.in_u8.permute(2, 0, 1).flip(0).float().div_(255.0))
+            self.slots[slot].copy_(self.inp.permute(2, 0, 1).flip(0).float().div_(255.0))
 
     @torch.no_grad()
     def interpolate(self, newest_slot: int, t: float = 0.5) -> torch.Tensor:
@@ -99,7 +109,9 @@ class VfgInterpolator:
         out = self.fx.run_at_timestep(prev, cur, t, stream_ptr=stream)
         img = torch.from_dlpack(out.image)  # SDK-owned memory: converted (copied) into out_u8 before the next run
         if self.encoding == "rgb10a2":
-            self.out_u8.copy_(unpack_rgb10a2(img.view(torch.int32)))
+            self.out_u8.copy_(unpack_rgb10a2(img.view(torch.int32), hdr=self.hdr))
+        elif self.hdr:
+            self.out_u8.copy_(img.clamp(0.0, 1.0).flip(0).permute(1, 2, 0))
         else:
             self.out_u8.copy_(img.clamp(0.0, 1.0).mul(255.0).round_().to(torch.uint8).flip(0).permute(1, 2, 0))
         return self.out_u8
@@ -112,14 +124,20 @@ class VfgInterpolator:
 
 # ---- packed 10-bit RGB: R in bits 0-9, G 10-19, B 20-29, alpha 30-31 (left 0, so it fits a signed int32) ------
 def pack_rgb10a2(bgr: torch.Tensor) -> torch.Tensor:
-    """HxWx3 uint8 BGR -> HxW int32 holding packed RGB10A2 (8-bit values widened exactly: v10 = v8 * 1023 / 255)."""
-    v = bgr.to(torch.int32)
-    v = (v << 2) | (v >> 6)  # 8 -> 10 bits, 255 -> 1023
+    """HxWx3 BGR -> HxW int32 holding packed RGB10A2. uint8 values are widened exactly (v10 = v8 * 1023 / 255);
+    float ones (0..1, hdr's pq16) rounded to 10 bits."""
+    if bgr.is_floating_point():
+        v = bgr.float().clamp(0.0, 1.0).mul_(1023.0).round_().to(torch.int32)
+    else:
+        v = bgr.to(torch.int32)
+        v = (v << 2) | (v >> 6)  # 8 -> 10 bits, 255 -> 1023
     return v[..., 2] | (v[..., 1] << 10) | (v[..., 0] << 20)
 
 
-def unpack_rgb10a2(packed: torch.Tensor) -> torch.Tensor:
-    """HxW int32 (packed RGB10A2) -> HxWx3 uint8 BGR, rounded."""
+def unpack_rgb10a2(packed: torch.Tensor, hdr: bool = False) -> torch.Tensor:
+    """HxW int32 (packed RGB10A2) -> HxWx3 uint8 BGR, rounded; with hdr, float16 0..1."""
     r, g, b = packed & 1023, (packed >> 10) & 1023, (packed >> 20) & 1023
-    bgr = torch.stack([b, g, r], -1).float().mul_(255.0 / 1023.0).round_()
-    return bgr.to(torch.uint8)
+    bgr = torch.stack([b, g, r], -1).float()
+    if hdr:
+        return bgr.div_(1023.0).to(torch.float16)
+    return bgr.mul_(255.0 / 1023.0).round_().to(torch.uint8)

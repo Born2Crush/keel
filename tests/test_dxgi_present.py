@@ -34,3 +34,18 @@ def test_hresults():
 def test_hwnd_from_either_pyglfw_form():
     assert d.hwnd_value(0x1234) == 0x1234
     assert d.hwnd_value(ctypes.c_void_p(0x5678)) == 0x5678
+
+
+def test_hdr_structures_match_the_windows_sdk():
+    assert ctypes.sizeof(d.OutputDesc1) == 152  # 64-bit Python
+    assert d.OutputDesc1.Monitor.offset == 88 and d.OutputDesc1.ColorSpace.offset == 100
+    assert d.OutputDesc1.MinLuminance.offset == 136
+    assert ctypes.sizeof(d.HdrMetadataHdr10) == 28
+    m = d.HdrMetadataHdr10.hdr10(1000)
+    assert list(m.Primaries) == [35400, 14600, 8500, 39850, 6550, 2300, 15635, 16450]
+    assert m.MaxMasteringLuminance == 1000 and m.MaxContentLightLevel == 1000 and m.MaxFrameAverageLightLevel == 400
+
+
+def test_outputs_can_be_listed():
+    outs = d.outputs()  # every display, with whether Windows' HDR is on for it (no window, no device)
+    assert all({"hdr", "max_nits", "monitor"} <= set(o) for o in outs)

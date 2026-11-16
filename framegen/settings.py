@@ -154,6 +154,22 @@ SPECS: tuple[Spec, ...] = (
               "which can cost in-between frames at 90 and 120 fps. Only used with RTX VSR.",
          impact={"picture": "Higher is cleaner and sharper.",
                  "speed": "Per frame at 1440p: Low 1.3 ms, Medium 1.6, High 3.6, Ultra 4.9."}),
+    # framegen/hdr.py. Off by default, and then nothing changes: an HDR stream comes out washed out, and SmoovPlay says
+    # so. "hdr10" needs the DXGI presentation (NVIDIA) and Windows' HDR; without them run.py uses "sdr" for the session.
+    Spec("hdr", "HDR", ("off", "sdr", "hdr10"), "off",
+         {"off": "Off", "sdr": "On, shown in SDR", "hdr10": "On, HDR output (Experimental)"}, live=False,
+         group="Picture",
+         hints={"off": "For a stream without HDR. The default.",
+                "sdr": "Plays an HDR stream on any display, with its colours and brightness fitted to it.",
+                "hdr10": "Keeps it HDR on an HDR display, with Use HDR on in Windows' display settings. NVIDIA "
+                         "cards. Experimental."},
+         help="For PS5 Remote Play in HDR: pick the H.265 HDR codec in chiaki-ng's Video settings, then turn this "
+              "on. Shown in SDR plays it on any display, fitting HDR's brighter highlights and wider colours to an "
+              "ordinary one. HDR output keeps the picture HDR all the way to an HDR display (turn on Use HDR in "
+              "Windows' display settings first); without one it's shown in SDR. A stream without HDR isn't "
+              "changed. Applies the next time you press Play.",
+         impact={"picture": "An HDR stream's true colours, instead of a washed-out picture.",
+                 "speed": "About 0.7 ms of graphics card time for each frame from the game."}),
     # framegen/looks.py (the looks; "Which look" lists the built-in ones, then the user's, from looks.CHOICES, which
     # the looks library keeps up to date) and framegen/looks_gl.py (drawing them, after the upscaler).
     Spec("look_on", "Look", (False, True), False, ON_OFF, group="Looks",

@@ -270,6 +270,9 @@ def main() -> int:
     ap.add_argument("--vsync", action=argparse.BooleanOptionalAction, default=None,
                     help="vsync the window (use with G-Sync/FreeSync displays)")
     ap.add_argument("--fullscreen", action=argparse.BooleanOptionalAction, default=None, help="start fullscreen")
+    ap.add_argument("--hdr", default=None, choices=BY_KEY["hdr"].choices,
+                    help="an HDR stream from PS5 Remote Play: off (as before), sdr (tone-mapped to SDR) or hdr10 (HDR "
+                         "output, Experimental: an HDR display with Windows' HDR on). Default: the saved setting")
     ap.add_argument("--present", default=None, choices=BY_KEY["present"].choices,
                     help="how the window presents: gl = OpenGL's own, dxgi = DXGI flip model (Experimental: less "
                          "delay in a window, G-Sync in a window). Default: the saved setting")
@@ -352,7 +355,8 @@ def main() -> int:
                        ("fsr_sharpness", a.fsr_sharpness), ("engine", "trt" if a.trt else a.engine),
                        ("interp", False if a.off else None), ("vsync", a.vsync), ("fullscreen", a.fullscreen),
                        ("minimize_chiaki", a.minimize_chiaki), ("simulate_30", True if a.test_mode else None),
-                       ("steady_hud", a.steady_hud), ("vfg_quality", a.vfg_quality), ("present", a.present)):
+                       ("steady_hud", a.steady_hud), ("vfg_quality", a.vfg_quality), ("present", a.present),
+                       ("hdr", a.hdr)):
         if value is not None:
             settings.override(key, value)
     # --model: one of the settings' choices, or another RIFE version for testing (not something the menu offers)
@@ -366,6 +370,32 @@ def main() -> int:
             ap.error("--hz 90/120 needs --display, and doesn't write --out yet")
         print(f"[run] output {settings.hz} Hz needs --display without --out; 60 Hz this run")
         settings.override("hz", 60)
+
+    # HDR (framegen/hdr.py, settings "hdr"): only for a PS5 Remote Play stream in HDR, and only with the setting on;
+    # otherwise nothing below changes. hdr_out: what the stream's frames become ("sdr8": tone-mapped to SDR; "pq16":
+    # kept HDR10, for HDR output), or None. hdr10[0]: the pipeline carries HDR10 frames (half floats) to the window.
+    hdr_out, hdr_why, hdr_peak = None, "", None
+    if kind == "chiaki" and settings.hdr != "off" and getattr(src, "hdr_stream", False):
+        if dml_mode:
+            hdr_why = "SmoovPlay's HDR needs an NVIDIA card for now"
+        else:
+            hdr_out = "sdr8"
+            if settings.hdr == "hdr10":
+                from framegen.dxgi_present import HDR_FORCE, display_hdr
+                shown = display_hdr()
+                if not a.display or a.display_cv or a.out:
+                    print("[run] HDR output needs the video window; showing HDR in SDR")
+                elif HDR_FORCE or (shown is not None and shown["hdr"]):
+                    hdr_out = "pq16"
+                    if shown is not None and shown["hdr"] and shown["max_nits"] > 0:
+                        hdr_peak = shown["max_nits"]  # highlights brighter than the display are rolled off to it
+                    print("[run] HDR output: HDR10"
+                          + (f" to a display that goes to about {hdr_peak:.0f} nits" if hdr_peak else "")
+                          + (" (testing: FRAMEGEN_HDR_FORCE)" if HDR_FORCE else ""))
+                else:
+                    print("[run] HDR output: this display doesn't have Windows' HDR on (Settings > System > Display > "
+                          "Use HDR), so HDR is shown in SDR")
+    hdr10 = [hdr_out == "pq16"]
 
     from framegen.trt import auto_engine, trt_available
     has_trt = trt_available()
@@ -405,12 +435,12 @@ def main() -> int:
     def build(cfg: dict):
         if cfg["model"] == "vfg":
             from framegen.vfg import VfgInterpolator
-            return VfgInterpolator(src.w, src.h, cfg["vfg_quality"])
+            return VfgInterpolator(src.w, src.h, cfg["vfg_quality"], hdr=hdr10[0])
         if cfg["engine"] == "dml":
             from framegen.dml import DmlInterpolator
             return DmlInterpolator(src.w, src.h, cfg["model"], cfg["motion"])
         return RifeInterpolator(src.w, src.h, cfg["model"], cfg["motion"], fp16=not a.fp32, cuda_graph=not a.no_graph,
-                                backend=cfg["engine"])
+                                backend=cfg["engine"], hdr=hdr10[0])
 
     def build_or_rife(cfg: dict, busy=lambda fn, text: fn()):
         """build(cfg); if NVIDIA VFG fails to start (e.g. a broken install or driver), RIFE instead, so play goes on.
@@ -436,10 +466,11 @@ def main() -> int:
                 f"graphs={'off' if a.no_graph else 'on'}  {'TensorRT' if cfg['engine'] == 'trt' else 'PyTorch'}")
 
     def label_of(cfg: dict) -> str:  # the overlay's first words
+        hdr_tag = {"sdr8": "  HDR in SDR", "pq16": "  HDR10"}.get(hdr_out, "")
         if cfg["model"] == "vfg":
-            return f"VFG {cfg['vfg_quality']}"
+            return f"VFG {cfg['vfg_quality']}{hdr_tag}"
         engine = {"trt": " TRT", "dml": " DML"}.get(cfg["engine"], "")
-        return f"RIFE {cfg['model']}{engine}{' half' if cfg['motion'] < 1 else ''}"
+        return f"RIFE {cfg['model']}{engine}{' half' if cfg['motion'] < 1 else ''}{hdr_tag}"
 
     window = None
 
@@ -470,6 +501,14 @@ def main() -> int:
                                       "Video files already play as a 30 fps game.")
     if kind == "window":
         unavailable["present"] = "Window capture draws its picture over the app's with the standard presentation."
+    if kind != "chiaki":
+        unavailable["hdr"] = "Only used with PS5 Remote Play."
+    elif dml_mode:
+        unavailable["hdr"] = "Not without an NVIDIA card yet."
+    hdr10_rows = {k: "Not with HDR output yet." for k in ("look_on", "look", "look_clips")}
+    hdr10_rows["present"] = "HDR output always uses the low-delay presentation."
+    if hdr10[0]:
+        unavailable.update(hdr10_rows)
     if a.scale is not None:
         unavailable["motion"] = f"Set to {a.scale} by --scale on the command line."
     if test_model:
@@ -485,7 +524,20 @@ def main() -> int:
         unavailable["hz"] = "90/120 fps can't be recorded with --out yet."
     window = (WindowSink(src.w, src.h) if a.display_cv else
               GLWindowSink(src.w, src.h, settings, restart_reasons, choices, unavailable,
-                           overlay_of=src.where if kind == "window" else None) if a.display else None)
+                           overlay_of=src.where if kind == "window" else None, hdr=hdr10[0],
+                           hdr_peak=min(hdr_peak or 1e9, 1000.0)) if a.display else None)
+    if hdr10[0] and not getattr(window, "hdr10", False):  # the window couldn't present HDR10: shown in SDR
+        hdr10[0], hdr_out, hdr_peak = False, "sdr8", None
+        for k in hdr10_rows:
+            unavailable.pop(k, None)
+            if window is not None:
+                window.unavailable.pop(k, None)
+        interp = None
+        gc.collect()
+        torch.cuda.empty_cache()
+        cfg, interp = build_or_rife(session_config())  # with 8-bit frames
+    if kind == "chiaki" and hasattr(src, "set_hdr"):
+        src.set_hdr(hdr_out, hdr_peak if hdr10[0] else None, why=hdr_why)
     sink = MultiSink(window, FileSink(a.out, src.w, src.h) if a.out else None)
     settings.watch(model_rows)  # before Remote's own watcher, so what it publishes is already up to date
     model_rows()
@@ -521,6 +573,9 @@ def main() -> int:
         replay = Recorder(settings.replay, clip=settings.replay_save, layout=settings.replay_layout,
                           notify=getattr(sink, "toast", None), hotkeys=True, size=(src.w, src.h))
         replay.warm_up()  # its encoders open now, not during play
+        if hdr10[0]:  # clips are SDR: HDR10 frames are tone-mapped as they go in, as "shown in SDR" would show them
+            from framegen.hdr import pq16_to_sdr8
+            replay.hdr_to_sdr = pq16_to_sdr8
         if hasattr(src, "read_sound"):
             replay.attach_sound(src.read_sound)
 

@@ -311,27 +311,37 @@ def _draw_text(frame: np.ndarray, text: str) -> np.ndarray:
     return frame
 
 
-class _Panel:
-    """A BGR image in a GL texture of its own, blitted 1:1 over the frame (menu, messages)."""
+def _gl_image(GL, img: np.ndarray, hdr: bool):
+    """An 8-bit BGR image as (pixels, internal format, pixel type) for a GL upload: as it is, or for an HDR10 picture
+    (framegen/hdr.py) as 16-bit PQ with white at SDR graphics white, so it looks as on an SDR one."""
+    if not hdr:
+        return np.ascontiguousarray(img), GL.GL_RGBA8, GL.GL_UNSIGNED_BYTE
+    from .hdr import sdr_to_pq16_image
+    return np.ascontiguousarray(sdr_to_pq16_image(img)), GL.GL_RGBA16, GL.GL_UNSIGNED_SHORT
 
-    def __init__(self, GL) -> None:
-        self.GL, self.w, self.h = GL, 0, 0
+
+class _Panel:
+    """A BGR image in a GL texture of its own, blitted 1:1 over the frame (menu, messages). hdr: over an HDR10
+    picture (see _gl_image)."""
+
+    def __init__(self, GL, hdr: bool = False) -> None:
+        self.GL, self.w, self.h, self.hdr = GL, 0, 0, hdr
         self.tex, self.fbo = GL.glGenTextures(1), GL.glGenFramebuffers(1)
 
     def update(self, img: np.ndarray) -> None:
         GL = self.GL
         h, w = img.shape[:2]
-        img = np.ascontiguousarray(img)
+        img, fmt, kind = _gl_image(GL, img, self.hdr)
         GL.glBindTexture(GL.GL_TEXTURE_2D, self.tex)
         if (w, h) != (self.w, self.h):
             GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_NEAREST)
             GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_NEAREST)
-            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_BGR, GL.GL_UNSIGNED_BYTE, img)
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, fmt, w, h, 0, GL.GL_BGR, kind, img)
             GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
             GL.glFramebufferTexture2D(GL.GL_READ_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.tex, 0)
             self.w, self.h = w, h
         else:
-            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, w, h, GL.GL_BGR, GL.GL_UNSIGNED_BYTE, img)
+            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, w, h, GL.GL_BGR, kind, img)
 
     def blit(self, x: int, top: int) -> None:
         """top: GL y of the image's top edge (GL y grows upwards; image rows go down)."""
@@ -380,6 +390,11 @@ class GLWindowSink:
     unavailable: {key: reason} greys out a whole row. remote: a framegen.remote.Remote (the launcher's Settings
     page), polled with the window's own events so its changes apply like the menu's.
 
+    hdr (settings "hdr" = HDR output, framegen/hdr.py): frames are HDR10 (float16 PQ BT.2020) and the window presents
+    them through a 10-bit DXGI swap chain in HDR10's colour space, whatever "present" says; fullscreen is then a
+    borderless window over the monitor. Looks and RTX VSR are off. If that swap chain can't be made (no HDR display,
+    no NVIDIA interop), self.hdr10 is False and the window is the usual SDR one: the caller then sends SDR frames.
+
     overlay_of (window capture, framegen/window.py): () -> (the app's picture area, its monitor) in screen pixels, or
     None while it's minimised. The window then sits over the app's picture (fullscreen: over its monitor), clicks
     and keys go through to the app, it never takes the focus, and it's left out of the capture. Settings change on
@@ -389,7 +404,7 @@ class GLWindowSink:
     NAMES = {"fsr": "FSR 1", "vsr": "RTX VSR", "bilinear": "bilinear"}
 
     def __init__(self, w: int, h: int, settings=None, restart_reasons=None, choices: dict | None = None,
-                 unavailable: dict | None = None, overlay_of=None) -> None:
+                 unavailable: dict | None = None, overlay_of=None, hdr: bool = False, hdr_peak: float = 1000.0) -> None:
         import glfw
         from OpenGL import GL
 
@@ -403,11 +418,21 @@ class GLWindowSink:
             raise RuntimeError("glfw init failed")
         self.dx = None  # a DxgiPresenter when the window presents through DXGI (settings "present")
         self.overlay_of = overlay_of
-        if st.present == "dxgi" and overlay_of is not None:
+        self.hdr10 = False  # presenting HDR10 (hdr asked for, and the swap chain could be made)
+        self.fs_style = FULLSCREEN_STYLE
+        if hdr and overlay_of is None:
+            self._open_dxgi(w, h, hdr=True, peak=hdr_peak)
+            self.hdr10 = self.dx is not None
+            if self.hdr10:
+                # Fullscreen with this swap chain is a borderless window: GLFW's fullscreen could stall it.
+                self.fs_style = "borderless" if FULLSCREEN_STYLE == "none" else FULLSCREEN_STYLE
+        if self.dx is not None or st.present != "dxgi":
+            pass  # (HDR output's swap chain, or the standard presentation)
+        elif overlay_of is not None:
             print("[display] window capture: standard presentation (the overlay draws with OpenGL)")
-        elif st.present == "dxgi" and (not st.fullscreen or FULLSCREEN_STYLE != "none"):
+        elif not st.fullscreen or FULLSCREEN_STYLE != "none":
             self._open_dxgi(w, h)
-        elif st.present == "dxgi":
+        else:
             print("[display] fullscreen: standard presentation (Low delay is for windowed play; fullscreen already "
                   "skips the compositor)")
         if self.dx is None:
@@ -434,7 +459,10 @@ class GLWindowSink:
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE)  # FSR samples past edges
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)
-        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_BGR, GL.GL_UNSIGNED_BYTE, None)
+        if self.hdr10:  # float16 PQ frames, as they are
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA16F, w, h, 0, GL.GL_BGR, GL.GL_HALF_FLOAT, None)
+        else:
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_BGR, GL.GL_UNSIGNED_BYTE, None)
         GL.glPixelStorei(GL.GL_UNPACK_ALIGNMENT, 1)
         self.fbo = GL.glGenFramebuffers(1)
         GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
@@ -447,8 +475,8 @@ class GLWindowSink:
         GL.glBindTexture(GL.GL_TEXTURE_2D, self.ov_tex)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
-        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, self.ov_w, self.ov_h, 0, GL.GL_BGR, GL.GL_UNSIGNED_BYTE,
-                        None)
+        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA16 if self.hdr10 else GL.GL_RGBA8, self.ov_w, self.ov_h, 0,
+                        GL.GL_BGR, GL.GL_UNSIGNED_SHORT if self.hdr10 else GL.GL_UNSIGNED_BYTE, None)
         self.ov_fbo = GL.glGenFramebuffers(1)
         GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.ov_fbo)
         GL.glFramebufferTexture2D(GL.GL_READ_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.ov_tex, 0)
@@ -458,7 +486,7 @@ class GLWindowSink:
         renderer = GL.glGetString(GL.GL_RENDERER).decode(errors="replace")
         try:
             from .glcuda import CudaGLTexture
-            self.interop = CudaGLTexture(int(self.tex), w, h)
+            self.interop = CudaGLTexture(int(self.tex), w, h, hdr=self.hdr10)
             print(f"[display] {renderer}: frames go to the screen straight from the GPU")
         except Exception as e:  # noqa: BLE001 - any failure just means the CPU upload path
             print(f"[display] {renderer}: GPU->screen copy unavailable ({e}); uploading frames from the CPU")
@@ -467,11 +495,12 @@ class GLWindowSink:
         from .fsr import FsrScaler, GpuTimer
         self.fsr = self.vsr = self.vsr_out = None
         try:
-            self.fsr = FsrScaler(GL, sharpness)
+            self.fsr = FsrScaler(GL, sharpness, hdr=self.hdr10)
         except Exception as e:  # noqa: BLE001 - shader trouble just means another scaler
             print(f"[display] FSR 1 unavailable ({str(e)[:200]})")
-        self.vsr_why = "it needs frames decoded on the GPU (the default for PS5 Remote Play)"
-        if self.gpu:  # RTX VSR works on frames that are already CUDA tensors
+        self.vsr_why = ("it isn't used with HDR output yet" if self.hdr10 else
+                        "it needs frames decoded on the GPU (the default for PS5 Remote Play)")
+        if self.gpu and not self.hdr10:  # RTX VSR works on frames that are already CUDA tensors (8-bit ones)
             from .rtxvsr import RtxVsr, unavailable_reason
             why = unavailable_reason()
             if why is None:
@@ -494,17 +523,20 @@ class GLWindowSink:
         from .looks_gl import LookRenderer
         self.looks = LookState(st)
         self.look_gl = None
-        try:
-            self.look_gl = LookRenderer(GL, self.looks.library.lut)
-        except Exception as e:  # noqa: BLE001 - looks are optional
-            print(f"[display] Looks unavailable ({str(e)[:200]})")
+        if self.hdr10:  # looks are made for SDR pictures
+            print("[display] Looks are off with HDR output")
+        else:
+            try:
+                self.look_gl = LookRenderer(GL, self.looks.library.lut)
+            except Exception as e:  # noqa: BLE001 - looks are optional
+                print(f"[display] Looks unavailable ({str(e)[:200]})")
         self._frame_no = 0
         self._bake = None  # instant replay with "Looks in clips": (texture, framebuffer, CudaGLReader)
         self._bake_said = False
 
         self.choices, self.unavailable = dict(choices or {}), dict(unavailable or {})
         self.menu = Menu(st, allowed=self.allowed, disabled=self.disabled, restart_reasons=restart_reasons)
-        self.menu_panel, self.toast_panel = _Panel(GL), _Panel(GL)
+        self.menu_panel, self.toast_panel = _Panel(GL, self.hdr10), _Panel(GL, self.hdr10)
         self._menu_state = self._toast_state = None
         self._toast_text, self._toast_until = "Press M for settings", time.perf_counter() + 8.0
         self._waited = -1  # wait(): the whole second the "no picture" note last said (-1: no wait going on)
@@ -550,11 +582,11 @@ class GLWindowSink:
         except Exception as e:
             print(f"[display] window icon not set: {e}")
 
-    def _open_dxgi(self, w: int, h: int) -> None:
+    def _open_dxgi(self, w: int, h: int, hdr: bool = False, peak: float = 1000.0) -> None:
         """Settings "present" = "dxgi" (Experimental): the video window gets a DXGI flip-model swap chain and no OpenGL
         context of its own (GLFW NO_API); OpenGL draws on a hidden window (framegen/dxgi_present.py). In a window that
         skips the compositor's copy: less delay, and G-Sync/FreeSync work. Leaves self.dx None (and no windows) if
-        any of it fails, so the caller opens the usual OpenGL window."""
+        any of it fails, so the caller opens the usual OpenGL window. hdr: a 10-bit HDR10 swap chain (HDR output)."""
         glfw = self.glfw
         from .dxgi_present import DxgiPresenter
         win = glwin = None
@@ -571,11 +603,12 @@ class GLWindowSink:
                 raise RuntimeError("couldn't open the window")
             glfw.make_context_current(glwin)
             fw, fh = glfw.get_framebuffer_size(win)
-            self.dx = DxgiPresenter(self.GL, glfw.get_win32_window(win), fw, fh)
+            self.dx = DxgiPresenter(self.GL, glfw.get_win32_window(win), fw, fh, hdr=hdr, peak_nits=peak)
             self.win, self.glwin = win, glwin
             from .dxgi_present import BUFFERS
-            test = ("direct", 2) != (self.dx.mode, BUFFERS) or FULLSCREEN_STYLE != "none"
+            test = ("copy", 2) != (self.dx.mode, BUFFERS) or FULLSCREEN_STYLE != "none"
             print("[display] window presentation: DXGI flip model"
+                  + (", HDR10 (10-bit, PQ, BT.2020)" if hdr else "")
                   + (", tearing allowed with VSync off" if self.dx.tearing else "") + " (Experimental)"
                   + (f" [testing: {self.dx.mode}, {BUFFERS} buffers, fullscreen {FULLSCREEN_STYLE}]" if test else ""))
         except Exception as e:  # noqa: BLE001 - any failure: OpenGL's own presentation
@@ -585,7 +618,10 @@ class GLWindowSink:
                 if wnd:
                     glfw.destroy_window(wnd)
             self.dx = None
-            print(f"[display] low-delay window presentation unavailable ({str(e)[:200]}); using OpenGL's own")
+            if hdr:
+                print(f"[display] HDR output unavailable ({str(e)[:200]}); showing HDR in SDR")
+            else:
+                print(f"[display] low-delay window presentation unavailable ({str(e)[:200]}); using OpenGL's own")
 
     def _target(self) -> int:
         """The framebuffer the picture is drawn into: the window's own, or DXGI's offscreen one."""
@@ -626,7 +662,7 @@ class GLWindowSink:
         elif key == "overlay":
             self.overlay = st.overlay
         elif key == "fullscreen":
-            if self.dx is not None and st.fullscreen and FULLSCREEN_STYLE == "none":
+            if self.dx is not None and st.fullscreen and self.fs_style == "none":
                 self.toast("Fullscreen starts next time you press Play: Low delay works in a window only", 5.0)
                 return
             self._set_fullscreen(st.fullscreen)
@@ -680,7 +716,7 @@ class GLWindowSink:
             self._overlay_at, self._overlay_check = None, 0.0
             self._follow()
             return
-        if self.dx is not None and FULLSCREEN_STYLE == "borderless":
+        if self.dx is not None and self.fs_style == "borderless":
             self._set_borderless(on)
             return
         if bool(glfw.get_window_monitor(win)) == on:
@@ -874,8 +910,9 @@ class GLWindowSink:
             self.interop.upload(frame)
         else:
             GL.glBindTexture(GL.GL_TEXTURE_2D, self.tex)
-            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, self.w, self.h, GL.GL_BGR, GL.GL_UNSIGNED_BYTE,
-                               np.ascontiguousarray(_host(frame)))
+            host = np.ascontiguousarray(_host(frame))
+            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, self.w, self.h, GL.GL_BGR,
+                               GL.GL_HALF_FLOAT if host.dtype == np.float16 else GL.GL_UNSIGNED_BYTE, host)
         fw, fh, s, dw, dh, x0, y0 = self._layout()
         target = self._target()
         GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, target)
@@ -982,7 +1019,8 @@ class GLWindowSink:
             self._ov_tw = min(self.ov_w, max(self._ov_tw, tw))
             self._ov_th = 16 + 40 * len(lines)
             GL.glBindTexture(GL.GL_TEXTURE_2D, self.ov_tex)
-            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, self.ov_w, self.ov_h, GL.GL_BGR, GL.GL_UNSIGNED_BYTE, img)
+            img, _, kind = _gl_image(GL, img, self.hdr10)
+            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, self.ov_w, self.ov_h, GL.GL_BGR, kind, img)
             self._ov_text = text
         GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.ov_fbo)
         x, y = x0 + int(8 * s), top - int(8 * s)

@@ -31,13 +31,15 @@ def _cudart() -> ctypes.CDLL:
 
 
 class CudaGLTexture:
-    """Copies HxWx3 uint8 BGR CUDA tensors into an existing GL_RGBA8 texture of the same size.
+    """Copies HxWx3 uint8 BGR CUDA tensors into an existing GL_RGBA8 texture of the same size; with hdr, HxWx3
+    float16 ones (framegen/hdr.py pq16) into a GL_RGBA16F texture.
 
     Create it, and call `upload`, on the thread whose GL context owns the texture.
     """
 
-    def __init__(self, tex: int, w: int, h: int) -> None:
+    def __init__(self, tex: int, w: int, h: int, hdr: bool = False) -> None:
         self.w, self.h = w, h
+        self.bpp = 8 if hdr else 4  # bytes per staged pixel
         self.rt = rt = _cudart()
         p, i, u, s = ctypes.c_void_p, ctypes.c_int, ctypes.c_uint, ctypes.c_size_t
         rt.cudaGraphicsGLRegisterImage.argtypes = [ctypes.POINTER(p), u, u, u]
@@ -50,8 +52,10 @@ class CudaGLTexture:
         self.res = p()
         self._check(rt.cudaGraphicsGLRegisterImage(ctypes.byref(self.res), tex, _GL_TEXTURE_2D,
                                                    _GRAPHICS_REGISTER_WRITE_DISCARD), "register texture")
-        # RGBA staging tensor (the texture is RGBA8; CUDA can't map 3-channel GL textures). Alpha stays 255.
-        self.rgba = torch.full((h, w, 4), 255, dtype=torch.uint8, device="cuda")
+        # RGBA staging tensor (the texture is RGBA8, or RGBA16F; CUDA can't map 3-channel GL textures). Alpha stays
+        # opaque.
+        self.rgba = (torch.ones((h, w, 4), dtype=torch.float16, device="cuda") if hdr else
+                     torch.full((h, w, 4), 255, dtype=torch.uint8, device="cuda"))
 
     def _check(self, err: int, what: str) -> None:
         if err:
@@ -66,7 +70,7 @@ class CudaGLTexture:
             arr = ctypes.c_void_p()
             self._check(self.rt.cudaGraphicsSubResourceGetMappedArray(ctypes.byref(arr), self.res, 0, 0), "get array")
             self._check(self.rt.cudaMemcpy2DToArrayAsync(arr, 0, 0, ctypes.c_void_p(self.rgba.data_ptr()),
-                                                         self.w * 4, self.w * 4, self.h,
+                                                         self.w * self.bpp, self.w * self.bpp, self.h,
                                                          _MEMCPY_DEVICE_TO_DEVICE, stream), "copy")
         finally:
             # Unmapping orders GL's use of the texture after the copy (stream semantics), no CPU wait needed.

@@ -9,7 +9,8 @@ Design notes
   `flownet(img0, img1, f0, f1) -> middle frame`. In a stream each real frame is
   the "next" frame of one pair and the "previous" frame of the following pair,
   so we encode it exactly once into one of two ping-pong slots.
-* Frames enter and leave as HxWx3 uint8 BGR (OpenCV / capture-card layout).
+* Frames enter and leave as HxWx3 uint8 BGR (OpenCV / capture-card layout), or with hdr=True as HxWx3 float16 BGR
+  PQ BT.2020 (framegen/hdr.py "pq16", settings "hdr" = HDR output). The model sees 0..1 either way.
 """
 
 from __future__ import annotations
@@ -74,10 +75,13 @@ class RifeInterpolator:
         reference: bool = False,
         backend: str = "torch",
         build_engine: bool = True,
+        hdr: bool = False,
     ) -> None:
         """`reference=True` runs the unmodified vs-rife forward (for validating FastIFNet).
         backend="trt" runs the flow network as a TensorRT engine (built and cached on first use; with
-        build_engine=False a missing engine raises FileNotFoundError instead)."""
+        build_engine=False a missing engine raises FileNotFoundError instead).
+        hdr: frames are float16 PQ (framegen/hdr.py pq16) instead of uint8; `in_u8` is then their 8-bit stand-in
+        for the pipeline's checks, worked out in load()."""
         if version not in MODELS:
             raise ValueError(f"unknown model {version!r}; choose from {list(MODELS)}")
         if scale not in (0.25, 0.5, 1.0, 2.0):
@@ -87,6 +91,8 @@ class RifeInterpolator:
         self.version, self.scale = version, scale
         self.device = torch.device(device)
         self.dtype = torch.half if fp16 else torch.float
+        self.hdr = hdr
+        self.frame_dtype = torch.float16 if hdr else torch.uint8  # what load() takes and interpolate() gives
         torch.backends.cudnn.benchmark = True
 
         module_name, modulo = MODELS[version]
@@ -129,9 +135,11 @@ class RifeInterpolator:
         self.steady_w = torch.zeros((1, 1, ph, pw), device=dev)  # see _steady_mask
         self._slot: int | None = None  # the newest prepared slot
 
-        # Static I/O buffers (graph inputs/outputs).
-        self.in_u8 = torch.zeros((height, width, 3), dtype=torch.uint8, device=dev)
-        self.out_u8 = torch.zeros((height, width, 3), dtype=torch.uint8, device=dev)
+        # Static I/O buffers (graph inputs/outputs), in the frames' own format. in_u8: the input as 8 bits, for the
+        # pipeline's checks (the input itself, unless hdr). out_u8: the output (float16 if hdr).
+        self.inp = torch.zeros((height, width, 3), dtype=self.frame_dtype, device=dev)
+        self.out_u8 = torch.zeros((height, width, 3), dtype=self.frame_dtype, device=dev)
+        self.in_u8 = torch.zeros((height, width, 3), dtype=torch.uint8, device=dev) if hdr else self.inp
         with torch.no_grad():
             fshape = self.encode(torch.zeros((1, 3, ph, pw), dtype=dt, device=dev)).shape
         self.fast = None if reference else FastIFNet(self.flownet, ph, pw, dt, dev)
@@ -163,7 +171,9 @@ class RifeInterpolator:
     # ---- eager kernels (also what gets captured into graphs) -----------------
     @torch.no_grad()
     def _prepare_eager(self, slot: int) -> None:
-        x = self.in_u8.permute(2, 0, 1).flip(0).unsqueeze(0).to(self.dtype).div_(255.0)  # BGR->RGB, 0..1
+        x = self.inp.permute(2, 0, 1).flip(0).unsqueeze(0).to(self.dtype)  # BGR->RGB
+        if not self.hdr:
+            x = x.div_(255.0)  # 0..1 (pq16 already is)
         if self.pad[1] or self.pad[3]:
             x = F.pad(x, self.pad)
         if self.fast is not None:
@@ -185,7 +195,10 @@ class RifeInterpolator:
         if steady:
             mid = self._steady(mid, a, b)
         mid = mid[0, :, : self.h, : self.w].flip(0).permute(1, 2, 0)  # RGB->BGR, HWC
-        self.out_u8.copy_(mid.clamp(0.0, 1.0).mul(255.0).round_().to(torch.uint8))
+        if self.hdr:
+            self.out_u8.copy_(mid.clamp(0.0, 1.0))
+        else:
+            self.out_u8.copy_(mid.clamp(0.0, 1.0).mul(255.0).round_().to(torch.uint8))
 
     def _rgb(self, slot: int) -> torch.Tensor:
         """Slot's real frame, (1, 3, ph, pw) RGB 0..1."""
@@ -287,5 +300,8 @@ class RifeInterpolator:
         return self.out_u8
 
     def load(self, frame_u8: torch.Tensor) -> None:
-        """Copy an HxWx3 uint8 frame (GPU or pinned CPU) into the static input."""
-        self.in_u8.copy_(frame_u8, non_blocking=True)
+        """Copy an HxWx3 frame (GPU or pinned CPU; uint8, or float16 if hdr) into the static input."""
+        self.inp.copy_(frame_u8, non_blocking=True)
+        if self.hdr:
+            from .hdr import to_u8
+            to_u8(self.inp, self.in_u8)
