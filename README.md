@@ -75,7 +75,7 @@ There's nothing to install on the console, and it's free and open source.
 ## Get it
 
 > [!NOTE]
-> **Early release.** 0.1.0 is the first version: expect rough edges, and please [report them](#help-test-it).
+> **Early release:** expect rough edges, and please [report them](#help-test-it).
 > SmoovPlay offers new versions itself, and updates in one click.
 
 | You need | |
