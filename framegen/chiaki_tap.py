@@ -42,11 +42,34 @@ SLOT_HEADER = 64
 SLOTS = 32
 SLOT_SIZE = 2 * 1024 * 1024
 TOTAL = HEADER + SLOTS * SLOT_SIZE
+CAPACITY = SLOTS * SLOT_SIZE  # the slots' share of the mapping, however a writer divides it (docs/frame-tap.md)
 CODECS = {0: "h264", 1: "hevc", 2: "hevc"}  # ChiakiCodec: H264, H265, H265_HDR
-CODEC_NAMES = {0: "H.264", 1: "H.265", 2: "H.265 HDR"}
+CODEC_NAMES = {0: "H.264", 1: "H.265", 2: "H.265 HDR", 16: "NV12 (decoded)", 17: "BGRA (decoded)"}
+# Decoded frames from any app (docs/frame-tap.md, framegen/tap.py): a writer of these sets version 2 and divides
+# CAPACITY into slots of its own size (raw_layout), since a decoded 1080p frame doesn't fit a 2 MiB slot.
+RAW_CODECS = {16: "nv12", 17: "bgra"}
+VERSION_RAW = 2
+RAW_BYTES = {"nv12": 1.5, "bgra": 4}
+# Header `colour` (offset 92) for NV12: 0 auto (BT.709 at 720 lines and up, else BT.601; limited range), then
+# 1 BT.709 limited, 2 BT.709 full, 3 BT.601 limited, 4 BT.601 full, as (bt709, full_range). BGRA is always full RGB.
+COLOURS = {1: (True, False), 2: (True, True), 3: (False, False), 4: (False, True)}
 DAMAGE_HOLD = 6  # frames held (not interpolated) after a gap in the stream, while the picture repairs itself
 U64_MAX = 2**64 - 1
 FEATURE_PRESS, FEATURE_AUDIO_DELAY, FEATURE_AUDIO_TAP = 1, 2, 4  # header `features` bits (frametap.h)
+FEATURE_VARIABLE = 8  # frames come when the picture changes, not once a refresh: the reader puts them on a beat
+FLAG_TRUNCATED, FLAG_REPEAT, FLAG_NEW = 1, 2, 4  # slot `flags`: REPEAT/NEW are the writer's own word on the frame
+
+
+def raw_layout(fmt: str, width: int, height: int) -> tuple[int, int]:
+    """(slot_count, slot_size) for decoded frames of this format and size: slots a whole number of MiB that hold
+    one frame and its slot header, as many as fit in CAPACITY (at most 32). ValueError if fewer than 4 fit."""
+    need = SLOT_HEADER + int(width * height * RAW_BYTES[fmt])
+    size = -(-need // (1 << 20)) << 20
+    count = min(SLOTS, CAPACITY // size)
+    if count < 4:
+        raise ValueError(f"a {width}x{height} {fmt} frame is too big for the frame tap ({need / 1e6:.1f} MB; "
+                         f"4 have to fit in {CAPACITY >> 20} MiB)")
+    return count, size
 # The game's sound, in a mapping of its own (frametap.h, "Sound ring")
 AUDIO_SUFFIX = "-audio"
 AUDIO_MAGIC = 0x41544643  # 'CFTA'
@@ -80,6 +103,10 @@ class Header:
     write_seq: int
     session: int
     qpc_freq: int
+    slots: int = SLOTS  # the writer's slot_count and slot_size (version 2; a version 1 writer always uses these)
+    slot_size: int = SLOT_SIZE
+    colour: int = 0  # NV12's colours (COLOURS), from a version 2 writer
+    features: int = 0
 
     @property
     def live(self) -> bool:
@@ -94,6 +121,8 @@ class Packet:
     frames_lost: int
     recovered: bool
     truncated: bool
+    flags: int = 0  # the slot's flags (FLAG_*)
+    size: int = 0  # bytes in the slot (read(into=...) leaves data empty)
 
 
 class FrameTap:
@@ -106,11 +135,15 @@ class FrameTap:
         self.event = _k32.CreateEventW(None, 0, 0, event_name)
 
     def header(self) -> Header:
-        magic, version, _n, _size, codec, w, h, fps = struct.unpack_from("<8I", self.mm, 0)
+        magic, version, n, size, codec, w, h, fps = struct.unpack_from("<8I", self.mm, 0)
         (write_seq,) = struct.unpack_from("<Q", self.mm, 32)
         (session,) = struct.unpack_from("<I", self.mm, 44)
         (freq,) = struct.unpack_from("<Q", self.mm, 48)
-        return Header(magic, version, codec, w, h, fps, write_seq, session, freq)
+        (features,) = struct.unpack_from("<I", self.mm, 64)
+        (colour,) = struct.unpack_from("<I", self.mm, 92)
+        if version < VERSION_RAW or not (4 <= n <= SLOTS and SLOT_HEADER < size and n * size <= CAPACITY):
+            n, size, colour = SLOTS, SLOT_SIZE, 0  # version 1 (chiaki-ng): the fixed layout
+        return Header(magic, version, codec, w, h, fps, write_seq, session, freq, n, size, colour, features)
 
     def request_idr(self) -> None:
         struct.pack_into("<I", self.mm, 40, 1)
@@ -145,38 +178,67 @@ class FrameTap:
     def wait(self, timeout_s: float) -> None:
         _k32.WaitForSingleObject(self.event, int(timeout_s * 1000))
 
-    def read(self, seq: int, qpc_freq: int) -> Packet | None:
-        """Copy frame `seq` out of its slot, or None if the writer has already reused the slot."""
-        off = HEADER + (seq % SLOTS) * SLOT_SIZE
+    def read(self, seq: int, qpc_freq: int, slots: int = SLOTS, slot_size: int = SLOT_SIZE,
+             into=None) -> Packet | None:
+        """Copy frame `seq` out of its slot, or None if the writer has already reused the slot. slots, slot_size:
+        the writer's layout (Header.slots, .slot_size). into: a uint8 numpy array to copy the frame into instead of
+        a new bytes object (a decoded frame, megabytes); the Packet's data is then b"" and its size is in `size`."""
+        off = HEADER + (seq % slots) * slot_size
         s0, q, size, lost, rec, flags = struct.unpack_from("<QQIiII", self.mm, off)
-        if s0 != seq:
+        if s0 != seq or size > slot_size - SLOT_HEADER:
             return None
-        data = self.mm[off + SLOT_HEADER: off + SLOT_HEADER + size]
+        if into is None:
+            data = self.mm[off + SLOT_HEADER: off + SLOT_HEADER + size]
+        else:
+            if size > into.size:
+                return None
+            into[:size] = np.frombuffer(self.mm, np.uint8, size, off + SLOT_HEADER)
+            data = b""
         if struct.unpack_from("<Q", self.mm, off)[0] != seq:  # rewritten while we copied
             return None
         age = (qpc() - q) / qpc_freq if qpc_freq else 0.0
-        return Packet(seq, time.perf_counter() - age, data, lost, bool(rec), bool(flags & 1))
+        return Packet(seq, time.perf_counter() - age, data, lost, bool(rec), bool(flags & FLAG_TRUNCATED), flags,
+                      size)
 
-    # Writer side, for tests and the fake PS5 (scripts/frametap_fake.py); chiaki-ng uses frametap.c.
-    def begin(self, codec: int, width: int, height: int, max_fps: int = 60) -> None:
+    # Writer side, for tests, the fake PS5 (scripts/frametap_fake.py) and the decoded-frame sender
+    # (scripts/frametap_send.py); chiaki-ng uses frametap.c.
+    _slots, _slot_size = SLOTS, SLOT_SIZE
+
+    def begin(self, codec: int, width: int, height: int, max_fps: int = 60, colour: int = 0,
+              features: int | None = None) -> None:
+        """Start a stream. A decoded format (RAW_CODECS) gets version 2 and slots of its own (raw_layout).
+        features, if given, replaces the header's features field."""
         struct.pack_into("<I", self.mm, 0, 0)
         freq = ctypes.c_int64()
         _k32.QueryPerformanceFrequency(ctypes.byref(freq))
-        struct.pack_into("<7I", self.mm, 4, VERSION, SLOTS, SLOT_SIZE, codec, width, height, max_fps)
+        if codec in RAW_CODECS:
+            version, (self._slots, self._slot_size) = VERSION_RAW, raw_layout(RAW_CODECS[codec], width, height)
+        else:
+            version, self._slots, self._slot_size = VERSION, SLOTS, SLOT_SIZE
+        struct.pack_into("<7I", self.mm, 4, version, self._slots, self._slot_size, codec, width, height, max_fps)
         struct.pack_into("<QI", self.mm, 32, 0, 0)
         struct.pack_into("<Q", self.mm, 48, freq.value)
+        struct.pack_into("<I", self.mm, 92, colour if codec in RAW_CODECS else 0)
+        if features is not None:
+            struct.pack_into("<I", self.mm, 64, features)
         (session,) = struct.unpack_from("<I", self.mm, 44)
         struct.pack_into("<I", self.mm, 44, session + 1)
         struct.pack_into("<I", self.mm, 0, MAGIC)
 
-    def push(self, data: bytes, frames_lost: int = 0, recovered: bool = False) -> None:
+    def push(self, data, frames_lost: int = 0, recovered: bool = False, new: bool | None = None) -> None:
+        """One frame: compressed bytes, or a decoded frame (bytes or a uint8 numpy array, rows packed tightly).
+        new: the writer's own word on it (True: new content, False: a repeat of the frame before; None: unknown)."""
         (seq,) = struct.unpack_from("<Q", self.mm, 32)
-        off = HEADER + (seq % SLOTS) * SLOT_SIZE
-        size = min(len(data), SLOT_SIZE - SLOT_HEADER)
+        off = HEADER + (seq % self._slots) * self._slot_size
+        n = data.nbytes if isinstance(data, np.ndarray) else len(data)
+        size = min(n, self._slot_size - SLOT_HEADER)
+        flags = (FLAG_TRUNCATED if size < n else 0) | {True: FLAG_NEW, False: FLAG_REPEAT, None: 0}[new]
         struct.pack_into("<Q", self.mm, off, U64_MAX)
-        struct.pack_into("<QIiII", self.mm, off + 8, qpc(), size, frames_lost, int(recovered),
-                         int(size < len(data)))
-        self.mm[off + SLOT_HEADER: off + SLOT_HEADER + size] = data[:size]
+        struct.pack_into("<QIiII", self.mm, off + 8, qpc(), size, frames_lost, int(recovered), flags)
+        if isinstance(data, np.ndarray):
+            np.frombuffer(self.mm, np.uint8, size, off + SLOT_HEADER)[:] = data.reshape(-1)[:size]
+        else:
+            self.mm[off + SLOT_HEADER: off + SLOT_HEADER + size] = bytes(data[:size])
         struct.pack_into("<Q", self.mm, off, seq)
         struct.pack_into("<Q", self.mm, 32, seq + 1)
         _k32.SetEvent(self.event)

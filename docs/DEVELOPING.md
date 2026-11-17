@@ -11,6 +11,7 @@ and how to get it, see the [README](../../README.md).
 | [`framegen/`](../framegen/) | The pipeline: video sources (file, capture card, app window, chiaki-ng frame tap), repeat and cut detection, RIFE interpolation (PyTorch and TensorRT), FSR 1 and RTX VSR upscaling, the OpenGL window and the settings menu. |
 | [`run.py`](../run.py) | Command-line entry point. |
 | [`chiaki_tap/`](../chiaki_tap/) | The patch that adds a frame tap to chiaki-ng, and how to build it. |
+| [`docs/frame-tap.md`](frame-tap.md) | The frame tap's format, so any app can send its frames to SmoovPlay (Experimental), with a small C writer to start from. |
 | [`installer/`](../installer/) | `SmoovPlay-Setup.exe` and the SmoovPlay launcher, in C# and WPF. |
 | [`native/rtxvsr/`](../native/rtxvsr/) | Optional wrapper around NVIDIA's RTX Video SDK. |
 | [`scripts/`](../scripts/) | Benchmarks, a model check and a fake chiaki-ng stream for testing without a PS5. |
@@ -54,6 +55,11 @@ Any 60 fps gameplay recording works for testing; the examples use `testdata\clip
 
 # PS5 Remote Play through the patched chiaki-ng (the CSV: one row per frame, stream facts and decisions):
 .venv\Scripts\python run.py --chiaki --display --chiaki-log out\session.csv
+
+# Any app that writes the frame tap (docs/frame-tap.md, Experimental): compressed or decoded frames. The
+# stand-in sends a video's decoded frames (--format bgra, --variable, --hints):
+.venv\Scripts\python run.py --source tap --display
+.venv\Scripts\python scripts\frametap_send.py testdata\clip_1080p60.mp4 --hints
 
 # Every Remote Play session ends with a stream check: how well the size-based repeat check read the game (frame
 # rate, the 30 fps new/repeat rhythm, likely misreads by the picture, sizes, arrival times, a verdict). It goes in
@@ -128,6 +134,7 @@ made-up PCs.
 | FSR sharpening | Max … Minimal | live |
 | RTX VSR quality | Low / Medium / High / Ultra | live |
 | Stats overlay, Fullscreen, VSync | On / Off | live |
+| Stats overlay style | Minimal (frames on screen, the game's rate, the delay, a keeping-up dot) / Detailed | live |
 | Window presentation | Standard / Low delay (Experimental: DXGI flip model, so a window skips the compositor's copy and G-Sync works in a window; fullscreen always uses Standard; `--present gl\|dxgi`) | next Play |
 | Minimise chiaki-ng | On / Off | live (PS5 Remote Play only) |
 | Sound in sync | On / Off (chiaki-ng holds its sound back to meet the picture) | live (PS5 Remote Play only) |
@@ -147,9 +154,9 @@ build for a new resolution takes about 2 minutes. Adding a setting means adding 
 that list. The launcher talks to a running session through its stdin and stdout (`run.py --control`; see
 `framegen/remote.py`).
 
-Hotkeys: `i` interpolation on/off for this session (instant A/B, not saved), `s` stats overlay, `f`
-fullscreen, `u` next upscaler, `l` delay test (PS5 Remote Play), `r` save the instant replay, `b` save a before &
-after video of it, `k` look on/off, `j` next look (`Shift+J` back), `q` quit. A short note in the corner confirms each one. While instant replay is on,
+Hotkeys: `i` interpolation on/off for this session (instant A/B, not saved), `s` stats overlay (off, minimal,
+detailed), `f` fullscreen, `u` next upscaler, `l` delay test (PS5 Remote Play), `r` save the instant replay, `b` save a before &
+after video of it, `k` look on/off, `j` next look (`Shift+J` back), `q` or Esc quit. A short note in the corner confirms each one. While instant replay is on,
 `Ctrl+Alt+R` and `Ctrl+Alt+B` work from any window.
 
 Instant replay (`framegen/replay.py`) keeps three tracks in memory as MPEG-TS pieces, one per encoded packet: every

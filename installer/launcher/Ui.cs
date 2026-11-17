@@ -1522,7 +1522,11 @@ namespace SmoovPlay
             switch (st)
             {
                 case PlayState.Starting: title = "Starting SmoovPlay"; sub = "Waking up the AI model..."; break;
-                case PlayState.Waiting: title = "Waiting for your stream"; sub = "chiaki-ng is open. Connect to your PS5 there and start Remote Play."; break;
+                case PlayState.Waiting:
+                    title = "Waiting for your stream";
+                    sub = source.Kind == "tap" ? "Start the app that sends its frames to SmoovPlay. Its smooth video opens as soon as they come."
+                        : "chiaki-ng is open. Connect to your PS5 there and start Remote Play.";
+                    break;
                 case PlayState.Found: title = "Stream found"; sub = (detail != null ? detail + ". " : "") + "Loading the AI model..."; break;
                 case PlayState.Building:
                     if (detail != null) { title = "Applying your settings"; sub = "Restarting the AI model for " + detail + ". A few seconds; the stream keeps going."; }
@@ -1535,7 +1539,7 @@ namespace SmoovPlay
                         sub = "Your 60 fps game is playing as if it were 30 fps. Play a few minutes, with some fast motion, then press Q in the video window for the results.";
                     }
                     else if (source.Kind == "window") { title = "Playing"; sub = "The smooth picture is over the app's window. Clicks, keys and the controller go to the app, so change settings here (they apply straight away) and press Stop to end."; }
-                    else { title = "Playing"; sub = "The smooth video is in its own window. There, M opens the menu, F goes fullscreen and Q stops. Settings here apply to it straight away."; }
+                    else { title = "Playing"; sub = "The smooth video is in its own window. There, M opens the menu, F goes fullscreen and Esc stops. Settings here apply to it straight away."; }
                     break;
                 case PlayState.Ended: title = "The stream ended"; sub = "Press Play to connect again."; break;
                 case PlayState.Stopped: title = "Stopped"; sub = "Press Play to start again."; break;
@@ -1548,6 +1552,7 @@ namespace SmoovPlay
                     sub = source.RemotePlay ? "Press Play. chiaki-ng opens: connect to your PS5 there, and the smooth video appears in its own window."
                         : source.Kind == "capture" ? "Press Play. The smooth video from your capture card appears in its own window."
                         : source.Kind == "window" ? "Press Play. The smooth picture appears over the app's window, which keeps the controller and the keyboard."
+                        : source.Kind == "tap" ? "Press Play, then start the app. Its smooth video appears in its own window."
                         : "Press Play to play the test video.";
                     break;
             }
@@ -1587,7 +1592,12 @@ namespace SmoovPlay
             if (st == PlayState.Playing && !minimisedForPlay && session != null)
             {
                 minimisedForPlay = true;
-                Window.WindowState = WindowState.Minimized;
+                // Without activating anything: WPF's own minimise hands the keys to the next window in line, which
+                // took them from the video window (SW_SHOWMINNOACTIVE).
+                IntPtr h = IntPtr.Zero;
+                try { h = new WindowInteropHelper(Window).Handle; } catch (Exception) { }
+                if (h != IntPtr.Zero) ShowWindow(h, 7);
+                else Window.WindowState = WindowState.Minimized;
             }
             if (over && changed) BringBack();
             if (over && changed) { liveState = null; restartSent = false; BuildChips(); }
@@ -1623,11 +1633,12 @@ namespace SmoovPlay
             var tiles = E<UniformGrid>("ResultsTiles");
             tiles.Children.Clear();
             string quality = last("Quality: ");
-            var q = Regex.Match(quality, @"scored ([\d.]+) dB.*?scores ([\d.]+) dB");
+            // "Quality: 6.2% of each AI frame was visibly off ..., against 11% when the last frame is repeated ..."
+            var q = Regex.Match(quality, @"([\d.]+%) of each AI frame was visibly off.*?against ([\d.]+%)");
             if (q.Success)
             {
-                ResultTile(tiles, "With AI", q.Groups[1].Value + " dB", "vs the real frames", true);
-                ResultTile(tiles, "Without AI", q.Groups[2].Value + " dB", "last frame repeated", false);
+                ResultTile(tiles, "With AI", q.Groups[1].Value, "visibly off", true);
+                ResultTile(tiles, "Without AI", q.Groups[2].Value, "visibly off (last frame repeated)", false);
             }
             else if (quality.Contains("not measured")) ResultTile(tiles, "Quality", "n/a", "measured at 60 or 120 fps", false);
             var behind = Regex.Match(last("Running behind: "), @"([\d.]+)%");
@@ -1642,7 +1653,8 @@ namespace SmoovPlay
             var played = Regex.Match(last("Stream: "), @"played ([\d:]+)");
             if (played.Success) facts.Add(played.Groups[1].Value + " played");
             T("ResultsNote").Text = (facts.Count > 0 ? string.Join(", ", facts) + ". " : "")
-                + "Higher dB is closer to the real frames; slow scenes score high either way.";
+                + "Visibly off: the share of each frame more than about 5% brighter or darker than the real one. Lower is "
+                + "better; slow scenes score well either way.";
             ShowResultsCard(true);
             Snap("play-results");
         }
@@ -1717,6 +1729,13 @@ namespace SmoovPlay
             new[] { "capture-play", "Press Play", "The smooth video from the card opens in its own window.", "play" },
         };
 
+        static readonly string[][] TapGuide =
+        {
+            new[] { "tap-app", "Use an app that sends its frames to SmoovPlay", "Some apps can hand their frames straight to SmoovPlay, saying which are repeats, so nothing is captured from the screen. For app developers, the format is docs/frame-tap.md in SmoovPlay's GitHub repo.", null },
+            new[] { "tap-sound", "Sound and controller", "The app keeps the controller and plays its own sound.", null },
+            new[] { "tap-play", "Press Play, then start the app", "Either can go first: SmoovPlay waits for the app's frames, then the smooth video opens in its own window.", "play" },
+        };
+
         string[][] GuideSteps
         {
             get
@@ -1724,6 +1743,7 @@ namespace SmoovPlay
                 if (source.RemotePlay) return Ps5Guide;
                 if (source.Kind == "capture") return CaptureGuide;
                 if (source.Kind == "window") return WindowGuide;
+                if (source.Kind == "tap") return TapGuide;
                 return new[] { new[] { source.Kind + "-play", source.Name, source.Guide ?? "", "play" } };
             }
         }

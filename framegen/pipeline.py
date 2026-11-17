@@ -13,7 +13,7 @@ from . import delaytest
 from .cadence import Action, CadenceScheduler, CutDetector, DuplicateDetector, FrameTimeline
 from .hdr import level8, to_u8
 from .interpolator import STEADY_HUD_THRESHOLD, RifeInterpolator
-from .io import TICK, Waiting
+from .io import TICK, MiniText, Waiting
 
 
 # --score's "still areas": pixels within this many levels (of 255) in both real frames, like a HUD or map.
@@ -24,6 +24,15 @@ STILL_LEVELS = 3
 # wobble a viewer sees, which a whole-frame score dilutes.
 HUD_EDGE = 128.0
 HUD_OFF_LEVELS = 12
+# Test mode's quality, for people: the share of a frame's pixels visibly off from the real frame (more than
+# HUD_OFF_LEVELS of 255 in any colour, about 5% brighter or darker), lower is better. PSNR (dB) stays in the log.
+VISIBLE_LEVELS = HUD_OFF_LEVELS
+
+
+def pct(share: float) -> str:
+    """0.062 -> "6.2%", 0.12 -> "12%": a share as people read it."""
+    v = 100 * share
+    return f"{v:.1f}%" if v < 10 else f"{v:.0f}%"
 
 
 def psnr(a: torch.Tensor, b: torch.Tensor) -> float:
@@ -140,6 +149,10 @@ class Stats:
     psnr_interp: list[float] = field(default_factory=list)
     psnr_repeat: list[float] = field(default_factory=list)  # what you'd see without interpolation
     psnr_blend: list[float] = field(default_factory=list)  # naive 50/50 crossfade
+    # Share of each scored frame's pixels visibly off from the real one (see VISIBLE_LEVELS): the AI frame, and the
+    # last real frame repeated instead (what you'd see without frame generation).
+    off_interp: list[float] = field(default_factory=list)
+    off_repeat: list[float] = field(default_factory=list)
     # The same, only over pixels that are (almost) unchanged between the two real frames: HUD, maps, still
     # backgrounds. Where Steady HUD acts; for tuning it (--score), not shown to users.
     psnr_still: list[float] = field(default_factory=list)
@@ -223,6 +236,10 @@ class Stats:
                 "  (n={}, RIFE worst {:.2f})".format(
                     np.mean(fin(self.psnr_interp)), np.mean(fin(self.psnr_blend)),
                     np.mean(fin(self.psnr_repeat)), len(self.psnr_interp), min(self.psnr_interp)))
+        if self.off_interp:
+            lines.append("visibly off (more than {} levels): RIFE {:.2f}% | repeat {:.2f}%  (worst {:.2f}%)".format(
+                VISIBLE_LEVELS, 100 * np.mean(self.off_interp), 100 * np.mean(self.off_repeat),
+                100 * max(self.off_interp)))
         if self.psnr_still:
             fin = lambda xs: [x for x in xs if np.isfinite(x)]  # noqa: E731
             lines.append("  still areas ({:.0f}% of pixels): RIFE {:.2f} | repeat {:.2f}".format(
@@ -240,8 +257,7 @@ class Stats:
         motion ran at full resolution (None: unknown), so the advice doesn't suggest what's already on."""
         budget = TICK * 1000
         interp, busy, delay = list(self.proc_interp_ms), list(self.busy_ms), list(self.real_delay_ms)
-        ai = [x for x in list(self.psnr_interp) if np.isfinite(x)]
-        repeat = [x for x in list(self.psnr_repeat) if np.isfinite(x)]
+        ai, repeat = list(self.off_interp), list(self.off_repeat)
         rates = sorted(set(self.hz_used)) or [60]
         lines = ["Output: " + " and ".join(f"{h} fps" for h in rates)]
         if interp:
@@ -266,12 +282,15 @@ class Stats:
             fps = 60 * self.test_game_new / tg
             lines.append(f"Game: it ran at about {fps:.0f} fps, not a steady 60. Simulate a 30 fps game is for 60 fps "
                          "games; a 30 fps game doesn't need it, as frame generation works on it as it is")
-        if len(ai) >= (30 if not_60 else 1):
-            lines.append(f"Quality: AI frames scored {np.mean(ai):.1f} dB against the real frames they stood in for; "
-                         f"repeating the last frame instead (no AI) scores {np.mean(repeat):.1f} dB. Higher is "
-                         f"closer to the real thing; slow scenes score high either way, the gap shows in motion "
-                         f"({len(ai)} frames measured, worst {min(ai):.1f} dB"
-                         + ("; only where the game drew every frame)" if not_60 else ")"))
+        # At 90 fps only the odd 60 fps fallback (a busy moment) has a real frame to compare with, and a game that
+        # isn't at 60 leaves few fair frames: a handful of those says nothing, so it takes 5 s of them.
+        only_90 = bool(self.hz_used) and self.hz_used <= {90}
+        if len(ai) >= (300 if not_60 or only_90 else 1) and repeat:
+            lines.append(f"Quality: {pct(np.mean(ai))} of each AI frame was visibly off from the real frame it stood "
+                         f"in for, against {pct(np.mean(repeat))} when the last frame is repeated instead (no AI). "
+                         "Lower is closer to the real thing; visibly off means more than about 5% brighter or darker. "
+                         f"Slow scenes score well either way; the gap shows in motion ({len(ai)} frames measured, "
+                         f"worst {pct(max(ai))}" + ("; only where the game drew every frame)" if not_60 else ")"))
         elif not_60:
             lines.append("Quality: not measured, as the game wasn't at a steady 60 fps")
         elif interp:
@@ -358,6 +377,8 @@ class Pipeline:
         gt = gt or getattr(source, "gt", None)
         gt_fn = gt if scoring else None
         st.hz_used.add(hz)
+        if replay is not None and hasattr(replay, "set_output_hz"):
+            replay.set_output_hz(hz)
         key_gpu: torch.Tensor | None = None  # GPU copy of key_frame, for scoring
         # A sink that takes CUDA tensors (the GL window with CUDA-GL interop) gets generated frames without a
         # GPU->CPU->GPU round trip; otherwise they're downloaded into pinned memory as before.
@@ -383,37 +404,67 @@ class Pipeline:
         off_since: float | None = None  # since when the game has been off the rate that's needed
         note, toasted = "", set()
 
+        def test_line() -> str:
+            """Test mode's badge, and quality over the last ~30 scored frames (about a second). 90 fps draws frames
+            at 1/3 and 2/3, where a 60 fps game has no real frame to compare against."""
+            text = "TEST: 60 fps game played as 30 fps"
+            q = list(zip(st.off_interp[-30:], st.off_repeat[-30:]))
+            if enabled and hz == 90:
+                text += "  quality: measured at 60 and 120 fps"
+            elif enabled and q:
+                text += (f"  quality: {pct(np.mean([x for x, _ in q]))} visibly off from the real frames"
+                         f" (no AI {pct(np.mean([y for _, y in q]))})")
+            return text
+
         def overlay_text() -> str:
             nonlocal ov_mark
             n0, s0, k0 = ov_mark
             ov_mark = (len(st.proc_interp_ms), st.quarter_shown, st.quarter_skipped)
             g, s = seen_rate.fps(), shown_rate.fps()
+            proc = st.proc_interp_ms[n0:]
+            shown, skipped = st.quarter_shown - s0, st.quarter_skipped - k0
+            testing = settings is not None and settings.simulate_30
+            if settings is not None and settings.overlay_style == "minimal":
+                return mini_text(g, s, proc, shown, skipped, testing)
             rates = (f"game {g:.0f} fps{' evened out' if timed else ''}, showing {s:.0f}"
                      if g is not None and s is not None else "")
             if not enabled:
                 text = f"{label}  INTERP OFF" + (f"  {rates}" if rates else "")
             else:
-                proc = st.proc_interp_ms[n0:]
                 text = f"{label}  INTERP ON  {rates or f'{hz} Hz'}  interp {np.mean(proc) if proc else 0.0:5.1f} ms"
-                shown, skipped = st.quarter_shown - s0, st.quarter_skipped - k0
                 if hz > 60 and shown + skipped:
                     text += f"  extra frames {100 * shown / (shown + skipped):3.0f}%"
             if delay_test is not None:  # the delay test, while it runs, is the second line
                 text += "\n" + delay_test.status()
             elif note:  # the game isn't at the rate that's needed: that's the second line
                 text += "\n" + note
-            elif settings is not None and settings.simulate_30:
-                # A second line: the test badge, and quality over the last ~30 scored frames (about a second).
-                # 90 fps draws frames at 1/3 and 2/3, where a 60 fps game has no real frame to compare against.
-                text += "\nTEST: 60 fps game played as 30 fps"
-                q = [(x, y) for x, y in zip(st.psnr_interp[-30:], st.psnr_repeat[-30:])
-                     if np.isfinite(x) and np.isfinite(y)]
-                if enabled and hz == 90:
-                    text += "  quality: measured at 60 and 120 fps"
-                elif enabled and q:
-                    text += (f"  quality {np.mean([x for x, _ in q]):.1f} dB vs real frames"
-                             f" (no AI {np.mean([y for _, y in q]):.1f} dB)")
+            elif testing:
+                text += "\n" + test_line()
             return text
+
+        def mini_text(g, s, proc, shown: int, skipped: int, testing: bool) -> MiniText:
+            """Stats overlay style Minimal: frames on screen, the game's rate (amber while it's off the rate that's
+            needed, which the message about it explains), SmoovPlay's delay, and how well the PC keeps up: at 90 and
+            120 fps by the extra frames shown, at 60 by the AI's share of each frame's time."""
+            parts = [(f"{s:.0f} fps" if s is not None else f"{hz} fps", "main")]
+            if g is not None:
+                parts.append((f"game {g:.0f}", "warn" if note else "dim"))
+            if st.real_delay_ms:
+                parts.append((f"delay {np.median(st.real_delay_ms[-120:]):.0f} ms", "dim"))
+            if not enabled:
+                health = "off"
+            elif hz > 60 and shown + skipped:
+                f = shown / (shown + skipped)
+                health = "good" if f >= 0.95 else "tight" if f >= 0.8 else "behind"
+            elif proc:
+                load = float(np.mean(proc)) / (TICK * 1000)
+                health = "good" if load < 0.75 else "tight" if load < 0.95 else "behind"
+            else:
+                health = ""
+            # Under the numbers, only while a test runs: the delay test, or test mode (with the advice, when the game
+            # isn't the 60 fps it needs; outside tests that advice is a message and the amber game rate).
+            second = (delay_test.status() if delay_test is not None else (note or test_line()) if testing else "")
+            return MiniText.make(parts, health, second)
 
         for tick in source:
             self.beat = time.perf_counter()
@@ -434,6 +485,8 @@ class Pipeline:
                 if want_hz != hz:
                     hz, gap, quarter_due, ov_next = want_hz, 0.95 / want_hz, False, 0.0
                     st.hz_used.add(hz)
+                    if replay is not None and hasattr(replay, "set_output_hz"):
+                        replay.set_output_hz(hz)
                     print(f"[pipeline] output {hz} Hz")
                 if (score or settings.simulate_30) != scoring:
                     scoring = not scoring
@@ -751,8 +804,11 @@ class Pipeline:
         still = ((b.float() - a.float()).abs().amax(-1, keepdim=True) <= STILL_LEVELS).float()
         n_still = still.sum().clamp_min(1.0) * 3
         errs = [(x - gt).pow_(2) for x in (out.float(), a.float(), blend)]
+        off = (out.float() - gt).abs().amax(-1, keepdim=True) > VISIBLE_LEVELS  # visibly off, AI frame
+        off_repeat = (a.float() - gt).abs().amax(-1, keepdim=True) > VISIBLE_LEVELS  # and the last frame repeated
         mse = torch.stack([e.mean() for e in errs] + [(errs[0] * still).sum() / n_still,
-                                                       (errs[1] * still).sum() / n_still, still.mean()]).tolist()
+                                                       (errs[1] * still).sum() / n_still, still.mean(),
+                                                       off.float().mean(), off_repeat.float().mean()]).tolist()
         p, p_repeat, p_blend = map(_db, mse[:3])
         if mse[5] > 0:
             st.psnr_still.append(_db(mse[3]))
@@ -761,12 +817,13 @@ class Pipeline:
         st.psnr_interp.append(p)
         st.psnr_repeat.append(p_repeat)
         st.psnr_blend.append(p_blend)
+        st.off_interp.append(mse[6])
+        st.off_repeat.append(mse[7])
         hud = hud_mask(a, b, gt, still)
         n_hud = hud.sum().item()
         if n_hud:
-            off = ((out.float() - gt).abs().amax(-1, keepdim=True) > HUD_OFF_LEVELS).float()
             st.psnr_hud.append(_db((errs[0] * hud).sum().item() / (3 * n_hud)))
-            st.hud_off.append((off * hud).sum().item() / n_hud)
+            st.hud_off.append((off.float() * hud).sum().item() / n_hud)
             st.hud_frac.append(n_hud / hud.numel())
         if keep_worst and (st.worst is None or p < st.worst[0]):
             st.worst = (p, tick.index, _np(prev), _np(self.interp.out_u8), _np(gt_np), _np(tick.frame))

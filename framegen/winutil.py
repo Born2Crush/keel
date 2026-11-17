@@ -9,7 +9,26 @@ import ctypes
 import os
 import sys
 
-SW_SHOWNOACTIVATE, SW_MINIMIZE, SW_RESTORE = 4, 6, 9
+# SW_SHOWMINNOACTIVE minimises without activating another window (SW_MINIMIZE activates the next one in line, which
+# can take the keys away from the video window).
+SW_SHOWNOACTIVATE, SW_MINIMIZE, SW_SHOWMINNOACTIVE, SW_RESTORE = 4, 6, 7, 9
+
+
+def _image_name(pid: int) -> str:
+    """The file name of process `pid`'s program, lower case (e.g. "chiaki.exe"); "" if it can't be read."""
+    from ctypes import wintypes as wt
+    k32 = ctypes.windll.kernel32
+    k32.OpenProcess.restype = wt.HANDLE
+    k32.QueryFullProcessImageNameW.argtypes = [wt.HANDLE, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD)]
+    k32.CloseHandle.argtypes = [wt.HANDLE]
+    h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return ""
+    try:
+        buf, n = ctypes.create_unicode_buffer(1024), wt.DWORD(1024)
+        return os.path.basename(buf.value).lower() if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)) else ""
+    finally:
+        k32.CloseHandle(h)
 
 
 def windows_of(exe: str) -> list[int]:
@@ -20,21 +39,12 @@ def windows_of(exe: str) -> list[int]:
     u32, k32 = ctypes.windll.user32, ctypes.windll.kernel32
     u32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
     u32.IsWindowVisible.argtypes = [wt.HWND]
-    k32.OpenProcess.restype = wt.HANDLE
-    k32.QueryFullProcessImageNameW.argtypes = [wt.HANDLE, wt.DWORD, wt.LPWSTR, ctypes.POINTER(wt.DWORD)]
-    k32.CloseHandle.argtypes = [wt.HANDLE]
     names: dict[int, str] = {}
     found: list[int] = []
 
     def image(pid: int) -> str:
         if pid not in names:
-            names[pid] = ""
-            h = k32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
-            if h:
-                buf, n = ctypes.create_unicode_buffer(1024), wt.DWORD(1024)
-                if k32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(n)):
-                    names[pid] = os.path.basename(buf.value).lower()
-                k32.CloseHandle(h)
+            names[pid] = _image_name(pid)
         return names[pid]
 
     @ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
@@ -53,6 +63,39 @@ def show(hwnds: list[int], cmd: int) -> None:
     if sys.platform == "win32":
         for h in hwnds:
             ctypes.windll.user32.ShowWindow(ctypes.c_void_p(h), cmd)
+
+
+def minimised(hwnd: int) -> bool:
+    return sys.platform == "win32" and bool(ctypes.windll.user32.IsIconic(ctypes.c_void_p(hwnd)))
+
+
+def foreground() -> tuple[int, str]:
+    """The window in front (it gets the keys) and its program's file name, lower case; (0, "") if none."""
+    if sys.platform != "win32":
+        return 0, ""
+    from ctypes import wintypes as wt
+    u32 = ctypes.windll.user32
+    u32.GetForegroundWindow.restype = wt.HWND
+    u32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
+    hwnd = u32.GetForegroundWindow()
+    if not hwnd:
+        return 0, ""
+    pid = wt.DWORD()
+    u32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    return int(hwnd), _image_name(pid.value)
+
+
+def ms_since_input() -> int | None:
+    """Milliseconds since the last keyboard or mouse input to this PC (a controller doesn't count); None off Windows."""
+    if sys.platform != "win32":
+        return None
+
+    class _LII(ctypes.Structure):
+        _fields_ = [("cbSize", ctypes.c_uint), ("dwTime", ctypes.c_uint)]
+    lii = _LII(ctypes.sizeof(_LII), 0)
+    if not ctypes.windll.user32.GetLastInputInfo(ctypes.byref(lii)):
+        return None
+    return (ctypes.windll.kernel32.GetTickCount() - lii.dwTime) & 0xFFFFFFFF
 
 
 def bring_to_front(hwnd: int) -> bool:

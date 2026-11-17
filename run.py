@@ -23,6 +23,10 @@ Examples
   # PS5 Remote Play through chiaki-ng's frame tap (start chiaki-ng with CHIAKI_FRAMETAP=1, see chiaki_tap/):
   python run.py --chiaki --display --chiaki-log out/session.csv
 
+  # Any app that sends its frames through the frame tap (docs/frame-tap.md, Experimental), compressed or decoded;
+  # scripts/frametap_send.py stands in for one:
+  python run.py --source tap --display
+
   # Test mode: a 60 fps PS5 game played as if it were 30 fps, each generated frame scored against the real
   # one, with a plain-language report (also in the window's menu: Simulate a 30 fps game):
   python run.py --chiaki --test-mode --display --results out/results.txt
@@ -30,7 +34,7 @@ Examples
   # NVIDIA VFG in place of RIFE (RTX 40/50; set up with framegen/vfg_setup.py, folder in FRAMEGEN_VFX_PATH):
   python run.py --chiaki --display --model vfg --vfg-quality medium
 
-  # The sources, for the launcher (--source picks one: chiaki, capture, window or file):
+  # The sources, for the launcher (--source picks one: chiaki, capture, window, tap or file):
   python run.py --list-sources --json
 
 Settings (frame rate, upscaler, ...) are chosen in the window's menu (key M) and saved to
@@ -202,7 +206,7 @@ def sound_player():
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("video", nargs="?", help="input video file")
-    ap.add_argument("--source", choices=["chiaki", "capture", "window", "file"],
+    ap.add_argument("--source", choices=["chiaki", "capture", "window", "tap", "file"],
                     help="where frames come from (default: from the flags below; a video file if one is given)")
     ap.add_argument("--list-sources", action="store_true",
                     help="list the sources and exit; with --json, as JSON for the launcher")
@@ -242,6 +246,9 @@ def main() -> int:
                          "each generated frame against the real one that was left out (also in the window's menu: "
                          "Simulate a 30 fps game). Remote Play, a capture card, or a video file with --raw")
     ap.add_argument("--chiaki-tap", default=None, help=argparse.SUPPRESS)  # another shared-memory name, for tests
+    ap.add_argument("--tap", metavar="NAME", default=None,
+                    help="--source tap: the frame tap's shared-memory name (default Local\\smoovplay-tap; "
+                         "docs/frame-tap.md)")
     ap.add_argument("--raw", action="store_true",
                     help="play the file's frames as-is (a real capture recording) instead of simulating PS5 30fps")
     ap.add_argument("--realtime", action="store_true", help="pace file input at 60 Hz like a capture card")
@@ -321,10 +328,20 @@ def main() -> int:
     kind = a.source or ("chiaki" if a.chiaki else "capture" if a.capture is not None else "file" if a.video else None)
     # Test mode ("Simulate a 30 fps game") works with any 60 Hz source; a video file simulates a PS5 by itself
     # unless --raw plays it as-is.
-    test = TestMode(a.test_mode) if kind in ("chiaki", "capture") or (kind == "file" and a.raw) else None
+    test = TestMode(a.test_mode) if kind in ("chiaki", "capture", "tap") or (kind == "file" and a.raw) else None
     if a.test_mode and test is None:
-        ap.error("--test-mode needs Remote Play, a capture card, or a video file with --raw")
-    if kind == "chiaki":
+        ap.error("--test-mode needs Remote Play, a capture card, the frame tap, or a video file with --raw")
+    if kind == "tap":
+        from framegen.tap import DEFAULT_NAME, open_tap
+        try:  # compressed frames come through the same reader as chiaki-ng's, so they count as "chiaki" from here
+            kind, src = open_tap(a.tap or DEFAULT_NAME, a.chiaki_decoder, wait_s=600, test=test,
+                                 log_path=a.chiaki_log)
+        except (ValueError, TimeoutError) as e:
+            print(f"[tap] {e}", file=sys.stderr)
+            return 1
+        if not src.info.test_mode:  # an app that sends only new pictures: no test mode (as for window capture)
+            test = None
+    elif kind == "chiaki":
         from framegen.chiaki_tap import NAME, ChiakiSource
         src = ChiakiSource(a.chiaki_decoder, wait_s=600, log_path=a.chiaki_log, tap_name=a.chiaki_tap or NAME,
                            test=test)
@@ -552,18 +569,32 @@ def main() -> int:
     def minimize_chiaki(key: str = "minimize_chiaki") -> None:
         if key != "minimize_chiaki" or not (kind == "chiaki" and window is not None):
             return
-        from framegen.winutil import SW_MINIMIZE, SW_SHOWNOACTIVATE, show, windows_of
+        from framegen.winutil import SW_SHOWMINNOACTIVE, SW_SHOWNOACTIVATE, show, windows_of
         if settings.minimize_chiaki and not hidden:
             hidden[:] = windows_of("chiaki.exe")
-            show(hidden, SW_MINIMIZE)
+            show(hidden, SW_SHOWMINNOACTIVE)  # (without activating another window: the keys stay on the video)
             print(f"[run] minimised chiaki-ng ({len(hidden)} window{'s' if len(hidden) != 1 else ''}); "
                   "restored on exit")
         elif not settings.minimize_chiaki and hidden:
             show(hidden, SW_SHOWNOACTIVATE)  # back, without taking focus from our window
             hidden.clear()
 
+    def keep_chiaki_down() -> None:
+        """For the video window's first seconds (GLWindowSink.settle): chiaki-ng can show its window again just after
+        the stream starts (its stream view opening), after it was minimised. Minimise it again."""
+        if not (kind == "chiaki" and settings.minimize_chiaki):
+            return
+        from framegen.winutil import SW_SHOWMINNOACTIVE, minimised, show, windows_of
+        back = [h for h in windows_of("chiaki.exe") if not minimised(h)]
+        if back:
+            show(back, SW_SHOWMINNOACTIVE)
+            hidden.extend(h for h in back if h not in hidden)
+            print(f"[run] chiaki-ng showed its window again: minimised it ({len(back)})")
+
     settings.watch(minimize_chiaki)
     minimize_chiaki()
+    if isinstance(window, GLWindowSink):
+        window.settle_hook = keep_chiaki_down
 
     # Instant replay (framegen/replay.py): only while playing on screen. It lasts across restarts, so a restart for a
     # setting doesn't lose what's held.

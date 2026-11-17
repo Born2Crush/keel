@@ -27,13 +27,14 @@ from dataclasses import asdict, dataclass, replace
 HIDDEN = {"file"}
 # Offered as Experimental: built from the best information available, without the hardware to test every setup. The
 # launcher marks them and offers Send feedback (a GitHub issue form).
-EXPERIMENTAL = {"capture", "window"}
+EXPERIMENTAL = {"capture", "window", "tap"}
 
 
 @dataclass(frozen=True)
 class SourceInfo:
     kind: str  # "chiaki" (PS5 Remote Play), "capture" (capture card), "window" (another app's window, framegen/window.py),
-    # "file" (a recording as-is), "sim" (simulated PS5)
+    # "tap" (another app's decoded frames through the frame tap, framegen/tap.py), "file" (a recording as-is),
+    # "sim" (simulated PS5)
     name: str  # shown to people
     live: bool = True  # frames come in real time; False: a file, read as fast as the pipeline takes them
     rate: str = "fixed"  # "fixed": a frame every refresh, repeats included (Remote Play, HDMI). "variable": frames
@@ -55,6 +56,8 @@ KINDS = {
     "window": SourceInfo("window", "App window", rate="variable", test_mode=False,
                          audio="The app plays its own sound, a little ahead of the picture",
                          controls="Your controller connects to the app as usual"),
+    "tap": SourceInfo("tap", "Frame tap", audio="The app plays its own sound",
+                      controls="Your controller connects to the app as usual"),
     "file": SourceInfo("file", "Video file", live=False),
     "sim": SourceInfo("sim", "Video file as a PS5 30 fps game", live=False, test_mode=False),
 }
@@ -208,12 +211,12 @@ class Clock60:
 def make_detector(info: SourceInfo, threshold: float = 2.0):
     """The repeat detector for a source. Remote Play says which frames are repeats, so its detector is only the
     fallback; files compare each frame with the previous one; a capture card compares with the last *new* frame,
-    so a slow change that stays under the threshold from frame to frame still adds up and is caught; an app's window
-    learns where the line between its repeats and new frames is (an app decodes its own stream, so its repeats are
-    never quite identical)."""
+    so a slow change that stays under the threshold from frame to frame still adds up and is caught; an app's window,
+    or an app's decoded frames through the frame tap, learns where the line between its repeats and new frames is (an
+    app decodes its own stream, so its repeats are never quite identical)."""
     from .cadence import DuplicateDetector
     return DuplicateDetector(threshold, reference="new" if info.kind == "capture" else "previous",
-                             learn=info.kind == "window")
+                             learn=info.kind in ("window", "tap"))
 
 
 # ----------------------------------------------------------------------------- the list for the launcher
@@ -224,6 +227,9 @@ GUIDES = {
     "window": "Open the app you stream with (PS Remote Play, the Xbox app, Moonlight, or a browser) and start the "
               "game, pick its window, then press Play. Keep the app's window on screen: SmoovPlay shows the smooth "
               "picture on top of it, and the app keeps the controller.",
+    "tap": "For apps that send their frames straight to SmoovPlay (docs/frame-tap.md in SmoovPlay's repo): press "
+           "Play, then start the app. Its smooth video opens in its own window; the app keeps the controller and "
+           "its sound.",
     "file": "For testing: a video file played as a source.",
 }
 
@@ -236,7 +242,7 @@ def describe(kind: str) -> dict:
 
 def list_sources(show_all: bool = False) -> list[dict]:
     out = []
-    for kind in ("chiaki", "capture", "window", "file"):
+    for kind in ("chiaki", "capture", "window", "tap", "file"):
         d = describe(kind)
         if show_all:
             d["hidden"] = False

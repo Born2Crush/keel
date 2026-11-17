@@ -355,6 +355,53 @@ class _Panel:
         self.GL.glDeleteTextures([self.tex])
 
 
+class MiniText(str):
+    """The minimal stats overlay (Stats overlay style: Minimal), from the pipeline: a str (the plain line, and a
+    second one while a test runs) for sinks that just print text, plus what GLWindowSink draws from it:
+    parts, [(text, kind)] with kind "main", "dim" or "warn"; health, how well the PC keeps up ("good", "tight",
+    "behind", "off" with frame generation off, "" not known yet); second, the test line or ""."""
+
+    parts: tuple = ()
+    health: str = ""
+    second: str = ""
+
+    @classmethod
+    def make(cls, parts, health: str = "", second: str = "") -> "MiniText":
+        t = cls("  ".join(x for x, _ in parts) + (f"\n{second}" if second else ""))
+        t.parts, t.health, t.second = tuple(parts), health, second
+        return t
+
+
+# BGR: the minimal overlay's dot (how well the PC keeps up) and its text
+HEALTH_COLORS = {"good": (110, 200, 80), "tight": (40, 180, 250), "behind": (70, 70, 235), "off": (150, 150, 150),
+                 "": (110, 110, 110)}
+MINI_TEXT = {"main": (245, 245, 245), "dim": (185, 185, 185), "warn": (40, 180, 250)}
+
+
+def _mini(t: MiniText, ui: float) -> np.ndarray:
+    """The minimal overlay: a small dark box with a dot (green keeping up, amber tight, red falling behind) and a few
+    numbers, plus the test line under them while a test runs."""
+    font, fs, th = cv2.FONT_HERSHEY_SIMPLEX, 0.52 * ui, 1 if ui < 1.6 else 2
+    small = 0.42 * ui
+    pad, gap, r = int(9 * ui), int(12 * ui), max(3, int(5 * ui))
+    th_main = cv2.getTextSize("90", font, fs, th)[0][1]
+    widths = [cv2.getTextSize(x, font, fs, th)[0][0] for x, _ in t.parts]
+    line_w = 2 * r + gap + sum(widths) + gap * max(0, len(widths) - 1)
+    second_w, second_h = (cv2.getTextSize(t.second, font, small, 1)[0] if t.second else (0, 0))
+    w = 2 * pad + max(line_w, second_w)
+    h = 2 * pad + th_main + (second_h + int(8 * ui) if t.second else 0)
+    img = np.full((h, w, 3), (30, 27, 25), np.uint8)
+    base = pad + th_main
+    cv2.circle(img, (pad + r, base - th_main // 2), r, HEALTH_COLORS.get(t.health, HEALTH_COLORS[""]), -1, cv2.LINE_AA)
+    x = pad + 2 * r + gap
+    for (text, kind), tw in zip(t.parts, widths):
+        cv2.putText(img, text, (x, base), font, fs, MINI_TEXT.get(kind, MINI_TEXT["dim"]), th, cv2.LINE_AA)
+        x += tw + gap
+    if t.second:
+        cv2.putText(img, t.second, (pad, base + int(8 * ui) + second_h), font, small, MINI_TEXT["dim"], 1, cv2.LINE_AA)
+    return img
+
+
 def _pill(text: str, ui: float, color=(238, 238, 238)) -> np.ndarray:
     """A short message (one line, or a few split by newlines) on a dark rounded-off box."""
     fs, th = 0.7 * ui, 1 if ui < 1.4 else 2
@@ -381,9 +428,9 @@ class GLWindowSink:
     see framegen/rtxvsr.py, and frames on the GPU), "bilinear" with a plain filtered blit. A look (framegen/looks.py,
     drawn by framegen/looks_gl.py) goes on after that, at the window's size.
     Keys: m/Tab = settings menu (arrows + Enter in it), i = interpolation on/off for this session, s = stats
-    overlay, f = fullscreen, u = next upscaler, k = look on/off, j = next look (Shift+J: the one before), l = delay
-    test (PS5 Remote Play), r = save the instant replay, b = save a before & after video of it (framegen/replay.py),
-    q/Esc = quit.
+    overlay (off, minimal, detailed), f = fullscreen, u = next upscaler, k = look on/off, j = next look (Shift+J:
+    the one before), l = delay test (PS5 Remote Play), r = save the instant replay, b = save a before & after video
+    of it (framegen/replay.py), q/Esc = quit.
 
     restart_reasons(): labels of pending restart-only changes (the menu then offers "Restart now", which makes
     write() return "restart"). choices: {key: allowed values} for options the program can't use right now;
@@ -402,6 +449,9 @@ class GLWindowSink:
     """
 
     NAMES = {"fsr": "FSR 1", "vsr": "RTX VSR", "bilinear": "bilinear"}
+
+    # Shown when the window opens, and again when the mouse moves over it.
+    KEYS_HINT = "M: menu    F: fullscreen    Esc: quit"
 
     def __init__(self, w: int, h: int, settings=None, restart_reasons=None, choices: dict | None = None,
                  unavailable: dict | None = None, overlay_of=None, hdr: bool = False, hdr_peak: float = 1000.0) -> None:
@@ -452,6 +502,16 @@ class GLWindowSink:
         self.overlay, self.cmd, self.windowed_pos, self.remote = st.overlay, None, None, None
         self._borderless = False  # fullscreen as a borderless window (FRAMEGEN_FULLSCREEN_STYLE, under test)
         glfw.set_key_callback(self.win, self._on_key)
+        glfw.set_cursor_pos_callback(self.win, self._on_mouse)
+        self._hint_next = 0.0  # moving the mouse shows the keys again, at most this often
+        # settle(): in the first seconds chiaki-ng can show its window again (settle_hook, run.py, minimises it), and
+        # all along a program can take the keys without the player doing anything (they're taken back).
+        self.settle_hook = None
+        t = time.perf_counter()
+        self._settle_until, self._settle_next, self._any_until = t + 10.0, 0.0, t + 15.0
+        self._front_at: float | bool = t  # when the video window last had the keys (from when it opened); False: off
+        self._keyed = False
+        self._took_from: set = set()
 
         self.tex = GL.glGenTextures(1)
         GL.glBindTexture(GL.GL_TEXTURE_2D, self.tex)
@@ -537,8 +597,10 @@ class GLWindowSink:
         self.choices, self.unavailable = dict(choices or {}), dict(unavailable or {})
         self.menu = Menu(st, allowed=self.allowed, disabled=self.disabled, restart_reasons=restart_reasons)
         self.menu_panel, self.toast_panel = _Panel(GL, self.hdr10), _Panel(GL, self.hdr10)
+        self.mini_panel, self._mini_state = _Panel(GL, self.hdr10), None
+        self._menu_top = None  # (GL y of the menu's top, the picture's (y0, height) it was placed in) while it's open
         self._menu_state = self._toast_state = None
-        self._toast_text, self._toast_until = "Press M for settings", time.perf_counter() + 8.0
+        self._toast_text, self._toast_until = "M: menu    F: fullscreen    Esc: quit", time.perf_counter() + 8.0
         self._waited = -1  # wait(): the whole second the "no picture" note last said (-1: no wait going on)
         self._unwatch = st.watch(self._apply)
         self._overlay_at, self._overlay_check = None, 0.0
@@ -562,6 +624,57 @@ class GLWindowSink:
                 print("[display] couldn't bring the video window to the front; click it once so the keys go to it")
         except Exception as e:  # noqa: BLE001 - only the focus: the video goes on
             print(f"[display] couldn't bring the video window to the front ({str(e)[:160]})")
+
+    # Programs that take the keys by themselves during play: chiaki-ng (its stream window), the launcher (minimising
+    # itself) and the desktop (where the keys land when the window in front goes away). Any program in the first
+    # seconds, when the window has just opened.
+    TAKERS = ("chiaki.exe", "smoovplay.exe", "explorer.exe", "")
+
+    def settle(self) -> None:
+        """Four times a second: in the first seconds, settle_hook (run.py: minimise chiaki-ng again if it showed its
+        window); and all along, the keys taken back for the video window when another program took them with no
+        keyboard or mouse input from the player since the video window had them (the player switching on purpose,
+        Alt+Tab or a click, is input, and left alone; a controller isn't, and switches nothing)."""
+        now = time.perf_counter()
+        if now < self._settle_next or self.overlay_of is not None:
+            return
+        self._settle_next = now + 0.25
+        if self.settle_hook is not None and now < self._settle_until:
+            try:
+                self.settle_hook()
+            except Exception as e:  # noqa: BLE001 - only tidying up: the video goes on
+                print(f"[display] {str(e)[:160]}")
+                self.settle_hook = None
+        if sys.platform != "win32" or self._front_at is False:
+            return
+        from .winutil import bring_to_front, foreground, ms_since_input
+        try:
+            ours = self.glfw.get_win32_window(self.win)
+            hwnd, exe = foreground()
+            if hwnd == ours:
+                self._front_at = now
+                return
+            idle = ms_since_input()
+            if idle is None or idle / 1000.0 < now - self._front_at:
+                return  # the player did something since: theirs to choose
+            if now >= self._any_until and exe not in self.TAKERS:
+                return
+            if bring_to_front(ours):
+                self._front_at = now
+                if exe not in self._took_from:
+                    self._took_from.add(exe)
+                    who = exe if exe in self.TAKERS[:3] else ("no window" if not exe else "another program")
+                    print(f"[display] {who} took the keys: gave them back to the video window")
+        except Exception as e:  # noqa: BLE001
+            print(f"[display] couldn't check which window is in front ({str(e)[:160]})")
+            self._front_at = False  # (stops checking)
+
+    def _on_mouse(self, win, x, y) -> None:
+        """Moving the mouse over the video shows the keys for a moment (not over the menu or another message)."""
+        now = time.perf_counter()
+        if now >= self._hint_next and not self.menu.open and now >= self._toast_until:
+            self._hint_next = now + 20.0
+            self.toast(self.KEYS_HINT, 3.0)
 
     def _name(self, mode: str) -> str:
         return f"RTX VSR q{self.vsr.quality}" if mode == "vsr" else self.NAMES[mode]
@@ -770,6 +883,7 @@ class GLWindowSink:
             return
         if action not in (glfw.PRESS, glfw.REPEAT):
             return
+        self._keyed = True  # the player has pressed a key here
         if self.menu.open and key in nav:
             r = self.menu.key(nav[key])
             if r == "close":
@@ -787,8 +901,14 @@ class GLWindowSink:
             self.cmd = "quit"
         elif key == glfw.KEY_I:
             st.override("interp", not st.interp)  # a quick A/B, not saved
-        elif key == glfw.KEY_S:
-            st.set("overlay", not st.overlay)
+        elif key == glfw.KEY_S:  # Off, Minimal, Detailed, Off...
+            if not st.overlay:
+                st.set("overlay_style", "minimal")
+                st.set("overlay", True)
+            elif st.overlay_style == "minimal":
+                st.set("overlay_style", "detailed")
+            else:
+                st.set("overlay", False)
         elif key == glfw.KEY_U:
             st.step("scaler", 1, self.allowed)
         elif key == glfw.KEY_K:
@@ -816,13 +936,21 @@ class GLWindowSink:
     def _draw_ui(self, x0: int, y0: int, dw: int, dh: int) -> None:
         """Menu and messages, on top of everything else. Images are redrawn only when they change."""
         ui = max(0.5, dh / 1080)
+        if not self.menu.open:
+            self._menu_top = None
         if self.menu.open:
             state = (self.menu.state(), round(ui, 3))
             if state != self._menu_state:
                 self.menu_panel.update(self.menu.render(ui))
                 self._menu_state = state
             p = self.menu_panel
-            self.menu_panel.blit(x0 + int(32 * ui), y0 + (dh + p.h) // 2)
+            # Centred when it opens, then its top stays put (a row appearing, such as Restart now, grows it
+            # downwards), so the rows never move under the highlight. Inside the picture whatever happens.
+            where = (y0, dh)
+            if self._menu_top is None or self._menu_top[1] != where:
+                self._menu_top = (y0 + (dh + p.h) // 2, where)
+            top = min(y0 + dh, max(self._menu_top[0], y0 + p.h))
+            self.menu_panel.blit(x0 + int(32 * ui), top)
         elif time.perf_counter() < self._toast_until:
             state = (self._toast_text, round(ui, 3))
             if state != self._toast_state:
@@ -878,7 +1006,7 @@ class GLWindowSink:
         n = int(w.since)
         if n >= 2 and (n != self._waited or self.menu.open) and self.overlay_of is None:
             self._waited = n
-            self.toast(f"No picture from {w.what} for {n} s. Q quits" + (f"\n{w.why}" if w.why else ""), 1.5)
+            self.toast(f"No picture from {w.what} for {n} s. Esc quits" + (f"\n{w.why}" if w.why else ""), 1.5)
             fw, fh, s, dw, dh, x0, y0 = self._layout()
             GL = self.GL
             GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, self._target())
@@ -888,6 +1016,7 @@ class GLWindowSink:
             GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
             self._draw_ui(x0, y0, dw, dh)
             self._present()
+        self.settle()
         glfw.poll_events()
         if self.remote is not None and self.remote.poll() == "restart" and self.cmd is None:
             self.cmd = "restart"
@@ -948,11 +1077,14 @@ class GLWindowSink:
             GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT,
                                  GL.GL_LINEAR)
         self.timer.end(q, f"{label} {dw}x{dh}")
-        if self.overlay and text:
+        if self.overlay and isinstance(text, MiniText):
+            self._draw_mini(text, x0, y0, dh)
+        elif self.overlay and text:
             first, nl, rest = text.partition("\n")  # the upscaler goes on the first line; a second is the test line
             self._blit_text(f"{first}  {label}{nl}{rest}", x0, y0 + dh, s)
         self._draw_ui(x0, y0, dw, dh)
         self._present()
+        self.settle()
         glfw.poll_events()
         if self.remote is not None and self.remote.poll() == "restart" and self.cmd is None:
             self.cmd = "restart"
@@ -1006,6 +1138,16 @@ class GLWindowSink:
             self.GL.glDeleteFramebuffers(1, [fbo])
             self.GL.glDeleteTextures([tex])
             self.vsr_out = None
+
+    def _draw_mini(self, text: MiniText, x0: int, y0: int, dh: int) -> None:
+        """The minimal overlay in the top-left corner, at the screen's own size (drawn again only when it changes)."""
+        ui = max(0.5, dh / 1080)
+        state = (str(text), text.parts, text.health, round(ui, 3))
+        if state != self._mini_state:
+            self.mini_panel.update(_mini(text, ui))
+            self._mini_state = state
+        m = int(12 * ui)
+        self.mini_panel.blit(x0 + m, y0 + dh - m)
 
     def _blit_text(self, text: str, x0: int, top: int, s: float) -> None:
         GL = self.GL
@@ -1088,6 +1230,7 @@ class GLWindowSink:
         self._unwatch()
         self.menu_panel.close()
         self.toast_panel.close()
+        self.mini_panel.close()
         if self.vsr is not None:
             self._vsr_target_free()
             self.vsr.close()

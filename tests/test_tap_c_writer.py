@@ -1,0 +1,58 @@
+"""docs/frame-tap-writer.c, the C example in docs/frame-tap.md, against SmoovPlay's reader (framegen/tap.py): built
+with MSYS2's gcc when it's there (C:\\msys64 or D:\\msys64), run on a tap name of its own, read on the CPU."""
+import os
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="the frame tap is Windows-only")
+
+ROOT = Path(__file__).resolve().parent.parent
+NAME = "Local\\smoovplay-tap-ctest"
+GCC = next((p for p in (Path(r"C:\msys64\mingw64\bin\gcc.exe"), Path(r"D:\msys64\mingw64\bin\gcc.exe"))
+            if p.exists()), None)
+
+
+@pytest.mark.skipif(GCC is None, reason="no MSYS2 gcc")
+def test_c_writer_frames_read_back():
+    from framegen.chiaki_tap import FrameTap
+    from framegen.io import Waiting
+    from framegen.tap import TapSource, wait_for_writer
+
+    exe = Path(tempfile.gettempdir()) / "frame_tap_writer_test.exe"
+    env = dict(os.environ, PATH=str(GCC.parent) + os.pathsep + os.environ["PATH"])
+    subprocess.run([str(GCC), "-O2", "-Wall", "-Werror", "-o", str(exe), str(ROOT / "docs" / "frame-tap-writer.c")],
+                   check=True, env=env)
+    tap = FrameTap(NAME, NAME + "-frame")
+    tap.end()
+    proc = subprocess.Popen([str(exe), "120", NAME], env=env, stdout=subprocess.PIPE, text=True)
+    try:
+        h = wait_for_writer(tap, 10)
+        assert (h.version, h.codec, h.width, h.height, h.max_fps) == (2, 17, 1920, 1080, 60)
+        assert (h.slots, h.slot_size) == (8, 8 << 20)
+        src = TapSource(FrameTap(NAME, NAME + "-frame"), NAME, h, device=None)
+        got, t_end = [], time.perf_counter() + 10
+        for t in src:
+            assert time.perf_counter() < t_end, "no frames came"
+            if isinstance(t, Waiting):
+                continue
+            got.append(t)
+            if len(got) == 20:
+                break
+        src.close()
+        assert all(t.frame.shape == (1080, 1920, 3) for t in got)
+        # Each picture's number is in red; new pictures say so, and repeats show the picture before again.
+        for a, b in zip(got, got[1:]):
+            if b.new_hint:
+                assert int(b.frame[0, 0, 2]) == int(a.frame[0, 0, 2]) + 1
+            else:
+                assert b.new_hint is False and (b.frame == a.frame).all()
+        assert {t.new_hint for t in got} == {True, False}
+    finally:
+        proc.wait(timeout=30)
+        tap.close()
+    assert proc.returncode == 0

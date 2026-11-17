@@ -93,10 +93,19 @@ def test_results_say_when_test_mode_had_no_60_fps_game_and_judge_by_extra_frames
     assert "falling behind at 90 fps" in st.results()[-1]
     # a steady 60 fps game in test mode: no note, scores as usual
     st = Stats(proc_interp_ms=[8.0] * 10, busy_ms=[9.0] * 10, psnr_interp=[34.0] * 10, psnr_repeat=[26.0] * 10, psnr_blend=[30.0] * 10,
-               hz_used={60}, test_game_new=1990, test_game_repeat=10)
+               off_interp=[0.05] * 10, off_repeat=[0.2] * 10, hz_used={60}, test_game_new=1990, test_game_repeat=10)
     text = "\n".join(st.results())
-    assert "Game:" not in text and "34.0 dB" in text and "(10 frames measured, worst 34.0 dB)" in text
+    assert "Game:" not in text and "5.0% of each AI frame was visibly off" in text
+    assert "(10 frames measured, worst 5.0%)" in text
     assert "10 of 2000 frames were repeats" in st.summary()
+    # 90 fps output with a game at about 37 fps: 44 frames from 60 fps fallbacks are too few to say anything
+    st = Stats(proc_interp_ms=[18.0] * 100, busy_ms=[9.0] * 100, psnr_interp=[40.0] * 44, psnr_repeat=[60.0] * 44,
+               psnr_blend=[50.0] * 44, off_interp=[0.034] * 44, off_repeat=[0.0] * 44, hz_used={90},
+               quarter_shown=99, quarter_skipped=1, test_game_new=4590, test_game_repeat=2760)
+    text = "\n".join(st.results())
+    assert "Quality: not measured, as the game wasn't at a steady 60 fps" in text and "visibly off" not in text
+    st.test_game_new, st.test_game_repeat = 7340, 10  # a steady 60, still only 90 fps output
+    assert "Quality: not measured yet" in "\n".join(st.results())
 
 
 # ---- the overlay and the message, in a real pipeline run with a stand-in interpolator
@@ -156,7 +165,7 @@ def test_overlay_shows_the_games_rate_and_advice_for_a_45_fps_game(monkeypatch):
     monkeypatch.setattr(pl, "RATE_NOTE_S", 0.0)
     monkeypatch.setattr(pl, "RATE_TOAST_S", 0.0)
     sink = _Sink()
-    settings = Settings({"hz": 60, "even_out": False})
+    settings = Settings({"hz": 60, "even_out": False, "overlay_style": "detailed"})
     _pipeline().run(_game(lambda i: i % 4 != 3), sink, label="RIFE", settings=settings)
     last = sink.texts[-1]
     assert last.startswith("RIFE  INTERP ON  game 45 fps, showing ")
@@ -164,11 +173,33 @@ def test_overlay_shows_the_games_rate_and_advice_for_a_45_fps_game(monkeypatch):
     assert sink.toasts == [rate_advice(45.0, False)]  # once
 
 
+def test_minimal_overlay_is_a_few_numbers_and_a_dot(monkeypatch):
+    from framegen.io import MiniText, _mini
+
+    monkeypatch.setattr(pl, "RATE_NOTE_S", 0.0)
+    monkeypatch.setattr(pl, "RATE_TOAST_S", 0.0)
+    sink = _Sink()
+    _pipeline().run(_game(lambda i: i % 4 != 3), sink, label="RIFE", settings=Settings({"hz": 60, "even_out": False}))
+    last = sink.texts[-1]
+    assert isinstance(last, MiniText) and "\n" not in last  # the default style; the advice is a message, not a line
+    texts = [t for t, _ in last.parts]
+    assert texts[0].endswith(" fps") and texts[1] == "game 45" and texts[2].startswith("delay ")
+    assert dict(last.parts)["game 45"] == "warn"  # 45 fps isn't what frame generation is for: amber
+    assert last.health == "good"  # the stand-in interpolator takes no time
+    assert sink.toasts == [rate_advice(45.0, False)]
+    img = _mini(last, 1.0)
+    assert img.shape[0] < 50 and img.shape[1] < 400  # small: a corner, not a banner
+    # Off, it says so with a grey dot; a test line goes under the numbers
+    off = MiniText.make([("60 fps", "main")], "off", "TEST: 60 fps game played as 30 fps")
+    assert str(off) == "60 fps\nTEST: 60 fps game played as 30 fps" and _mini(off, 1.0).shape[0] > img.shape[0]
+
+
 def test_a_45_fps_game_is_evened_out(monkeypatch):
     monkeypatch.setattr(pl, "RATE_NOTE_S", 0.0)
     monkeypatch.setattr(pl, "RATE_TOAST_S", 0.0)
     sink = _Sink()
-    st = _pipeline().run(_game(lambda i: i % 4 != 3), sink, label="RIFE", settings=Settings({"hz": 60}))
+    st = _pipeline().run(_game(lambda i: i % 4 != 3), sink, label="RIFE",
+                         settings=Settings({"hz": 60, "overlay_style": "detailed"}))
     last = sink.texts[-1]
     assert last.startswith("RIFE  INTERP ON  game 45 fps evened out, showing ") and "\n" not in last  # no advice
     assert len(sink.toasts) == 1 and "spacing its frames evenly" in sink.toasts[0]
@@ -182,8 +213,12 @@ def test_a_30_fps_game_gets_no_advice(monkeypatch):
     monkeypatch.setattr(pl, "RATE_NOTE_S", 0.0)
     monkeypatch.setattr(pl, "RATE_TOAST_S", 0.0)
     sink = _Sink()
-    _pipeline().run(_game(lambda i: i % 2 == 0), sink, label="RIFE", settings=Settings({"hz": 60}))
+    _pipeline().run(_game(lambda i: i % 2 == 0), sink, label="RIFE",
+                    settings=Settings({"hz": 60, "overlay_style": "detailed"}))
     assert "game 30 fps" in sink.texts[-1] and "\n" not in sink.texts[-1] and sink.toasts == []
+    sink = _Sink()  # the minimal overlay: the game's rate in plain grey
+    _pipeline().run(_game(lambda i: i % 2 == 0), sink, label="RIFE", settings=Settings({"hz": 60}))
+    assert dict(sink.texts[-1].parts)["game 30"] == "dim" and sink.toasts == []
 
 
 def test_test_mode_on_a_30_fps_game_says_simulate_isnt_needed(monkeypatch):

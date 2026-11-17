@@ -204,10 +204,18 @@ SPECS: tuple[Spec, ...] = (
               "already as quick there. Experimental; applies the next time you press Play.",
          impact={"speed": "Low delay should save the 12 ms a window adds. Still being measured."}),
     Spec("overlay", "Stats overlay", (True, False), True, ON_OFF, group="Display",
-         help="Shows the game's frame rate, how many frames a second are on screen, how long each AI frame takes "
-              "and the upscaler in a corner of the video. At 90 and 120 fps it also shows \"extra frames\": below "
-              "about 95%, your PC is falling behind, so try a lower frame rate. If the game isn't running at 30 fps, "
-              "a second line says so. Key: S."),
+         help="Numbers in a corner of the video: how many frames a second are on screen, the game's own frame rate, "
+              "and whether your PC keeps up. Key: S (Off, Minimal, Detailed)."),
+    Spec("overlay_style", "Stats overlay style", ("minimal", "detailed"), "minimal",
+         {"minimal": "Minimal", "detailed": "Detailed"}, group="Display", applies=("overlay", (True,)),
+         hints={"minimal": "A small line: frames on screen, the game's frame rate, the delay, and a dot for how well "
+                           "your PC keeps up.",
+                "detailed": "Everything: AI frame time, the upscaler, and at 90 and 120 fps the share of extra frames "
+                            "shown."},
+         help="Minimal: frames on screen, the game's frame rate (amber when it isn't 30 fps) and the delay, with a "
+              "dot: green, your PC keeps up; amber, it's tight; red, it's falling behind, so try a lower frame rate. "
+              "Detailed adds the AI frame time, the upscaler and, at 90 and 120 fps, the extra frames shown (below "
+              "about 95%, your PC is falling behind)."),
     # framegen/replay.py. Memory in the hints: replay.memory_mb() for 1080p at 90 fps (tests/test_replay.py checks).
     Spec("replay", "Instant replay", (0, 30, 60, 120, 300), 0,
          {0: "Off", 30: "Last 30 seconds", 60: "Last minute", 120: "Last 2 minutes", 300: "Last 5 minutes"},

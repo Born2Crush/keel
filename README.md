@@ -142,9 +142,9 @@ must carry SmoovPlay's signature before they run.
 | **I** | Frame generation off and on, to compare |
 | **R** · **B** | Save the instant replay · a before & after video (**Ctrl+Alt+R** · **Ctrl+Alt+B** from any window) |
 | **K** · **J** | Look off and on · next look (**Shift+J** goes back) |
-| **S** · **U** | Stats overlay · next upscaler |
+| **S** · **U** | Stats overlay (off, minimal, detailed) · next upscaler |
 | **L** | Delay test (PS5 Remote Play) |
-| **Q** | Stop |
+| **Esc** or **Q** | Stop |
 
 ## How it works
 
@@ -284,6 +284,7 @@ frames and AMD FSR 1 for scaling.
 | [`framegen/`](framegen/) | The pipeline: video sources, repeat and cut detection, RIFE (PyTorch and TensorRT), FSR 1 and RTX VSR, the OpenGL window and the settings menu |
 | [`run.py`](run.py) | Command-line entry point |
 | [`chiaki_tap/`](chiaki_tap/) | The patch that adds a frame tap to chiaki-ng |
+| [`docs/frame-tap.md`](docs/frame-tap.md) | How any app can send its frames to SmoovPlay through the same tap (Experimental) |
 | [`installer/`](installer/) | `SmoovPlay-Setup.exe` and the launcher, in C# and WPF |
 | [`native/rtxvsr/`](native/rtxvsr/) | Optional wrapper around NVIDIA's RTX Video SDK |
 | [`scripts/`](scripts/), [`tests/`](tests/) | Benchmarks, a fake chiaki-ng stream for testing without a PS5, and `pytest` tests |

@@ -214,16 +214,16 @@ def test_comparing_with_the_last_new_frame_catches_a_slow_change():
 
 
 # ----------------------------------------------------------------------------- the list for the launcher
-def test_source_list_offers_remote_play_capture_cards_and_app_windows():
+def test_source_list_offers_remote_play_capture_cards_app_windows_and_the_frame_tap():
     shown = [s["kind"] for s in list_sources() if not s["hidden"]]
-    assert shown == ["chiaki", "capture", "window"]  # video files only for testing
+    assert shown == ["chiaki", "capture", "window", "tap"]  # video files only for testing
     assert all(not s["hidden"] for s in list_sources(show_all=True))
 
 
-def test_capture_cards_and_app_windows_are_marked_experimental():
+def test_capture_cards_app_windows_and_the_frame_tap_are_marked_experimental():
     # The launcher shows a badge and a Send feedback button for these: built without the hardware to test them.
     flags = {s["kind"]: s["experimental"] for s in list_sources(show_all=True)}
-    assert flags == {"chiaki": False, "capture": True, "window": True, "file": False}
+    assert flags == {"chiaki": False, "capture": True, "window": True, "tap": True, "file": False}
 
 
 def test_run_py_lists_sources_quickly_without_loading_the_pipeline():
@@ -232,6 +232,6 @@ def test_run_py_lists_sources_quickly_without_loading_the_pipeline():
                        text=True, cwd=ROOT, env={**os.environ, "SMOOVPLAY_SOURCES": ""})
     assert r.returncode == 0, r.stderr
     data = json.loads(r.stdout)
-    assert [s["kind"] for s in data["sources"]] == ["chiaki", "capture", "window", "file"]
+    assert [s["kind"] for s in data["sources"]] == ["chiaki", "capture", "window", "tap", "file"]
     assert data["sources"][0]["name"] == "PS5 Remote Play" and data["sources"][0]["repeats"] == "hint"
     assert time.perf_counter() - t0 < 5  # no torch import

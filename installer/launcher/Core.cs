@@ -773,6 +773,9 @@ namespace SmoovPlay
                        + (audio != null ? " --capture-audio " + Quote(audio) : "");
             if (kind == "window")  // video: the app's window, as AppWindows.Query gives it
                 return "--source window --window " + Quote(Environment.GetEnvironmentVariable("SMOOVPLAY_WINDOW") ?? video ?? "ps-remote-play");
+            if (kind == "tap")  // SMOOVPLAY_TAP: another shared-memory name (docs/frame-tap.md)
+                return "--source tap" + (Environment.GetEnvironmentVariable("SMOOVPLAY_TAP") != null
+                                         ? " --tap " + Quote(Environment.GetEnvironmentVariable("SMOOVPLAY_TAP")) : "");
             if (kind == "file")
                 return "--source file " + Quote(Environment.GetEnvironmentVariable("SMOOVPLAY_SOURCE_FILE") ?? "") + " --raw --realtime";
             return "--source chiaki";
@@ -930,6 +933,16 @@ namespace SmoovPlay
         public Action<PlayState, string> OnState = (s, d) => { };
         public Action<string> OnNote = s => { };
         public Action<string> OnSettings = json => { };  // a state line's JSON, on the output thread
+
+        // Windows lets a program bring its window to the front only if the program in front allows it. When the
+        // player has just pressed Play here, that's this launcher: let the video window come to the front, so the
+        // keys (M, F, Esc) go to it without a click first. (chiaki-ng does the same when its stream starts.)
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool AllowSetForegroundWindow(int pid);
+
+        void LetVideoComeToFront()
+        {
+            try { if (Running) AllowSetForegroundWindow(py.Id); } catch (Exception) { }
+        }
         public bool Running { get { return py != null && !py.HasExited; } }
 
         public Session(Paths p) { this.p = p; }
@@ -963,6 +976,7 @@ namespace SmoovPlay
             };
             OnState(PlayState.Starting, null);
             py.Start();
+            LetVideoComeToFront();
             // Our own writer: UTF-8 without a BOM (Process's own uses the console's code page).
             commands = new StreamWriter(py.StandardInput.BaseStream, new UTF8Encoding(false)) { AutoFlush = true, NewLine = "\n" };
             py.BeginOutputReadLine();
@@ -1000,11 +1014,18 @@ namespace SmoovPlay
             OnLine(line);
             if (line.StartsWith("[chiaki] waiting for chiaki-ng"))
             {
-                if (Chiaki.Ours(p) == null) Chiaki.Start(p, OnLine);
+                if (Source == "chiaki" && Chiaki.Ours(p) == null) Chiaki.Start(p, OnLine);
                 OnState(PlayState.Waiting, null);
             }
+            else if (line.StartsWith("[tap] waiting for an app"))  // the frame tap: the app starts when the player likes
+                OnState(PlayState.Waiting, null);
             else if (line.StartsWith("[chiaki] stream:"))
+            {
+                LetVideoComeToFront();  // (the video window opens next)
                 OnState(PlayState.Found, line.Substring("[chiaki] stream:".Length).Trim());
+            }
+            else if (line.StartsWith("[tap] frames:"))
+                OnState(PlayState.Found, line.Substring("[tap] frames:".Length).Trim());
             else if (line.StartsWith("[trt] building"))
                 OnState(PlayState.Building, null);
             else if (line.StartsWith("[run] restarting for "))  // "[run] restarting for AI engine: RIFE ..."

@@ -42,6 +42,7 @@ class Menu:
         self.index = 0
         self._sel: str | None = None  # the highlighted setting's key, and the index it was at (see _follow)
         self._at = 0
+        self._foot_key, self._foot_h = None, 0  # render(): the help area's height, for these rows at this size
 
     def rows(self) -> list[tuple[str, Spec | None]]:
         """The settings that apply right now (VFG quality only while NVIDIA VFG is picked, and so on)."""
@@ -94,20 +95,33 @@ class Menu:
         th = 1 if ui < 1.4 else 2
         rows = self.rows()
         self._follow(rows)
-        sel_kind, sel_spec = rows[self.index]
-        if sel_kind == "restart":
-            help_text = "Restarts the pipeline with the new settings. The stream keeps running; takes a few seconds."
-        else:
-            help_text = self.disabled(sel_spec.key) or sel_spec.help
-        help_lines = _wrap(help_text, w - 2 * pad, small, th)[:4]
-        impact_lines: list[str] = []  # under the help: its rough effect on the picture and on speed
-        if sel_kind != "restart" and not self.disabled(sel_spec.key):
-            for k, name in (("picture", "Picture"), ("speed", "Speed")):
-                if sel_spec.impact.get(k):
-                    impact_lines += _wrap(f"{name}: {sel_spec.impact[k]}", w - 2 * pad, small, th)[:2]
-        foot_h = px(18) + (len(help_lines) + len(impact_lines)) * px(26) + (px(8) if impact_lines else 0) + px(46)
+
+        def foot(kind, spec) -> tuple[list[str], list[str]]:
+            """A row's help under the list, and under that its rough effect on the picture and on speed."""
+            if kind == "restart":
+                text = "Restarts the pipeline with the new settings. The stream keeps running; takes a few seconds."
+            else:
+                text = self.disabled(spec.key) or spec.help
+            impact: list[str] = []
+            if kind != "restart" and not self.disabled(spec.key):
+                for k, name in (("picture", "Picture"), ("speed", "Speed")):
+                    if spec.impact.get(k):
+                        impact += _wrap(f"{name}: {spec.impact[k]}", w - 2 * pad, small, th)[:2]
+            return _wrap(text, w - 2 * pad, small, th)[:4], impact
+
+        def foot_size(lines: tuple[list[str], list[str]]) -> int:
+            return (len(lines[0]) + len(lines[1])) * px(26) + (px(8) if lines[1] else 0)
+
+        help_lines, impact_lines = foot(*rows[self.index])
+        # The help area is as tall as the longest help in the list, whichever row is selected, so the menu keeps its
+        # size and the rows stay where they are while the player goes up and down.
+        key = (round(ui, 3), tuple((kind, spec.key if spec else None, self.disabled(spec.key) if spec else None)
+                                   for kind, spec in rows))
+        if self._foot_key != key:
+            self._foot_key, self._foot_h = key, max(foot_size(foot(kind, spec)) for kind, spec in rows)
+        foot_h = px(18) + self._foot_h + px(46)
         if head_h + len(rows) * row_h + foot_h > px(1040):  # many rows: closer together, so it fits the window
-            row_h = max(px(32), (px(1040) - head_h - foot_h) // len(rows))
+            row_h = max(px(30), (px(1040) - head_h - foot_h) // len(rows))
         h = head_h + len(rows) * row_h + foot_h
         img = np.full((h, w, 3), BG, np.uint8)
 

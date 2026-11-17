@@ -60,10 +60,14 @@ def test_results_report_reads_plainly():
 
     st = Stats(proc_interp_ms=[8.0] * 100, busy_ms=[9.0] * 200, real_delay_ms=[20.0] * 100,
                psnr_interp=[34.0] * 50 + [float("inf")], psnr_repeat=[26.0] * 50 + [float("inf")],
+               off_interp=[0.062] * 50, off_repeat=[0.12] * 50,
                hz_used={60, 120}, quarter_shown=99, quarter_skipped=1, simulated=200)
     text = "\n".join(st.results())
     assert "Output: 60 fps and 120 fps" in text
-    assert "34.0 dB" in text and "26.0 dB" in text and "50 frames measured" in text
+    # Quality in plain terms (the share of each frame visibly off), not dB; the dB stay in the log
+    assert "6.2% of each AI frame was visibly off" in text and "against 12% when the last frame is repeated" in text
+    assert "50 frames measured" in text and " dB" not in text
+    assert "PSNR" in st.summary() and "visibly off (more than 12 levels): RIFE 6.20% | repeat 12.00%" in st.summary()
     assert "Verdict: this PC keeps up at 120 fps" in text
     st.behind = 50  # a quarter of the frames waited, but the extra frames were all but all shown: still keeping up
     assert "keeps up at 120 fps" in st.results()[-1]
@@ -72,7 +76,7 @@ def test_results_report_reads_plainly():
     st.hz_used, st.quarter_shown, st.quarter_skipped = {60}, 0, 0  # 60 fps: frames that waited are what's left
     assert "falling behind at 60 fps" in st.results()[-1]
     st.hz_used, st.quarter_shown, st.quarter_skipped = {90}, 0, 0
-    st.psnr_interp = []
+    st.psnr_interp, st.off_interp, st.off_repeat = [], [], []
     assert any("not measured yet" in line for line in st.results())
 
 
@@ -173,6 +177,19 @@ def test_help_fits_the_in_video_menu():
     from framegen.menu import _wrap
     for s in SPECS:  # the menu shows up to 4 lines of help (menu.render: 780 px wide, 26 px padding, scale 0.5)
         assert len(_wrap(s.help, 780 - 2 * 26, 0.5, 1)) <= 4, s.key
+
+
+def test_the_in_video_menu_stays_still_while_going_through_it():
+    # Its size is the same on every row (the help area fits the longest help), so the rows never move.
+    from framegen.menu import Menu
+    from framegen.settings import Settings
+    for vals in ({}, {"model": "vfg"}, {"overlay": False}):
+        m = Menu(Settings(vals))
+        sizes = set()
+        for i in range(len(m.rows())):
+            m.index = i
+            sizes.add(m.render(1.0).shape)
+        assert len(sizes) == 1, (vals, sizes)
 
 
 def test_the_in_video_menu_fits_a_window_whatever_is_picked():

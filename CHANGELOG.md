@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+**Play**
+- **A minimal stats overlay**, now the default: a small line in the corner with the frames on screen, the game's own
+  frame rate (amber when it isn't 30 fps) and the delay, and a dot: green, your PC keeps up; amber, it's tight; red,
+  it's falling behind. Settings → Display → Stats overlay style has Detailed for everything as before; **S** goes
+  Off, Minimal, Detailed.
+- **Keys work in the video window straight away.** It no longer needs a click before M, F or Esc do anything, and
+  chiaki-ng stays minimised when it shows its window again just after the stream starts. The video window shows its
+  keys when it opens (M menu, F fullscreen, Esc quit), and again when you move the mouse over it.
+- **The in-video menu stays still** while you go up and down it: the space for each setting's description is
+  the same size whichever one is picked, so the rows no longer jump.
+- **Test results say quality in plain terms**: the share of each frame that's visibly off from the real one (lower is
+  better), instead of dB. It's only given when there's enough to go on: at 90 fps, or with a game that isn't at a
+  steady 60, a few seconds of fair frames.
+- **Instant replay at 120 fps keeps 60 fps clips** (every other frame). Encoding all 120 a second fell behind,
+  dropping frames from clips, and took graphics card time from play.
+
+**For developers** (Experimental)
+- **The frame tap is documented for any app** ([docs/frame-tap.md](docs/frame-tap.md)): the shared memory
+  chiaki-ng sends PS5 Remote Play's frames through. An app can now send decoded frames too (NV12 or BGRA), and
+  say which are repeats, or send pictures only when they change. Pick **Frame tap** on the Play page (or
+  `run.py --source tap`). `scripts/frametap_send.py` and `docs/frame-tap-writer.c` are writers to start from.
+  Tested with those, not yet with another app.
+- **A slimmer chiaki-ng patch**: the tap's code now lives in its own files (`chiaki_tap/frametap_session.cpp`), and
+  chiaki-ng's own files only get one-line calls, so a new chiaki-ng version is quicker to patch.
+
 ## 0.2.0
 
 **Experimental** (please send feedback)

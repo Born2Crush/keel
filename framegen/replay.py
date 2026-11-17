@@ -2,7 +2,8 @@
 
 Three tracks are kept while it's on (settings.replay), each as MPEG-TS in memory, a piece per encoded packet, so the
 oldest can be dropped and any stretch cut out at a keyframe (one every second):
-- after: every frame SmoovPlay shows, real and AI, timed when it was shown (so 90 fps really is 90);
+- after: every frame SmoovPlay shows, real and AI, timed when it was shown (so 90 fps really is 90), except at
+  120 fps, where it's every other frame (60 fps: encoding all 120 a second fell behind, and took time from play);
 - before: each new frame from the game, once, timed when it arrived plus SmoovPlay's delay, so it lines up with
   after: the game's own frames as they'd look without SmoovPlay;
 - sound: the game's sound (PS5 Remote Play through chiaki-ng's frame tap, chiaki_tap/frametap.h, or a capture
@@ -400,6 +401,8 @@ class Recorder:
         self._delay_s = 0.04  # until the pipeline says
         self.length = 0
         self.dropped = 0
+        self.after_gap_s = 0.0  # the after track keeps a frame only this long after the last one (set_output_hz)
+        self._after_last: float | None = None
         self._lock = threading.Lock()
         self._q: queue.Queue = queue.Queue(maxsize=sum(POOL.values()) + 64)
         self.tracks = {n: _Track(n) for n in ("after", "before", "sound")}
@@ -463,15 +466,23 @@ class Recorder:
             self._q.put(("s", list(chunks)))
 
     # ---- frames
+    def set_output_hz(self, hz: int) -> None:
+        """The rate frames are shown at: from 120 a second, every other one is kept (60 fps clips)."""
+        self.after_gap_s = 0.75 / 60 if hz >= 120 else 0.0  # 1.5 frames at 120: alternate ones, whatever the jitter
+
     def frame(self, frame, t: float | None = None) -> None:
         """A frame just shown (HxWx3 uint8 BGR, numpy or CUDA), at t (perf_counter; default now)."""
         if self.length:
+            t = time.perf_counter() if t is None else t
+            if self.after_gap_s and self._after_last is not None and t - self._after_last < self.after_gap_s:
+                return
+            self._after_last = t
             if self.look is not None:
                 try:
                     frame = self.look(frame)
                 except Exception as e:  # noqa: BLE001 - then without the look
                     self._warn("look", f"[replay] can't put the look in clips ({str(e)[:200]})")
-            self._put("after", frame, time.perf_counter() if t is None else t)
+            self._put("after", frame, t)
 
     def real_frame(self, frame, t_arrival: float) -> None:
         """A new frame from the game, that arrived at t_arrival (perf_counter)."""

@@ -219,14 +219,19 @@ def stage_payload(stage: Path, launcher: Path, chiaki_build: Path, chiaki_src: P
         shutil.copy2(ffmpeg / "LICENSE.txt", lic / "FFmpeg-LICENSE.txt")
     src = chiaki / "source"
     src.mkdir()
-    for name in ("frametap.c", "frametap.h", "apply_patch.py", "build_windows.sh", "README.md"):
+    # The tap's own files as they were built (from the chiaki-ng source, so they always match the binary), then
+    # how they're applied and built.
+    for folder in ("src", "include"):
+        for f in sorted((chiaki_src / "gui" / folder).glob("frametap*")):
+            shutil.copy2(f, src)
+    for name in ("apply_patch.py", "build_windows.sh", "README.md"):
         shutil.copy2(ROOT / "chiaki_tap" / name, src)
     diff = subprocess.run(["git", "-C", str(chiaki_src), "diff"], capture_output=True, text=True, check=True).stdout
     (src / "chiaki-ng-v1.10.1-frametap.patch").write_text(diff, encoding="utf-8")
     tag = subprocess.run(["git", "-C", str(chiaki_src), "describe", "--tags"], capture_output=True, text=True).stdout.strip()
     (src / "SOURCE.txt").write_text(
         f"This chiaki-ng is upstream {tag or 'v1.10.1'} (https://github.com/streetpea/chiaki-ng) with SmoovPlay's frame "
-        "tap added:\n  frametap.c / frametap.h            the tap (copied into gui/src and gui/include)\n"
+        "tap added:\n  frametap*.c, .cpp, .h              the tap (copied into gui/src and gui/include)\n"
         "  chiaki-ng-v1.10.1-frametap.patch  the changes to chiaki-ng's own files (git diff)\n"
         "  apply_patch.py, build_windows.sh  how it's applied and built (mirrors chiaki-ng's Windows CI)\n"
         "With the tap built in, chiaki-ng behaves exactly as before unless CHIAKI_FRAMETAP=1 is set.\n"
