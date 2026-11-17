@@ -71,7 +71,7 @@ Any 60 fps gameplay recording works for testing; the examples use `testdata\clip
 `scripts/frametap_fake.py testdata\clip_1080p60.mp4 --native` stands in for a PS5 running a 60 fps game, so test
 mode can be tried without a console.
 
-**HDR** ([`framegen/hdr.py`](../framegen/hdr.py), setting `hdr`, `--hdr off|sdr|hdr10`) only changes anything for a
+**HDR** (Experimental: [`framegen/hdr.py`](../framegen/hdr.py), setting `hdr`, `--hdr off|sdr|hdr10`) only changes anything for a
 chiaki-ng stream in HDR (codec H.265 HDR: 10-bit HEVC, PQ, BT.2020) with the setting on. `sdr` tone-maps it to 8-bit
 SDR as it's decoded (BT.2390 roll-off, SDR white at 203 nits), so everything after that is unchanged. `hdr10` keeps
 the frames HDR10 as half floats through RIFE and FSR 1 into a 10-bit DXGI swap chain in HDR10's colour space; it
@@ -294,8 +294,9 @@ Timing from a recorded clip, not a live stream, paced at 60 Hz with the OpenGL w
 - **Window capture is Experimental.** Not tested with a real app. The app's sound comes ahead of the smooth
   picture and its window has to stay visible. In Windows HDR mode, on a rotated monitor or without an NVIDIA card,
   frames go through the CPU instead (a few ms more).
-- **HDR output is Experimental.** It's been checked by reading back the 10-bit buffer it presents (on an SDR
-  display, with `FRAMEGEN_HDR_FORCE=1`), not yet on an HDR screen. Capture cards and window capture stay SDR.
+- **HDR is Experimental.** Tried with a stand-in for a PS5's HDR stream (`frametap_fake.py --hdr`), not a real
+  one yet. HDR output has been checked by reading back the 10-bit buffer it presents (on an SDR display, with
+  `FRAMEGEN_HDR_FORCE=1`), not on an HDR screen. Capture cards and window capture stay SDR.
 - **4K** input doesn't fit in real time, even with TensorRT.
 - **90/120 Hz to a file** (`--out`) isn't supported; those rates are window-only.
 - **Soft scene cuts** between two dark shots can occasionally slip past the cut detector and show one blended frame.
@@ -317,11 +318,11 @@ Timing from a recorded clip, not a live stream, paced at 60 Hz with the OpenGL w
   frames before it are shown. When the graphics card falls behind for a moment, SmoovPlay drops to 60 fps rather
   than add delay.
 - **1080p.** Remote Play arrives at 1080p, so the picture is a little softer than HDMI straight from the console.
-- **HDR** (Settings → HDR, off by default). For a PS5 streaming in HDR: pick the H.265 HDR codec in chiaki-ng,
-  then turn HDR on. **On, shown in SDR** gives the stream its real colours on any monitor. **On, HDR output**
-  (Experimental) keeps it HDR all the way to a monitor with Windows' HDR on; it's been checked by reading back the
-  10-bit picture it sends, not yet on an HDR screen, and Looks and RTX VSR are off with it. Instant replay clips are
-  saved in SDR either way.
+- **HDR** (*Experimental*, from 0.2.0: Settings → HDR, off by default). For a PS5 streaming in HDR: pick the H.265
+  HDR codec in chiaki-ng, then turn HDR on. **On, shown in SDR** gives the stream its real colours on any monitor.
+  **On, HDR output** keeps it HDR all the way to a monitor with Windows' HDR on, with Looks and RTX VSR off. Both
+  have been tried with a stand-in for a PS5's HDR stream, not a real one yet, and HDR output has been checked by
+  reading back the 10-bit picture it sends, not on an HDR screen. Instant replay clips are saved in SDR either way.
 - **Some wobble.** HUD text over fast motion, very fast camera turns and thin objects crossing each other can wobble
   a little. Press **I** in the video window to compare with frame generation off.
 - **Sound and picture stay in step.** chiaki-ng plays the sound, and SmoovPlay tells it to hold the sound back

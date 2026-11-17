@@ -38,6 +38,8 @@ class Spec:
     # there, so no-break spaces keep "90 Hz" together; the in-video menu's font can't draw them, so help has none)
     impact: dict = field(default_factory=dict)  # "picture" and/or "speed": a rough line on what it does to the picture
     # and to speed or delay, shown in the launcher and the in-video menu (plain ASCII). Numbers are measured (IMPACT_PC).
+    experimental: bool = False  # built without the hardware to test it: tagged as Experimental in the launcher (with
+    # Send feedback) and in the in-video menu
 
     def name(self, value: Any) -> str:
         return self.names.get(value, str(value))
@@ -157,17 +159,16 @@ SPECS: tuple[Spec, ...] = (
     # framegen/hdr.py. Off by default, and then nothing changes: an HDR stream comes out washed out, and SmoovPlay says
     # so. "hdr10" needs the DXGI presentation (NVIDIA) and Windows' HDR; without them run.py uses "sdr" for the session.
     Spec("hdr", "HDR", ("off", "sdr", "hdr10"), "off",
-         {"off": "Off", "sdr": "On, shown in SDR", "hdr10": "On, HDR output (Experimental)"}, live=False,
-         group="Picture",
+         {"off": "Off", "sdr": "On, shown in SDR", "hdr10": "On, HDR output"}, live=False,
+         group="Picture", experimental=True,
          hints={"off": "For a stream without HDR. The default.",
                 "sdr": "Plays an HDR stream on any display, with its colours and brightness fitted to it.",
-                "hdr10": "Keeps it HDR on an HDR display, with Use HDR on in Windows' display settings. NVIDIA "
-                         "cards. Experimental."},
-         help="For PS5 Remote Play in HDR: pick the H.265 HDR codec in chiaki-ng's Video settings, then turn this "
-              "on. Shown in SDR plays it on any display, fitting HDR's brighter highlights and wider colours to an "
-              "ordinary one. HDR output keeps the picture HDR all the way to an HDR display (turn on Use HDR in "
-              "Windows' display settings first); without one it's shown in SDR. A stream without HDR isn't "
-              "changed. Applies the next time you press Play.",
+                "hdr10": "Keeps it HDR on an HDR display, with Use HDR on in Windows' display settings. Not yet "
+                         "tried on an HDR screen."},
+         help="Experimental: not yet tried with a real PS5 HDR stream, or on an HDR screen. For Remote Play in HDR, "
+              "pick the H.265 HDR codec in chiaki-ng, then turn this on. Shown in SDR fits HDR to any display. HDR "
+              "output keeps it HDR on a display with Use HDR on in Windows (without one, it's shown in SDR). A "
+              "stream without HDR isn't changed. Applies the next time you press Play.",
          impact={"picture": "An HDR stream's true colours, instead of a washed-out picture.",
                  "speed": "About 0.7 ms of graphics card time for each frame from the game."}),
     # framegen/looks.py (the looks; "Which look" lists the built-in ones, then the user's, from looks.CHOICES, which
@@ -347,6 +348,7 @@ def specs_json(specs: tuple[Spec, ...] = SPECS) -> dict:
         "impact_pc": IMPACT_PC,
         "specs": [{"key": s.key, "label": s.label, "group": s.group, "help": s.help, "default": s.default,
                    "live": s.live, "saved": s.saved, "later": s.later, "quick": s.quick, "impact": s.impact,
+                   "experimental": s.experimental,
                    "applies": {"key": s.applies[0], "values": list(s.applies[1])} if s.applies else None,
                    "choices": [{"value": v, "name": s.name(v), "hint": s.hints.get(v, "")} for v in s.choices]}
                   for s in specs],

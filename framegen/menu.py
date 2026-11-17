@@ -130,9 +130,13 @@ class Menu:
             off = self.disabled(spec.key) is not None
             color = DIM if off else TEXT
             cv2.putText(img, spec.label, (pad, base), FONT, fs, color, th, cv2.LINE_AA)
+            tag_x = pad + cv2.getTextSize(spec.label, FONT, fs, th)[0][0] + px(12)
+            if spec.experimental:  # built without the hardware to test it (as the launcher's EXPERIMENTAL badge)
+                cv2.putText(img, "experimental", (tag_x, base), FONT, small * 0.9, DIM if off else ACCENT, th,
+                            cv2.LINE_AA)
+                tag_x += cv2.getTextSize("experimental", FONT, small * 0.9, th)[0][0] + px(10)
             if not spec.live:
-                lw = cv2.getTextSize(spec.label, FONT, fs, th)[0][0]
-                cv2.putText(img, "restart", (pad + lw + px(12), base), FONT, small * 0.9, DIM if off else MUTED,
+                cv2.putText(img, "restart", (tag_x, base), FONT, small * 0.9, DIM if off else MUTED,
                             th, cv2.LINE_AA)
             value = "not available" if off else spec.name(getattr(self.settings, spec.key))
             right = w - pad

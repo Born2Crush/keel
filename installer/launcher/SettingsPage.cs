@@ -40,6 +40,7 @@ namespace SmoovPlay
             public string Key, Label, Group, Help, Later;
             public string Picture, Speed;  // rough effect on the picture and on speed or delay ("impact"), or null
             public bool Live, Saved, Quick;
+            public bool Experimental;  // built without the hardware to test it: the EXPERIMENTAL badge and Send feedback
             public object Default;
             public readonly List<KeyValuePair<object, string>> Choices = new List<KeyValuePair<object, string>>();
             public readonly List<string> Hints = new List<string>();  // a line under each choice ("" = none)
@@ -143,6 +144,7 @@ namespace SmoovPlay
                     Live = (bool)d["live"], Saved = (bool)d["saved"], Default = d["default"],
                     Later = d.ContainsKey("later") ? d["later"] as string : null,
                     Quick = d.ContainsKey("quick") && d["quick"] is bool && (bool)d["quick"],
+                    Experimental = d.ContainsKey("experimental") && d["experimental"] is bool && (bool)d["experimental"],
                 };
                 foreach (Dictionary<string, object> c in (object[])d["choices"])
                 {
@@ -412,6 +414,11 @@ namespace SmoovPlay
                 ToolTipService.SetInitialShowDelay(info, 150);
                 ToolTipService.SetShowDuration(info, 60000);
                 title.Children.Add(info);
+            }
+            if (spec.Experimental && off == null)
+            {
+                title.Children.Add(ExperimentalBadge());
+                title.Children.Add(FeedbackPill(spec.Label, "setting-feedback-" + spec.Key));
             }
             if (!spec.Live)
             {

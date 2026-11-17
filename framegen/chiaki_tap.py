@@ -655,7 +655,8 @@ class ChiakiSource:
         from .hdr import StreamConverter
         import torch
         self.convert = StreamConverter(out, "cuda" if torch.cuda.is_available() else "cpu", display_peak=display_peak)
-        print("[chiaki] HDR stream: " + ("kept HDR for the HDR display" if out == "pq16" else "shown in SDR"))
+        print("[chiaki] HDR stream: " + ("kept HDR for the HDR display" if out == "pq16" else "shown in SDR")
+              + " (HDR is Experimental)")
 
     def _ask_idr(self) -> None:
         now = time.perf_counter()

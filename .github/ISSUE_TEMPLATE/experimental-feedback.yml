@@ -1,5 +1,5 @@
 name: Feedback on an Experimental feature
-description: How an Experimental feature worked for you (Low delay window presentation now; capture cards, AMD Radeon and Intel Arc cards, and window capture as they arrive)
+description: How an Experimental feature worked for you (HDR, Low delay window presentation, capture cards, AMD Radeon and Intel Arc cards, window capture)
 title: "[Experimental] "
 labels: ["experimental", "feedback"]
 body:

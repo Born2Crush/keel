@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.2.0 (not released yet)
+
+**Experimental** (please send feedback)
+- **HDR** (Settings → Picture → HDR, off by default). For a PS5 streaming in HDR, pick chiaki-ng's H.265 HDR codec
+  and turn this on. **On, shown in SDR** gives the stream its real colours on any monitor, where before it looked
+  washed out, for about 0.7 ms of graphics card time a frame. **On, HDR output** keeps the picture HDR10 all the way
+  to a monitor with Windows' HDR on; Looks and RTX VSR are off with it, and instant replay clips are saved in SDR.
+  Tried with a stand-in for a PS5's HDR stream, not a real one yet; HDR output was checked by reading back the
+  10-bit picture it sends, not on an HDR screen.
+
+**Play**
+- An HDR stream with HDR off now says how to fix the washed-out colours.
+
+**Launcher**
+- The PS5 guide explains the HDR codec instead of saying to turn HDR off. HDR has the Experimental badge and a
+  Send feedback button on the Settings page.
+
+**Fixes**
+- **Low delay** presentation could hand Windows a black buffer instead of the new frame on some refreshes (found by
+  reading back what it sent). Each frame is now copied into place, for one quick graphics card copy.
+
 ## 0.1.0 (early release)
 
 The first public version. Windows 10 or 11, with an NVIDIA RTX graphics card recommended.
