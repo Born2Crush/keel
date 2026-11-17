@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 **Play**
 - **A minimal stats overlay**, now the default: a small line in the corner with the frames on screen, the game's own
