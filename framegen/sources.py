@@ -40,8 +40,8 @@ class SourceInfo:
     rate: str = "fixed"  # "fixed": a frame every refresh, repeats included (Remote Play, HDMI). "variable": frames
     # come when the sender chooses (window capture, Moonlight), so Clock60 puts them on a 60 Hz beat
     hz: float = 60.0  # refreshes per second, for a fixed rate
-    repeats: str = "pixels"  # how a repeat is told from new content: "hint" (the source says, e.g. Remote Play from
-    # each frame's compressed size; the picture check is only a fallback) or "pixels" (pictures compared)
+    repeats: str = "pixels"  # how a repeat is told from new content: "hint" (the source says, e.g. the frame tap's
+    # flags; the picture check is only a fallback) or "pixels" (pictures compared: see make_detector)
     test_mode: bool = True  # "Simulate a 30 fps game" works with it (False: built in, as for "sim")
     full_range: bool = True  # frames come as full-range RGB (0-255); False: limited range (16-235), to be expanded
     audio: str = ""  # who plays the sound, in words ("" = nobody yet)
@@ -49,7 +49,7 @@ class SourceInfo:
 
 
 KINDS = {
-    "chiaki": SourceInfo("chiaki", "PS5 Remote Play", repeats="hint", audio="chiaki-ng plays the sound",
+    "chiaki": SourceInfo("chiaki", "PS5 Remote Play", audio="chiaki-ng plays the sound",
                          controls="Your controller connects to this PC; chiaki-ng sends it to the PS5"),
     "capture": SourceInfo("capture", "Capture card", audio="SmoovPlay plays the card's sound, in step with the picture",
                           controls="Your controller connects to the console as usual"),
@@ -115,7 +115,8 @@ class TestMode:
             return tick
         i = self._n
         self._n += 1
-        self._game[i] = tick.extra["game_new"] = tick.new_hint
+        # (Remote Play: its size check, which only says roughly; the pipeline's own call is the picture's)
+        self._game[i] = tick.extra["game_new"] = tick.extra.get("size_new", tick.new_hint)
         self._game.pop(i - self.KEEP, None)
         if i % 2 == 0:  # kept: arrives as new content
             self._last = tick.frame
@@ -209,14 +210,14 @@ class Clock60:
 
 # ----------------------------------------------------------------------------- repeat detector
 def make_detector(info: SourceInfo, threshold: float = 2.0):
-    """The repeat detector for a source. Remote Play says which frames are repeats, so its detector is only the
-    fallback; files compare each frame with the previous one; a capture card compares with the last *new* frame,
-    so a slow change that stays under the threshold from frame to frame still adds up and is caught; an app's window,
-    or an app's decoded frames through the frame tap, learns where the line between its repeats and new frames is (an
-    app decodes its own stream, so its repeats are never quite identical)."""
+    """The repeat detector for a source. Files compare each frame with the previous one; a capture card compares with
+    the last *new* frame, so a slow change that stays under the threshold from frame to frame still adds up and is
+    caught; PS5 Remote Play, an app's window, or an app's decoded frames through the frame tap learn where the line
+    between their repeats and new frames is (a decoded stream's repeats are never quite identical, but change far
+    less than new frames)."""
     from .cadence import DuplicateDetector
     return DuplicateDetector(threshold, reference="new" if info.kind == "capture" else "previous",
-                             learn=info.kind in ("window", "tap"))
+                             learn=info.kind in ("chiaki", "window", "tap"))
 
 
 # ----------------------------------------------------------------------------- the list for the launcher

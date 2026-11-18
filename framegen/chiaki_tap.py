@@ -4,10 +4,13 @@ chiaki-ng, built with the tap and started with CHIAKI_FRAMETAP=1, copies every c
 sends into a shared-memory ring. FrameTap reads that ring; ChiakiSource decodes it into Ticks for the pipeline.
 
 Compared with a capture card, each frame also carries what the stream knows about it:
-  - size: bytes of the compressed frame. After compression a repeated frame isn't an exact copy (the encoder
-    spends its few bytes sharpening the picture), so the image-based duplicate detector calls most repeats
-    new. Size doesn't have that problem: a repeat costs the encoder almost nothing (in tests ~3 KB against
-    ~60 KB for a new frame), so `new_hint` comes from size and the pipeline uses it instead of the image check.
+  - size: bytes of the compressed frame. A repeat costs the encoder little, so size says roughly which frames are
+    new (SizeRepeatDetector, in extra["size_new"]): kept for the frame log, the stream check and test mode. The
+    pipeline tells new frames from repeats by the picture instead (cadence.DuplicateDetector(learn=True), as for
+    an app's window): a decoded repeat is never an exact copy (the encoder spends its few bytes sharpening it),
+    but it changes 10 times or more less than a new frame. In real sessions that split them 93-99% right, where
+    size managed 3-35% (a repeat can be nearly half a new frame's size, and the size check stuck after still
+    scenes).
   - damaged: frames were lost before this one, or it's the PS5's recovery frame after a loss. The pipeline
     holds instead of interpolating, so a broken frame isn't smeared into the generated one.
 Windows only (named file mapping + named event).
@@ -396,7 +399,8 @@ def param_sets(data: bytes, codec: str) -> bytes:
 
 
 class SizeRepeatDetector:
-    """New frame or repeat, from compressed size alone.
+    """New frame or repeat, from compressed size alone. (Not the pipeline's call, which is the picture's: see the
+    module docstring. Kept for the stream check, test mode and the frame log.)
 
     A frame is new if it's at least `ratio` of a typical recent new frame (the 75th percentile of the last 16
     non-keyframe sizes: in a 30 fps game at 60 Hz half the frames are new, so that lands on a new one).
@@ -406,9 +410,12 @@ class SizeRepeatDetector:
     it; otherwise it returns None and the pipeline falls back to the image check.
     """
 
+    BIG_RUN = 6  # this many "big" frames among the last 2 * BIG_RUN aren't refresh frames but a busier scene
+
     def __init__(self, ratio: float = 0.4, window: int = 16) -> None:
         from collections import deque
         self.ratio = ratio
+        self._recent: deque[tuple[int, bool]] = deque(maxlen=2 * self.BIG_RUN)  # (size, big) of the last frames
         self.sizes: deque[int] = deque(maxlen=window)
         self.decisions: deque[bool] = deque(maxlen=6)
         self.ref: float | None = None  # the last update's typical new frame size (None: keyframe or warming up)
@@ -417,6 +424,16 @@ class SizeRepeatDetector:
     def update(self, size: int, keyframe: bool) -> bool | None:
         # The PS5's refresh frames are ordinary slices by NAL type, but far bigger than anything recent.
         self.big = not keyframe and len(self.sizes) >= 8 and size > 4 * float(np.percentile(self.sizes, 75))
+        # After a still scene (a menu, a pause: ~1 KB frames), the new frames of the motion that follows (and often
+        # the repeats) look big, and big frames never joined the sizes, so the check stayed silent for the rest of
+        # the session (55-91% of ticks in real logs). Many of them recently is the new normal: start from those.
+        if not keyframe:
+            self._recent.append((size, self.big))
+        if sum(b for _, b in self._recent) >= self.BIG_RUN:
+            self.sizes.clear()
+            self.sizes.extend(s for s, _ in list(self._recent)[:-1])  # (this frame joins below, as an ordinary one)
+            self._recent.clear()
+            self.big = False
         self.ref = None
         if keyframe or self.big:
             d = list(self.decisions)
@@ -666,17 +683,17 @@ class ChiakiSource:
             if not frames:  # (a decoder that holds a frame back)
                 continue
             decoded = True
-            new_hint = sizes.update(len(p.data), key)
+            size_new = sizes.update(len(p.data), key)
             damaged = bool(p.frames_lost > 0 or p.recovered or p.truncated or damaged_left > 0)
             for img in images:
                 decode_ms = (time.perf_counter() - t) * 1000
                 # Ready = arrival + decode time: what the pipeline's "behind" check has always measured from.
-                tick = Tick(img, p.t_arrival, 0, new_hint=new_hint, damaged=damaged,
+                tick = Tick(img, p.t_arrival, 0, damaged=damaged,
                             t_ready=p.t_arrival + decode_ms / 1000,
                             extra={"seq": p.seq, "size": len(p.data), "frames_lost": p.frames_lost,
                                    "recovered": p.recovered, "keyframe": key, "decode_ms": decode_ms,
-                                   # for the stream check: test mode replaces new_hint, these stay as the stream said
-                                   "size_new": new_hint, "size_ref": sizes.ref, "big": sizes.big})
+                                   # the size check's call: for the stream check, test mode and the frame log
+                                   "size_new": size_new, "size_ref": sizes.ref, "big": sizes.big})
                 if self.test is not None and (tick := self.test(tick)) is None:
                     continue
                 try:
@@ -817,7 +834,7 @@ class ChiakiSource:
         if self._log is None:
             return
         e = tick.extra
-        hint = tick.new_hint
+        hint = e.get("size_new")
         self._log[1].writerow([tick.index, e.get("seq"), f"{(tick.t_arrival - self._t0) * 1000:.2f}", e.get("size"),
                                e.get("frames_lost"), int(bool(e.get("recovered"))), int(bool(e.get("keyframe"))),
                                f"{e.get('decode_ms', 0):.2f}", f"{(t_start - tick.t_arrival) * 1000:.2f}",

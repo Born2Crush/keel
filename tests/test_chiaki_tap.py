@@ -72,12 +72,11 @@ def test_size_detector_60fps_all_new():
     assert all(out[4:])
 
 
-@pytest.mark.xfail(strict=True, reason="known weakness, not fixed yet: the obvious fix (counting those frames) "
-                   "makes a real 60 fps session misread ~3x more new frames as repeats; waiting for a real 30 fps log")
 def test_size_detector_recovers_after_a_still_stretch():
     # A menu or loading screen sends tiny frames; then a 30 fps game resumes. Its new frames are far bigger
-    # than anything in the window, so they're treated like keyframes and left out of it: the window stays full
-    # of repeats and the detector stuck (repeats called new). The stream check reports such runs.
+    # than anything in the window, so they were treated like keyframes and left out of it: the window stayed full
+    # of tiny frames and the detector stuck. Many big frames recently are now the new normal. (Real 30 fps logs,
+    # 17-18 Nov: silent on 55-91% of ticks before, 1-4% after.)
     rng = np.random.default_rng(3)
     d = SizeRepeatDetector()
     for _ in range(180):

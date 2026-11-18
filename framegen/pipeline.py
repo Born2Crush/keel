@@ -514,7 +514,7 @@ class Pipeline:
                 np.copyto(self._in_np, tick.frame)
                 it.load(self._in_pinned)
             diff = self.detector.update(it.in_u8)
-            # A source that knows better (Remote Play: compressed frame size) overrides the image check.
+            # A source that knows better (the frame tap's flags, test mode) overrides the image check.
             is_new = diff.is_new if tick.new_hint is None else tick.new_hint
             # Game frame rate set to 30 fps: every other tick is new, the checks only choosing which (not in test
             # mode, which decides itself what's new)

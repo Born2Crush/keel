@@ -250,7 +250,11 @@ frames dropped and kept as ground truth for `--score`. Test mode does the same t
 (`ChiakiSource(test=TestMode(True))`, switchable mid-stream from the menu's Simulate a 30 fps game), and scoring turns on with it.
 
 Duplicate detection compares 16×16 block means: noise averages out, but a small moving object still trips the
-maximum. Over the Remote Play stream, repeats are recognised by their size before decoding.
+maximum. Over PS5 Remote Play, an app's window and the frame tap, a decoded repeat is never an exact copy, so the
+detector learns the line between repeats and new frames from the last 16 frames' mean differences (two bands, a
+repeat's 10 or more times smaller); in real 30 fps Remote Play sessions it called new frames 99.5-100% and repeats
+93-99% right over Ethernet (83% over Wi-Fi). Each frame's compressed size is kept in the frame log and the stream
+check.
 
 `framegen/fastrife.py` is a restructured RIFE forward pass (same maths, verified to about 60 dB against the
 reference) that cut 1080p interpolation from about 16 ms to about 9 ms: one warp per direction instead of two,

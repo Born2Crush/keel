@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+**Play**
+- **Auto tells a PS5 Remote Play game's new frames from its repeats by the picture**, as App window already did.
+  It went by each frame's compressed size, which misread locked 30 fps games: a repeat can be nearly half a new
+  frame's size, and after any still scene (a menu, a pause) the size check stopped answering for the rest of the
+  session. Replayed over frame logs from real 30 fps sessions, Auto now calls 93-99% of repeats right over
+  Ethernet (83% over Wi-Fi), where it called 3-35% right, and switches Even out 40-60 on by mistake for 0-5% of
+  the time instead of 3-23%. Game frame rate 30 fps works as before.
+
+**Fixes**
+- **The end-of-session stream check no longer gets stuck after a still scene** and reports the game's frame rate
+  from the whole session.
+
 ## 0.3.3
 
 **Fixes**
