@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+**Dip smoothing** (Experimental, please send feedback)
+- **New: Dip smoothing** (Settings → Smoothness, off by default), made to help 30 fps games that sometimes drop
+  below 30, as big open-world games like GTA VI may at times on a base console. At each dip a frame stays on screen
+  for 50 or 67 ms instead of 33 and the next one jumps, and the smooth motion around it makes the hitch stand out.
+  With Dip smoothing on, SmoovPlay spaces the frames it draws by when the game's frames really arrived, so a dip
+  looks like a brief slow-down instead of a freeze and a jump. It turns itself on after two dips within a second and
+  off 3 s after the last, so a game holding a steady 30 is unchanged. Works with Game frame rate Auto or 30 fps.
+- **It's experimental.** It's been tried on simulated dipping games and a stand-in PS5, not yet on a real game that
+  dips. While it's smoothing it adds 17 to 50 ms of delay (more for longer dips, and more at 90 fps than at 60 or
+  120), and every frame shown is a generated one, so the graphics card works harder: on a busy card some of the
+  extra 90 or 120 fps frames fall back to 60 (in our test at 90 fps, 79-83% were shown against 97% with it off). If
+  you try it, tell us how it went in a [GitHub issue](https://github.com/smoovplay/smoovplay/issues).
+
 **Play**
 - **Auto tells a PS5 Remote Play game's new frames from its repeats by the picture**, as App window already did.
   It went by each frame's compressed size, which misread locked 30 fps games: a repeat can be nearly half a new

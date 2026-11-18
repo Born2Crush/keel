@@ -200,9 +200,9 @@ def test_the_in_video_menu_fits_a_window_whatever_is_picked():
         for i in range(len(m.rows())):
             m.index = i
             assert m.render(1.0).shape[0] <= 1060, (vals, i)  # drawn at 1.0 in a 1080 px tall picture
-    extra = SPECS + tuple(BY_KEY[k] for k in ("overlay", "vsync", "minimize_chiaki", "audio_sync"))  # (as stand-ins)
+    extra = SPECS + tuple(BY_KEY[k] for k in ("overlay", "vsync", "minimize_chiaki"))  # (as stand-ins)
     m = Menu(Settings({}), specs=extra)
-    assert m.render(1.0).shape[0] <= 1060  # and with a few more settings to come
+    assert m.render(1.0).shape[0] <= 1060  # and with a few more settings to come (room for 3 since Dip smoothing)
 
 
 def test_impact_lines_are_plain_short_and_never_about_vfg():

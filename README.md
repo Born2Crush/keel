@@ -211,6 +211,9 @@ The timeline shows 90 fps. At 60 fps there's one AI frame between each pair of r
   [test mode](#only-have-60-fps-games-use-test-mode).
 - **Games between 40 and 60 fps** stutter over a 60 Hz stream. **Even out 40-60 fps** (on by default, Experimental)
   spaces their frames evenly, for about one frame (17 ms) more delay.
+- **30 fps games that dip below 30** freeze for a moment and jump at each dip. **Dip smoothing** (off by default,
+  Experimental) spaces their frames by when they arrived, so a dip looks like a brief slow-down. It's only on while
+  the game dips, and adds about 17 to 50 ms of delay and more graphics card work then.
 - **One frame generator at a time.** Leave NVIDIA Smooth Motion, AMD Fluid Motion Frames and Lossless Scaling off
   for SmoovPlay and chiaki-ng. Your other games aren't affected.
 

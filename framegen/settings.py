@@ -38,8 +38,8 @@ class Spec:
     # there, so no-break spaces keep "90 Hz" together; the in-video menu's font can't draw them, so help has none)
     impact: dict = field(default_factory=dict)  # "picture" and/or "speed": a rough line on what it does to the picture
     # and to speed or delay, shown in the launcher and the in-video menu (plain ASCII). Numbers are measured (IMPACT_PC).
-    experimental: bool = False  # built without the hardware to test it: tagged as Experimental in the launcher (with
-    # Send feedback) and in the in-video menu
+    experimental: bool = False  # built without the hardware (or a real game) to test it: tagged as Experimental in the
+    # launcher (with Send feedback) and in the in-video menu
 
     def name(self, value: Any) -> str:
         return self.names.get(value, str(value))
@@ -95,6 +95,17 @@ SPECS: tuple[Spec, ...] = (
               "stays even. Menus that run at 60 fps look a little less smooth with it.",
          impact={"picture": "Even motion in a game locked at 30 fps, whatever the scene.",
                  "speed": "None. At most one frame (17 ms) later for a moment after the game stutters."}),
+    # framegen/cadence.py DipWatch + FrameTimeline.at_arrival. Tried on simulated 30 fps games that hold frames for 3 or
+    # 4 ticks (tests/test_dips.py, scratchpad numbers in notes/backlog.md), not a real one yet. Off by default: it adds
+    # delay while the game dips.
+    Spec("even_dips", "Dip smoothing", (False, True), False, ON_OFF, group="Smoothness",
+         applies=("interp", (True,)), experimental=True,
+         help="For 30 fps games that sometimes drop below 30, as some big open-world games do on a base console. "
+              "At each dip a frame stays up longer and the next one jumps. With this on, SmoovPlay spaces the "
+              "frames it draws by when the game's frames arrived, so a dip looks like a brief slow-down instead. "
+              "It's only on while the game dips, and adds delay then.",
+         impact={"picture": "A dip below 30 fps looks like a brief slow-down, not a freeze and a jump.",
+                 "speed": "While it dips: 17 to 50 ms more delay, and more graphics card work."}),
     # RIFE: only the model SmoovPlay is tuned and tested with (setup prepares it). interpolator.MODELS has more, for
     # testing with run.py --model; one becomes a choice here once it's tested in real time and setup prepares it.
     # NVIDIA VFG (framegen/vfg.py): offered once the user has set it up on the launcher's Settings page. Its licence

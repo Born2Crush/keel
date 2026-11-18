@@ -130,6 +130,7 @@ made-up PCs.
 | Frame generation | On / Off | live |
 | Output frame rate | 60 / 90 / 120 fps | live (falls back to 60 when the GPU can't keep up) |
 | Even out 40-60 fps | On / Off (Experimental: even motion for games between 30 and 60 fps) | live |
+| Dip smoothing | Off / On (Experimental: a 30 fps game's dips become a brief slow-down) | live |
 | Upscaler | AMD FSR 1 / NVIDIA RTX VSR / Bilinear (others may come later) | live |
 | FSR sharpening | Max … Minimal | live |
 | RTX VSR quality | Low / Medium / High / Ultra | live |
@@ -381,6 +382,15 @@ Timing from a recorded clip, not a live stream, paced at 60 Hz with the OpenGL w
   they stutter. **Even out 40-60 fps** (on by default, Experimental) times each frame and draws evenly spaced ones
   from them, for about one frame (17 ms) more delay. Tested with real footage played as 43 and 47 fps games, not yet
   with a real one.
+- **30 fps games that dip below 30** hold a frame for 3 ticks (50 ms) or 4 (67 ms, waiting for the next 30 fps
+  slot, as Gotham Knights' hitches did on PS5 Remote Play), then jump. **Dip smoothing** (off by
+  default, Experimental; framegen/cadence.py DipWatch and FrameTimeline.at_arrival) times each frame by the tick it
+  arrived on while the game dips (two dips within a second; off 3 s after the last) and draws evenly spaced frames
+  from them, with up to 3 ticks of delay. On simulated games holding 10-20% of their frames, motion unevenness fell
+  from 0.28-0.58 to 0.02-0.11 (0 = even), for 17-25 ms more delay with 50 ms holds and 33-49 ms with 67 ms
+  holds (90 fps the most), and none for a game holding 30. Every frame shown while it's on is a generated one, so
+  the GPU does more: through the fake PS5 at 90 fps (`frametap_fake.py --game-fps 27`, encoder on the same GPU) the
+  median delay went from 36 to 70 ms and extra frames shown from 97% to 79%. Not tried with a real game that dips yet.
 - **One frame generator at a time.** Leave NVIDIA Smooth Motion, AMD Fluid Motion Frames and Lossless Scaling off
   for SmoovPlay and chiaki-ng: on top of SmoovPlay they'd make frames out of its generated ones (more wobble) and
   add delay. Your other games aren't affected.
