@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+**Capture cards** (Experimental)
+- **Sound from cards that carry it on their video device**, as the AVerMedia Live Gamer 4K (GC573) does
+  ([#9](https://github.com/smoovplay/smoovplay/issues/9)). SmoovPlay only looked for a separate sound device named
+  like the card; when there's none, it now tries the card itself, and plays the picture alone if that has no sound
+  either.
+
+**Setup**
+- **A folder Windows won't let SmoovPlay write to is caught before installing**, such as a Program Files folder on
+  another drive ([#9](https://github.com/smoovplay/smoovplay/issues/9)). Setup used to stop with an "access denied"
+  error; it now tries writing there first (leaving nothing behind) and asks for another folder.
+
 ## 0.3.1
 
 **Play**

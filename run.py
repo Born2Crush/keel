@@ -176,8 +176,11 @@ def open_capture(a, w: int, h: int, test):
         if a.capture_audio == "auto":
             audio_device = capture.pick_audio(name, devices)
             if audio_device is None:
-                print("[capture] no sound device named like the card, so no sound: pick one with --capture-audio "
-                      "(see --list-devices)")
+                # Some cards carry their sound on the video device itself (in OBS: Video Capture Device with no custom
+                # audio device), not as a sound device of their own, e.g. the AVerMedia GC573: try that. FFmpeg looks
+                # for a video device with a sound pin by that name; CardSource.open plays the picture alone if not.
+                audio_device = name
+                print("[capture] no sound device named like the card: trying the card's own sound")
         elif a.capture_audio.isdigit() and int(a.capture_audio) < len(audio):
             audio_device = audio[int(a.capture_audio)]
         else:

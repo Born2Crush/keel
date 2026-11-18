@@ -888,6 +888,7 @@ namespace SmoovPlay
                 try { dir = ResolveDir(raw, out sub); problem = SystemCheck.FolderProblem(dir, out tooLong); }
                 catch (Exception e) { problem = e.Message; }
             }
+            if (problem == null && dir != null) problem = SystemCheck.WriteProblem(dir);
             string root = SafeRoot(raw);
             double free = 0, total = 0;
             try
