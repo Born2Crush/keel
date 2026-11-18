@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.3
 
 **Fixes**
 - **Game frame rate 30 fps no longer judders back and forth when a game dips below 30.** When a game missed a frame
