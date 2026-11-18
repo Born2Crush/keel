@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+**Fixes**
+- **Game frame rate 30 fps no longer judders back and forth when a game dips below 30.** When a game missed a frame
+  (showing one for 50 ms instead of 33), the 30 fps setting could be a frame out of step for up to a second: it
+  showed the game's next frame, then the in-between frame from before it. It now keeps every frame in order, one
+  frame later until it's back in step. Auto wasn't affected.
+
 ## 0.3.2
 
 **Play**
