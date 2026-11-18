@@ -390,7 +390,8 @@ Timing from a recorded clip, not a live stream, paced at 60 Hz with the OpenGL w
   from 0.28-0.58 to 0.02-0.11 (0 = even), for 17-25 ms more delay with 50 ms holds and 33-49 ms with 67 ms
   holds (90 fps the most), and none for a game holding 30. Every frame shown while it's on is a generated one, so
   the GPU does more: through the fake PS5 at 90 fps (`frametap_fake.py --game-fps 27`, encoder on the same GPU) the
-  median delay went from 36 to 70 ms and extra frames shown from 97% to 79%. Not tried with a real game that dips yet.
+  median delay went from 37 to 66 ms and extra frames shown from 97% to 79-83% (two runs). Not tried with a real game
+  that dips yet.
 - **One frame generator at a time.** Leave NVIDIA Smooth Motion, AMD Fluid Motion Frames and Lossless Scaling off
   for SmoovPlay and chiaki-ng: on top of SmoovPlay they'd make frames out of its generated ones (more wobble) and
   add delay. Your other games aren't affected.

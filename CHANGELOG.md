@@ -24,6 +24,9 @@
   the time instead of 3-23%. Game frame rate 30 fps works as before.
 
 **Fixes**
+- **The delay figure, and Sound in sync, which follows it, are a little more exact with Even out 40-60 on.** A frame
+  now counts as on screen when it's first drawn as itself, not only once its moment has passed, which for some
+  games counted it up to a tick late (about 5 ms too much on average for a 45 fps game at 60 or 120 fps).
 - **The end-of-session stream check no longer gets stuck after a still scene** and reports the game's frame rate
   from the whole session.
 

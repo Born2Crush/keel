@@ -304,13 +304,14 @@ class TimedFrame:
     cut: bool = False
     frame: object = None
     t_arrival: float = 0.0
-    reached: bool = False  # its time has come on screen
+    reached: bool = False  # it has been on screen (drawn as itself, or its time has passed)
 
 
 @dataclass
 class Place:
     """What to show at one display time: frame `a` itself, or (`b` not None) the frame at fraction t from a to b.
-    c: the game time shown. reached: frames whose time came with this one (for the delay stats)."""
+    c: the game time shown. reached: frames on screen for the first time with this one, drawn as themselves or
+    passed (for the delay stats, which the sound sync follows)."""
     a: TimedFrame
     b: TimedFrame | None = None
     t: float = 0.0
@@ -489,5 +490,12 @@ class FrameTimeline:
         if b.cut or t < 0.04:  # across a cut, the frame before it until the new one's time comes
             return Place(a, c=c, reached=reached)
         if t > 0.96:
+            # b itself is on screen from now, so its delay counts from here, not from the next display time, when
+            # its time has passed. (Timed as it arrived, on a whole tick, a frame was drawn as itself a tick before
+            # its time passed, so Dip smoothing logged every frame a tick late, and the sound, which
+            # follows the logged delay, was held back that much too long.)
+            if not b.reached:
+                b.reached = True
+                reached += (b,)
             return Place(b, c=c, reached=reached)
         return Place(a, b, t, c, reached)

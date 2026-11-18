@@ -8,7 +8,7 @@ import time
 import pytest
 import torch
 
-from framegen.cadence import DipWatch
+from framegen.cadence import DipWatch, FrameTimeline
 from framegen.io import Tick
 from framegen.pipeline import Pipeline
 from framegen.settings import Settings
@@ -169,3 +169,28 @@ def test_even_out_dips_is_off_by_default():
     assert spec.default is False and spec.experimental
     _, st = _play(_dipping_game(300, 0.15, hold=4, steady=40), 90)
     assert st.dip_ticks == 0
+
+
+@pytest.mark.parametrize("hz", [60, 90, 120])
+def test_a_frame_counts_as_shown_when_it_is_drawn_as_itself(hz):
+    """The delay figures, and the sound sync that follows them, count a frame from when it's first on screen as
+    itself. Timed as it arrived, that's a display time before its own time passes (which is where it used to be
+    counted: a tick late, so the sound was held back 17 ms too long)."""
+    tl = FrameTimeline()
+    tl.set_at_arrival(True)
+    rnd = random.Random(3)
+    calls = []
+    for _ in range(300):
+        calls += [True] + [False] * (2 if rnd.random() < 0.3 else 1)
+    drawn, counted = {}, {}
+    for n, new in enumerate(calls):
+        tl.tick(new, frame=n)
+        for phi in tl.slots(hz):
+            p = tl.place(phi)
+            if p.b is None:
+                drawn.setdefault(p.a.frame, n)
+            for f in p.reached:
+                assert f.frame not in counted  # each frame once
+                counted[f.frame] = n
+    assert len(counted) > 280
+    assert [a for a, n in drawn.items() if a > 60 and counted[a] != n] == []
