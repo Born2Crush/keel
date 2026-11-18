@@ -201,7 +201,8 @@ The timeline shows 90 fps. At 60 fps there's one AI frame between each pair of r
   played a real PS5 HDR stream this way on an HDR monitor, and since 0.3.2 fullscreen keeps Windows' HDR on instead
   of switching the display to SDR. Instant replay clips are saved in SDR either way.
 - **A game locked at 30 fps looks uneven?** Set Settings → Smoothness → **Game frame rate** to **30 fps**. On Auto,
-  SmoovPlay works the rate out from the stream, and still or dark scenes can fool it.
+  SmoovPlay works the rate out from the stream as it plays. Since 0.3.4 it goes by the picture and rarely misreads a
+  30 fps game over a wired connection, but a still or dark scene can still fool it.
 - **Wired is smoothest.** On Wi-Fi, frames can arrive late and in bunches, which shows as hitches however fast your
   PC is. Plug the PS5 and the PC into the router if you can.
 - **Some wobble.** HUD text over fast motion, very fast camera turns and thin objects crossing each other can wobble
