@@ -22,6 +22,7 @@
 
 <p align="center">
   <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Status: early release" src="https://img.shields.io/badge/status-early%20release-FFB02E?style=flat-square"></a>
+  <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Downloads of SmoovPlay-Setup.exe, all releases" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsmoovplay%2Fsmoovplay%2Fstats%2Fdownloads.json&style=flat-square"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-3A4250?style=flat-square">
   <img alt="Graphics: NVIDIA RTX 30, 40 or 50 series; AMD and Intel as an Experimental option" src="https://img.shields.io/badge/GPU-NVIDIA%20RTX%2030%20%7C%2040%20%7C%2050%2C%20AMD%20%26%20Intel%20experimental-3A4250?style=flat-square">
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3A4250?style=flat-square"></a>
