@@ -1,6 +1,24 @@
 # Changelog
 
-## Unreleased
+## 0.3.2
+
+**Play**
+- **Steady HUD works with NVIDIA VFG too**, not only RIFE: the map, health bar and subtitles stay as the game drew
+  them while the scene behind them moves. Still off by default (Settings, Smoothness). Thanks to
+  [@Vadko](https://github.com/Vadko) ([#11](https://github.com/smoovplay/smoovplay/pull/11))!
+- **Auto-detect tells RTX 40 and 50 series owners their card can run NVIDIA VFG**, with a button to set it up.
+  Nothing is downloaded until you accept NVIDIA's licence, and once it's set up, Auto-detect times it and suggests it
+  if it keeps up. Thanks to [@Vadko](https://github.com/Vadko) ([#7](https://github.com/smoovplay/smoovplay/pull/7))!
+
+**Fixes**
+- **Fullscreen keeps Windows' HDR on.** With Use HDR on in Windows, fullscreen switched the display to SDR while the
+  video was in front and back to HDR with every Alt+Tab or click, so the colours kept changing (and fullscreen could
+  look yellowish). With Windows' HDR on, the video window now uses the DXGI presentation, and fullscreen is a
+  borderless window, so the display stays in HDR. Thanks to [@Vadko](https://github.com/Vadko)
+  ([#6](https://github.com/smoovplay/smoovplay/pull/6))!
+- **Each choice on the Settings page shows its own tooltip** as the mouse moves along a row (AMD FSR 1, NVIDIA RTX
+  VSR, Bilinear), instead of the first one's staying up. Thanks to [@Vadko](https://github.com/Vadko)
+  ([#10](https://github.com/smoovplay/smoovplay/pull/10))!
 
 **Capture cards** (Experimental)
 - **Sound from cards that carry it on their video device**, as the AVerMedia Live Gamer 4K (GC573) does
