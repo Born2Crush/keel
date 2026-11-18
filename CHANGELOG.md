@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.4
 
 **Dip smoothing** (Experimental, please send feedback)
 - **New: Dip smoothing** (Settings → Smoothness, off by default), made to help 30 fps games that sometimes drop
