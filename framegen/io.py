@@ -451,7 +451,7 @@ class GLWindowSink:
     with AMD FSR 1 (~0.1 ms GPU at 1440p), "vsr" with NVIDIA RTX Video Super Resolution (needs the RTX Video SDK,
     see framegen/rtxvsr.py, and frames on the GPU), "bilinear" with a plain filtered blit. A look (framegen/looks.py,
     drawn by framegen/looks_gl.py) goes on after that, at the window's size.
-    Keys: m/Tab = settings menu (arrows + Enter in it), i = interpolation on/off for this session, s = stats
+    Keys: m/Tab = settings menu (arrows + Enter in it, Esc back a page), i = interpolation on/off for this session, s = stats
     overlay (off, minimal, detailed), f = fullscreen, u = next upscaler, k = look on/off, j = next look (Shift+J:
     the one before), l = delay test (PS5 Remote Play), r = save the instant replay, b = save a before & after video
     of it (framegen/replay.py), q/Esc = quit.
@@ -1037,7 +1037,7 @@ class GLWindowSink:
         self._toast_text, self._toast_until = text, time.perf_counter() + seconds
 
     _NAV = {"UP": "up", "DOWN": "down", "LEFT": "left", "RIGHT": "right", "ENTER": "enter", "KP_ENTER": "enter",
-            "BACKSPACE": "back"}
+            "BACKSPACE": "back", "ESCAPE": "back"}  # Esc: back a page, and on the main page it closes the menu
 
     def _on_key(self, win, key, scancode, action, mods) -> None:
         glfw, st = self.glfw, self.settings
@@ -1058,8 +1058,6 @@ class GLWindowSink:
         if key in (glfw.KEY_M, glfw.KEY_TAB):
             self.menu.open = not self.menu.open
             self._toast_until = 0.0
-        elif key == glfw.KEY_ESCAPE and self.menu.open:
-            self.menu.open = False
         elif key in (glfw.KEY_Q, glfw.KEY_ESCAPE):
             self.cmd = "quit"
         elif key == glfw.KEY_I:

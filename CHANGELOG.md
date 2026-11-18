@@ -16,6 +16,10 @@
   you try it, tell us how it went in a [GitHub issue](https://github.com/smoovplay/smoovplay/issues).
 
 **Play**
+- **The in-video menu is in sections, so it's no longer one long list.** Press M: the main page has the quick picks
+  (Frame generation, Output frame rate, Upscaler) and a row for each section (Smoothness, Picture, Looks, Display,
+  Instant replay, PS5 Remote Play), as on the launcher's Settings page. Enter opens a section and Esc goes back; M
+  closes the menu from anywhere, and it opens again where you left it. It's about two thirds the height it was.
 - **Auto tells a PS5 Remote Play game's new frames from its repeats by the picture**, as App window already did.
   It went by each frame's compressed size, which misread locked 30 fps games: a repeat can be nearly half a new
   frame's size, and after any still scene (a menu, a pause) the size check stopped answering for the rest of the

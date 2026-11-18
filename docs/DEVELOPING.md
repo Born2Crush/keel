@@ -104,8 +104,11 @@ The settings are in two places, which stay in step:
 
 - **The launcher's Settings page.** With nothing playing, changes are saved for the next session. While a stream
   plays, the page shows **LIVE** and changes reach the video straight away, as if made in the video window's menu.
-- **The video window's menu.** Press **M** (or Tab): ↑/↓ pick a setting, ←/→ change it, M or Esc closes it. The
-  video keeps playing behind it, so changes can be judged as they're made.
+- **The video window's menu.** Press **M** (or Tab). Its main page has the quick picks (frame generation, output
+  frame rate, upscaler) and a row for each section (Smoothness, Picture, Looks, Display, Instant replay, PS5 Remote
+  Play, as on the Settings page): ↑/↓ pick, ←/→ change a setting, Enter or → opens a section, Esc or Backspace goes
+  back a page, and M (or Esc on the main page) closes it. It reopens where it was left. The video keeps playing
+  behind it, so changes can be judged as they're made.
 
 Both save to `%APPDATA%\framegen\settings.json`. Each setting explains itself on the page, and each choice in a
 dropdown has a line on when to pick it.

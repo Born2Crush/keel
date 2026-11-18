@@ -115,7 +115,7 @@ def _sink(u):
     glfw = SimpleNamespace(PRESS=1, REPEAT=2, MOD_SHIFT=1, poll_events=lambda: None,
                            **{"KEY_" + k: 1000 + i for i, k in enumerate(keys)})
     menu = SimpleNamespace(open=False, pressed=[])
-    menu.key = lambda k: menu.pressed.append(k)
+    menu.key = lambda k: menu.pressed.append(k) or ("close" if k == "back" else None)  # (Esc on the main page)
     st = SimpleNamespace(interp=True, overlay=False, overlay_style="minimal", fullscreen=False, changed=[])
     st.override = lambda k, v: st.changed.append((k, v))
     st.set = lambda k, v: (st.changed.append((k, v)), setattr(st, k, v))
@@ -134,9 +134,9 @@ def test_the_video_window_acts_on_them_as_on_its_own_keys():
     u.press("Down"), u.press("Enter")
     w._events()
     assert w.menu.pressed == ["down", "enter"]
-    u.press("Esc")  # closes the menu, and the app has its keys back
+    u.press("Esc")  # closes the menu (on its main page), and the app has its keys back
     w._events()
-    assert not w.menu.open and not w.hotkeys.nav_on and w.cmd is None
+    assert w.menu.pressed[-1] == "back" and not w.menu.open and not w.hotkeys.nav_on and w.cmd is None
     u.press("Ctrl+Alt+F"), u.press("Ctrl+Alt+I")
     w._events()
     assert ("fullscreen", True) in w.settings.changed and ("interp", False) in w.settings.changed
