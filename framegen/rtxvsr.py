@@ -86,10 +86,10 @@ def vfx_reason() -> str | None:
         return "it needs an NVIDIA RTX card"
     if torch.cuda.get_device_capability(0) < MIN_COMPUTE:
         return ("it comes with NVIDIA VFG's download from NVIDIA, which SmoovPlay offers on RTX 40 and 50 series "
-                "cards. AMD FSR 1 looks about the same")
+                "cards. AMD FSR 1 works on any card")
     if not installed():
         return ("it comes with NVIDIA VFG's download from NVIDIA: set up NVIDIA VFG on SmoovPlay's Settings page "
-                "(Interpolation model). AMD FSR 1 looks about the same")
+                "(Interpolation model). AMD FSR 1 works on any card")
     return None
 
 
