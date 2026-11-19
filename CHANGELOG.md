@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.7
 
 **AMD and Intel graphics** (Experimental)
 - **chiaki-ng draws with OpenGL on AMD and Intel graphics** ([#19](https://github.com/smoovplay/smoovplay/issues/19),
