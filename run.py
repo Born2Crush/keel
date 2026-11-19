@@ -745,9 +745,10 @@ def main() -> int:
 
     ticks = iter(src)  # one stream for every session, so a restart doesn't reconnect or reopen anything
     if sink.sinks:  # playing on screen: keep frames on time when other programs are busy
-        from framegen.winutil import boost_gpu, boost_thread
+        from framegen.winutil import boost_gpu, boost_thread, keep_screen_on
         print(f"[run] scheduling: MMCSS {'on' if boost_thread() else 'off'}, "
-              f"GPU priority {'high' if boost_gpu() else 'normal'}")
+              f"GPU priority {'high' if boost_gpu() else 'normal'}, "
+              f"screen kept on {'yes' if keep_screen_on() else 'no'}")  # (a controller isn't input to Windows)
     try:
         while True:
             started.clear()
@@ -795,6 +796,9 @@ def main() -> int:
         for s in getattr(sink, "sinks", [sink]):
             if hasattr(s, "hide"):
                 s.hide()
+        if sink.sinks:  # the screen can turn off again, while clips finish saving
+            from framegen.winutil import keep_screen_on
+            keep_screen_on(False)
         if kind == "chiaki" and hasattr(src, "set_audio_delay"):
             src.set_audio_delay(0)  # chiaki-ng's sound back on time (it would also lapse once we stop)
         if hidden:

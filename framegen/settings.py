@@ -286,6 +286,16 @@ SPECS: tuple[Spec, ...] = (
               "dot: green, your PC keeps up; amber, it's tight; red, it's falling behind, so try a lower frame rate. "
               "Detailed adds the AI frame time, the upscaler and, at 90 and 120 fps, the extra frames shown (below "
               "about 95%, your PC is falling behind)."),
+    Spec("overlay_corner", "Stats overlay position", ("top_left", "top_right", "bottom_left", "bottom_right"),
+         "top_left", {"top_left": "Top left", "top_right": "Top right", "bottom_left": "Bottom left",
+                      "bottom_right": "Bottom right"}, group="Display", applies=("overlay", (True,)),
+         help="The corner the stats go in, tucked into its edges. Pick one your game's own HUD leaves free."),
+    Spec("overlay_size", "Stats overlay size", ("small", "medium", "large"), "small",
+         {"small": "Small", "medium": "Medium", "large": "Large"}, group="Display", applies=("overlay", (True,)),
+         hints={"small": "Out of the way of the game's own HUD.", "medium": "Easier to read from further away.",
+                "large": "For a TV across the room."},
+         help="How big the stats are. Small stays out of the way of the game's own HUD; Large is for a TV across the "
+              "room."),
     # framegen/replay.py. Memory in the hints: replay.memory_mb() for 1080p at 90 fps (tests/test_replay.py checks).
     Spec("replay", "Instant replay", (0, 30, 60, 120, 300), 0,
          {0: "Off", 30: "Last 30 seconds", 60: "Last minute", 120: "Last 2 minutes", 300: "Last 5 minutes"},

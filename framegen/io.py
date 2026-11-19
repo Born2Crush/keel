@@ -404,12 +404,17 @@ HEALTH_COLORS = {"good": (110, 200, 80), "tight": (40, 180, 250), "behind": (70,
 MINI_TEXT = {"main": (245, 245, 245), "dim": (185, 185, 185), "warn": (40, 180, 250)}
 
 
+# Stats overlay size: times the screen's own scale (its height / 1080). Small sits in the edge games keep clear of
+# their HUD (title safe area, about 3-5% of the screen): at 1440p its box is about 24 px tall, 4 px from the edges.
+OVERLAY_SIZES = {"small": 0.8, "medium": 1.0, "large": 1.5}
+
+
 def _mini(t: MiniText, ui: float) -> np.ndarray:
     """The minimal overlay: a small dark box with a dot (green keeping up, amber tight, red falling behind) and a few
     numbers, plus the test line under them while a test runs."""
     font, fs, th = cv2.FONT_HERSHEY_SIMPLEX, 0.52 * ui, 1 if ui < 1.6 else 2
     small = 0.42 * ui
-    pad, gap, r = int(9 * ui), int(12 * ui), max(3, int(5 * ui))
+    pad, gap, r = max(3, int(6 * ui)), int(10 * ui), max(3, int(4.5 * ui))
     th_main = cv2.getTextSize("90", font, fs, th)[0][1]
     widths = [cv2.getTextSize(x, font, fs, th)[0][0] for x, _ in t.parts]
     line_w = 2 * r + gap + sum(widths) + gap * max(0, len(widths) - 1)
@@ -425,6 +430,21 @@ def _mini(t: MiniText, ui: float) -> np.ndarray:
         x += tw + gap
     if t.second:
         cv2.putText(img, t.second, (pad, base + int(8 * ui) + second_h), font, small, MINI_TEXT["dim"], 1, cv2.LINE_AA)
+    return img
+
+
+def _detail(text: str, ui: float, min_w: int = 0) -> np.ndarray:
+    """The detailed overlay: its line (and a second, the advice or a test line) on a small dark box like the minimal
+    one's, at the same text size. min_w: the box only grows, so it doesn't jitter as the numbers change width."""
+    font, fs, th = cv2.FONT_HERSHEY_SIMPLEX, 0.52 * ui, 1 if ui < 1.6 else 2
+    pad, lead = max(3, int(6 * ui)), int(8 * ui)
+    lines = text.split("\n")[:2]
+    line_h = cv2.getTextSize("90", font, fs, th)[0][1]
+    w = max(min_w, 2 * pad + max(cv2.getTextSize(x, font, fs, th)[0][0] for x in lines))
+    img = np.full((2 * pad + len(lines) * line_h + (len(lines) - 1) * lead, w, 3), (30, 27, 25), np.uint8)
+    for i, line in enumerate(lines):
+        cv2.putText(img, line, (pad, pad + line_h + i * (line_h + lead)), font, fs,
+                    MINI_TEXT["main" if i == 0 else "dim"], th, cv2.LINE_AA)
     return img
 
 
@@ -552,19 +572,6 @@ class GLWindowSink:
         GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
         GL.glFramebufferTexture2D(GL.GL_READ_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.tex, 0)
 
-        # Stats text: a small strip of its own, blitted over the frame (no full-frame copy to draw on). Room for two
-        # lines (the second is the test-mode line); _ov_th is the height the current text uses.
-        self.ov_w, self.ov_h, self._ov_text, self._ov_tw, self._ov_th = 1600, 96, None, 0, 56
-        self.ov_tex = GL.glGenTextures(1)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, self.ov_tex)
-        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR)
-        GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR)
-        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA16 if self.hdr10 else GL.GL_RGBA8, self.ov_w, self.ov_h, 0,
-                        GL.GL_BGR, GL.GL_UNSIGNED_SHORT if self.hdr10 else GL.GL_UNSIGNED_BYTE, None)
-        self.ov_fbo = GL.glGenFramebuffers(1)
-        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.ov_fbo)
-        GL.glFramebufferTexture2D(GL.GL_READ_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.ov_tex, 0)
-
         # Frames that are already on the GPU (CUDA tensors) are copied into the texture directly.
         self.interop = None
         renderer = GL.glGetString(GL.GL_RENDERER).decode(errors="replace")
@@ -622,7 +629,8 @@ class GLWindowSink:
         self.note_presentation()
         self.menu = Menu(st, allowed=self.allowed, disabled=self.disabled, restart_reasons=restart_reasons)
         self.menu_panel, self.toast_panel = _Panel(GL, self.hdr10), _Panel(GL, self.hdr10)
-        self.mini_panel, self._mini_state = _Panel(GL, self.hdr10), None
+        self.mini_panel, self._mini_state = _Panel(GL, self.hdr10), None  # the stats overlay, Minimal or Detailed
+        self._detail_w, self._detail_ui = 0, None  # the detailed box's width so far, at this size (it only grows)
         self._menu_top = None  # (GL y of the menu's top, the picture's (y0, height) it was placed in) while it's open
         self._menu_state = self._toast_state = None
         self._toast_text, self._toast_until = "M: menu    F: fullscreen    Esc: quit", time.perf_counter() + 8.0
@@ -1167,7 +1175,10 @@ class GLWindowSink:
                 self._toast_state = state
             p = self.toast_panel
             m = int(16 * ui)
-            p.blit(x0 + dw - p.w - m, y0 + dh - m)
+            below = 0  # the stats overlay in the top right: messages go under it
+            if self.overlay and getattr(self.settings, "overlay_corner", "") == "top_right" and self._mini_state:
+                below = self.mini_panel.h + max(2, int(4 * self._stats_ui(dh)))
+            p.blit(x0 + dw - p.w - m, y0 + dh - m - below)
 
     def busy(self, fn, text: str):
         """Run fn() on a worker thread while the window stays responsive, showing the last frame and `text`.
@@ -1299,10 +1310,10 @@ class GLWindowSink:
             label += " + panorama"
         self.timer.end(q, f"{label} {dw}x{dh}")
         if self.overlay and isinstance(text, MiniText):
-            self._draw_mini(text, ux, uy, uh)
+            self._draw_stats(text, ux, uy, uw, uh)
         elif self.overlay and text:
             first, nl, rest = text.partition("\n")  # the upscaler goes on the first line; a second is the test line
-            self._blit_text(f"{first}  {label}{nl}{rest}", ux, uy + uh, s)
+            self._draw_stats(f"{first}  {label}{nl}{rest}", ux, uy, uw, uh)
         self._draw_ui(ux, uy, uw, uh)
         self._present()
         self.settle()
@@ -1372,35 +1383,32 @@ class GLWindowSink:
             self.GL.glDeleteTextures(sorted({int(tex), int(self.vsr_out[5])}))  # a view and its storage, or one
             self.vsr_out = None
 
-    def _draw_mini(self, text: MiniText, x0: int, y0: int, dh: int) -> None:
-        """The minimal overlay in the top-left corner, at the screen's own size (drawn again only when it changes)."""
-        ui = max(0.5, dh / 1080)
-        state = (str(text), text.parts, text.health, round(ui, 3))
-        if state != self._mini_state:
-            self.mini_panel.update(_mini(text, ui))
-            self._mini_state = state
-        m = int(12 * ui)
-        self.mini_panel.blit(x0 + m, y0 + dh - m)
+    def _stats_ui(self, dh: int) -> float:
+        """The stats overlay's scale: the screen's own (its height / 1080) times Stats overlay size."""
+        k = OVERLAY_SIZES.get(getattr(self.settings, "overlay_size", "small"), OVERLAY_SIZES["small"])
+        return max(0.6, max(0.5, dh / 1080) * k)
 
-    def _blit_text(self, text: str, x0: int, top: int, s: float) -> None:
-        GL = self.GL
-        if text != self._ov_text:
-            img = np.zeros((self.ov_h, self.ov_w, 3), np.uint8)
-            lines = text.split("\n")[:2]
-            for i, line in enumerate(lines):
-                cv2.putText(img, line, (12, 38 + 40 * i), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2, cv2.LINE_AA)
-            # The box only grows, so it doesn't jitter as the numbers change width.
-            tw = max(cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)[0][0] for line in lines) + 24
-            self._ov_tw = min(self.ov_w, max(self._ov_tw, tw))
-            self._ov_th = 16 + 40 * len(lines)
-            GL.glBindTexture(GL.GL_TEXTURE_2D, self.ov_tex)
-            img, _, kind = _gl_image(GL, img, self.hdr10)
-            GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, self.ov_w, self.ov_h, GL.GL_BGR, kind, img)
-            self._ov_text = text
-        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.ov_fbo)
-        x, y = x0 + int(8 * s), top - int(8 * s)
-        GL.glBlitFramebuffer(0, 0, self._ov_tw, self._ov_th, x, y, x + int(self._ov_tw * s), y - int(self._ov_th * s),
-                             GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
+    def _draw_stats(self, text: str, x0: int, y0: int, dw: int, dh: int) -> None:
+        """The stats overlay (Minimal, a MiniText, or Detailed, a str) in the corner picked (Stats overlay position),
+        tucked into its edges, out of the way of the game's HUD. Drawn again only when it changes."""
+        ui = self._stats_ui(dh)
+        if isinstance(text, MiniText):
+            state = ("mini", str(text), text.parts, text.health, round(ui, 3))
+            if state != self._mini_state:
+                self.mini_panel.update(_mini(text, ui))
+        else:
+            state = ("detail", text, round(ui, 3))
+            if state != self._mini_state:
+                if self._detail_ui != round(ui, 3):
+                    self._detail_w, self._detail_ui = 0, round(ui, 3)
+                img = _detail(text, ui, self._detail_w)
+                self._detail_w = img.shape[1]
+                self.mini_panel.update(img)
+        self._mini_state = state
+        p, m = self.mini_panel, max(2, int(4 * ui))
+        corner = getattr(self.settings, "overlay_corner", "top_left")
+        x = x0 + dw - p.w - m if corner.endswith("right") else x0 + m
+        p.blit(x, y0 + p.h + m if corner.startswith("bottom") else y0 + dh - m)
 
     # ---- looks
     def remote_commands(self) -> dict:
