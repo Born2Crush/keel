@@ -821,7 +821,8 @@ def main() -> int:
         for t, name in zip(tiles, ("previous real", f"RIFE ({p:.1f} dB)", "actual in-between", "next real")):
             cv2.putText(t, name, (15, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 0), 5, cv2.LINE_AA)
             cv2.putText(t, name, (15, 40), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.imwrite(a.save_worst, cv2.vconcat([cv2.hconcat(tiles[:2]), cv2.hconcat(tiles[2:])]))
+        from framegen.imagefile import write_image
+        write_image(a.save_worst, cv2.vconcat([cv2.hconcat(tiles[:2]), cv2.hconcat(tiles[2:])]))
         print(f"[run] worst frame (tick {tick}) -> {a.save_worst}")
     return 0
 

@@ -167,6 +167,12 @@ SPECS: tuple[Spec, ...] = (
               "1440p capture at 90, a quarter for a 4K capture, and Full otherwise. Only used with RIFE.",
          impact={"picture": "Half is a little softer on small, fast details.",
                  "speed": "Half takes about 40% less time per AI frame."}),
+    # A test mode (framegen/sources.py TestMode), for any source that sends every frame (not App window: run.py).
+    # Session only, so the launcher's Settings page leaves it out: its Play page has "Test with a 60 fps game".
+    Spec("simulate_30", "Simulate a 30 fps game", (False, True), False, ON_OFF, saved=False, group="Smoothness",
+         help="For testing with a 60 fps game: every other frame is left out, so it plays like a 30 fps game. At "
+              "60 and 120 fps each AI frame is also scored against the real frame it replaced. For a game locked "
+              "at 30 fps, use Game frame rate: 30 fps instead. This session only."),
     Spec("scaler", "Upscaler", ("fsr", "vsr", "bilinear"), "fsr",
          {"fsr": "AMD FSR 1", "vsr": "NVIDIA RTX VSR", "bilinear": "Bilinear"}, group="Picture", quick=True,
          later="Support for other upscalers may come in a later version.",
@@ -346,10 +352,6 @@ SPECS: tuple[Spec, ...] = (
               "at 90 fps, measured as you play), so they line up. Press L in the video window for a delay test: it "
               "times the whole trip, from a button press to SmoovPlay's screen (PS5 Remote Play).",
          impact={"speed": "None: only the sound waits, by as long as the picture does."}),
-    Spec("simulate_30", "Simulate a 30 fps game", (False, True), False, ON_OFF, saved=False, group="PS5 Remote Play",
-         help="For testing with a 60 fps game: every other frame is left out, so it plays like a 30 fps game. At "
-              "60 and 120 fps each AI frame is also scored against the real frame it replaced. This session "
-              "only."),
 )
 BY_KEY = {s.key: s for s in SPECS}
 
