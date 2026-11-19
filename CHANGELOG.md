@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.9
+
+**Display**
+- **The screen no longer goes black mid-game.** Windows turns the screen off after a while without mouse or
+  keyboard input (15 minutes on many PCs), and a controller doesn't count, so the screen could go black until you
+  clicked. While the video plays, SmoovPlay now asks Windows to keep the screen on, as video players and games do.
+- **Smaller stats overlays, out of the way of the game's HUD.** Both styles sit right in the corner, inside the
+  margin games keep clear of their own HUD. Detailed is now a small box like Minimal's, not a strip across the top.
+  New in Settings, Display (and the video window's menu, M): **Stats overlay position**, any corner, and **Stats
+  overlay size**: Small (the default), Medium, or Large for a TV across the room.
+
 ## 0.3.8
 
 **Settings**
