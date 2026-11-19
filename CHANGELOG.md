@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.8
+
+**Settings**
+- **Capture card resolution is greyed out unless a capture card is your source** (picked on the Play page), with a
+  note saying why: PS5 Remote Play streams 1080p at most, and App window capture is scaled to 1080p. Before, you
+  could pick 1440p or 4K with Remote Play and nothing changed. **Minimise chiaki-ng** is greyed out the same way
+  unless PS5 Remote Play is picked. Switches that can't be changed now look it.
+
+**Frame tap** (Experimental, for app developers)
+- **Another app's frames aren't called chiaki-ng any more** ([#18](https://github.com/smoovplay/smoovplay/issues/18)).
+  For an app sending compressed video through the frame tap, the log says "[tap] frames: ..." and the notes say
+  "the app", and a chiaki-ng running on its own is no longer minimised.
+
 ## 0.3.7
 
 **AMD and Intel graphics** (Experimental)
