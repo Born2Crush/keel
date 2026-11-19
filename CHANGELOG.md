@@ -14,7 +14,8 @@
   card or Remote Play, so there's no more of the game to show: this isn't real ultrawide, just different ways of
   laying out the same 16:9 picture. **Fit** keeps all of it with black bars (the default, as before). **Zoom** fills
   the screen by cutting off the top and bottom, which can cut the HUD. **Stretch** makes everything wider.
-  **Panorama** keeps the middle close to its true shape and stretches the sides, like a TV's wide zoom.
+  **Panorama** keeps the middle close to its true shape and stretches the sides, like a TV's wide zoom. On the
+  launcher's Settings page, a small drawing beside the choices shows what each one does on your screen's shape.
 
 **Capture cards** (Experimental)
 - **Capture card resolution: 1080p, 1440p or 4K** (Settings, Picture). It was always 1080p. Higher is sharper on a

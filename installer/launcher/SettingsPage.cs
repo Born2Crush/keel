@@ -493,7 +493,22 @@ namespace SmoovPlay
                 Grid.SetRow(helpText, 1);
                 Grid.SetColumnSpan(helpText, 2);
                 g.Children.Add(helpText);
-                if (row.Hint != null)
+                if (row.Hint != null && spec.Key == "fill")
+                {
+                    // Fill the screen: a drawing of the picked choice on this PC's screen, its hint beside it (FillPreview.cs)
+                    var wrap = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+                    wrap.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    wrap.ColumnDefinitions.Add(new ColumnDefinition());
+                    wrap.Children.Add(FillPreview());
+                    row.Hint.Foreground = R("Text");
+                    row.Hint.Margin = new Thickness(18, FillPad, 0, 0);
+                    Grid.SetColumn(row.Hint, 1);
+                    wrap.Children.Add(row.Hint);
+                    Grid.SetRow(wrap, 3);
+                    Grid.SetColumnSpan(wrap, 2);
+                    g.Children.Add(wrap);
+                }
+                else if (row.Hint != null)
                 {
                     row.Hint.Foreground = R("Text");
                     row.Hint.Margin = new Thickness(2, 8, 0, 0);
@@ -535,6 +550,11 @@ namespace SmoovPlay
             AutomationProperties.SetHelpText(rb, hint);
             AutomationProperties.SetAutomationId(rb, "Set_" + row.Spec.Key + "_" + (value == OffTag ? "off" : Json.Serialize(value).Trim('"')));
             rb.Checked += (s, e) => PickSeg(row, value);
+            if (row.Spec.Key == "fill")  // the drawing shows the choice under the mouse, then the picked one again
+            {
+                rb.MouseEnter += (s, e) => fillDraw?.Invoke(value as string);
+                rb.MouseLeave += (s, e) => fillDraw?.Invoke(fillPicked);
+            }
             row.Segs.Add(rb);
             bar.Children.Add(rb);
         }
@@ -677,6 +697,11 @@ namespace SmoovPlay
                         string picked = running ? spec.Hint(v) : row.Off.Hint(false);
                         row.Hint.Text = picked;
                         Show(row.Hint, picked.Length > 0);
+                        if (spec.Key == "fill")
+                        {
+                            fillPicked = v as string ?? "fit";
+                            fillDraw?.Invoke(fillPicked);
+                        }
                     }
                     else
                     {
