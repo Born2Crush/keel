@@ -275,6 +275,10 @@ As Experimental options. For any console with HDMI, pick **Capture card** on the
 window**: SmoovPlay captures the window of the app you stream with (the Xbox app, Sony's PS Remote Play app,
 Moonlight or a cloud game in a browser) and shows the smooth picture over it. A player's AVerMedia Live Gamer 4K
 works; the Xbox app and other cards are waiting on reports, so please [send feedback](#help-test-it).
+
+A capture card is read at 1080p by default. **Capture card resolution** (Settings, Picture) can ask for 1440p or 4K,
+which is sharper on a screen that big, but every new frame is drawn at that size: 1440p is about twice the work of
+1080p (60 fps on most cards), 4K about four times. Both can run quite sluggish.
 </details>
 
 <details>

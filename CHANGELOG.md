@@ -16,6 +16,13 @@
   the screen by cutting off the top and bottom, which can cut the HUD. **Stretch** makes everything wider.
   **Panorama** keeps the middle close to its true shape and stretches the sides, like a TV's wide zoom.
 
+**Capture cards** (Experimental)
+- **Capture card resolution: 1080p, 1440p or 4K** (Settings, Picture). It was always 1080p. Higher is sharper on a
+  1440p or 4K screen, but every new frame is drawn at the size captured, so it can run quite sluggish: 1440p is
+  about twice the work of 1080p (fine at 60 fps on most cards), 4K about four times (likely sluggish even at 60 fps
+  on a fast card). 1080p stays the default. The console has to send that resolution too; a card without it uses the
+  largest it has under it. Motion detail on Auto goes to half for 1440p at 90 fps, and to a quarter for 4K.
+
 ## 0.3.6
 
 **Picture**

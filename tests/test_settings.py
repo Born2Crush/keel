@@ -172,7 +172,7 @@ def test_menu_disabled_row_and_restart_row():
     m.index = _keys(m).index("fsr_sharpness")
     m.key("right")
     assert st.fsr_sharpness == BY_KEY["fsr_sharpness"].default  # greyed out: no change
-    assert _keys(m) == ["scaler", "fsr_sharpness", "hdr"]  # RTX VSR quality: hidden
+    assert _keys(m) == ["scaler", "fsr_sharpness", "hdr", "capture_size"]  # RTX VSR quality: hidden
     pending.append("AI engine")
     assert m.rows()[-1][0] == "restart"
     m.index = len(m.rows()) - 1
@@ -390,3 +390,13 @@ def test_specs_json_says_what_applies_when():
     assert specs["fullscreen"]["applies"] is None
     assert [k for k, s in specs.items() if s["quick"]] == ["interp", "hz", "model", "scaler"]
     assert [s["group"] for s in specs.values()][:3] == ["Smoothness"] * 3
+
+
+def test_capture_card_resolution_says_what_it_costs():
+    from framegen.settings import CAPTURE_SIZES
+    s = BY_KEY["capture_size"]
+    assert s.default == "1080p" and CAPTURE_SIZES[s.default] == (1920, 1080) and not s.live and s.experimental
+    assert set(CAPTURE_SIZES) == set(s.choices) and s.name("2160p") == "4K"
+    assert "twice" in s.hints["1440p"] and "four times" in s.hints["2160p"] and "Recommended" in s.hints["1080p"]
+    assert all("sluggish" in t for t in (s.hints["1440p"], s.hints["2160p"], s.help, s.impact["speed"]))
+    assert "gains nothing" in s.help and "Capture cards only" in s.help

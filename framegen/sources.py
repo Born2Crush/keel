@@ -224,7 +224,8 @@ def make_detector(info: SourceInfo, threshold: float = 2.0):
 GUIDES = {
     "chiaki": "Connect your PS5 with chiaki-ng (SmoovPlay sets it up), then press Play.",
     "capture": "Connect the console's HDMI to the capture card and the card to this PC. On a PS5, turn off HDCP "
-               "while you use it (Settings > System > HDMI). Set the console to 1080p, 60 Hz, HDR off.",
+               "while you use it (Settings > System > HDMI). Set the console to 1080p, 60 Hz, HDR off (or the Capture card "
+               "resolution picked in Settings).",
     "window": "Open the app you stream with (PS Remote Play, the Xbox app, Moonlight, or a browser) and start the "
               "game, pick its window, then press Play. Keep the app's window on screen: SmoovPlay shows the smooth "
               "picture on top of it, and the app keeps the controller and the keyboard. SmoovPlay's own keys use Ctrl+Alt "

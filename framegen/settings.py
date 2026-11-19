@@ -50,6 +50,7 @@ class Spec:
 
 
 ON_OFF = {True: "On", False: "Off"}
+CAPTURE_SIZES = {"1080p": (1920, 1080), "1440p": (2560, 1440), "2160p": (3840, 2160)}  # Capture card resolution
 IMPACT_PC = "an RTX 4070 Ti SUPER"  # where the numbers in `impact` and the hints were measured
 # scripts/looks_timing.py: GPU time of the built-in looks on a 1440p window (0.02 to 0.34 ms) and at 1080p for clips
 # (0.01 to 0.19 ms), measured while chiaki-ng streamed.
@@ -150,11 +151,11 @@ SPECS: tuple[Spec, ...] = (
                  "speed": "TensorRT is about 12% faster at full motion detail, PyTorch at half."}),
     Spec("motion", "Motion detail", ("auto", "full", "half"), "auto",
          {"auto": "Auto", "full": "Full", "half": "Half"}, live=False, group="Smoothness", applies=("model", ("4.22.lite",)),
-         hints={"auto": "Full, or Half at 120 fps. Recommended.", "full": "Sharpest on fast motion. The slowest.",
+         hints={"auto": "Full; Half at 120 fps or a 1440p capture at 90; less for 4K. Recommended.", "full": "Sharpest on fast motion. The slowest.",
                 "half": "About 40% faster. A little softer on fast detail."},
          help="How finely RIFE tracks movement. Full follows small, fast details best, like railings or distant "
-              "cars; Half takes about 40% less time but softens them a little. Auto uses Half at 120 fps (or for "
-              "a stream above 1440p) and Full otherwise. Only used with RIFE.",
+              "cars; Half takes about 40% less time but softens them a little. Auto uses Half at 120 fps or for a "
+              "1440p capture at 90, a quarter for a 4K capture, and Full otherwise. Only used with RIFE.",
          impact={"picture": "Half is a little softer on small, fast details.",
                  "speed": "Half takes about 40% less time per AI frame."}),
     Spec("scaler", "Upscaler", ("fsr", "vsr", "bilinear"), "fsr",
@@ -199,6 +200,20 @@ SPECS: tuple[Spec, ...] = (
               "stream without HDR isn't changed. Applies the next time you press Play.",
          impact={"picture": "An HDR stream's true colours, instead of a washed-out picture.",
                  "speed": "About 0.7 ms of graphics card time for each frame from the game."}),
+    # run.py asks the card for this size (framegen/capture.py pick_mode: else the largest it has under it). Every new
+    # frame is drawn at the size captured, so the cost grows with it: notes in the hints, measured by scripts/benchmark.py.
+    Spec("capture_size", "Capture card resolution", tuple(CAPTURE_SIZES), "1080p",
+         {"1080p": "1080p", "1440p": "1440p", "2160p": "4K"}, live=False, group="Picture", experimental=True,
+         hints={"1080p": "The lightest: 60, 90 or 120 fps on a fast card. Recommended. The default.",
+                "1440p": "About twice the work of 1080p: fine at 60 fps on most cards, but 90 can run sluggish. "
+                         "Sharper on a 1440p or 4K screen.",
+                "2160p": "About four times the work of 1080p: likely to run sluggish, even at 60 fps on a fast card. "
+                         "Only for a 4K screen."},
+         help="Capture cards only (Remote Play is 1080p at most). Higher is sharper on a bigger screen, but every new "
+              "frame is drawn at this size, so it can run quite sluggish. A capture bigger than your screen gains "
+              "nothing. The console must send it too. Experimental; applies the next time you press Play.",
+         impact={"picture": "Sharper on a 1440p or 4K screen; no gain on a 1080p one.",
+                 "speed": "1440p: about twice the work of 1080p. 4K: about four times. Both can run sluggish."}),
     # framegen/looks.py (the looks; "Which look" lists the built-in ones, then the user's, from looks.CHOICES, which
     # the looks library keeps up to date) and framegen/looks_gl.py (drawing them, after the upscaler).
     Spec("look_on", "Look", (False, True), False, ON_OFF, group="Looks",

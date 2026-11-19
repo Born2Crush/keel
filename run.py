@@ -115,7 +115,7 @@ def write_results(path: str, sessions: list, size: str, settings: Settings) -> b
             lines += st.results(full_motion=False)  # no motion detail setting: the advice suggests a lower rate
             continue
         engine = "TensorRT" if cfg["engine"] == "trt" else "PyTorch"
-        motion = {1.0: "Full", 0.5: "Half"}.get(cfg["motion"], f"{cfg['motion']:g}x")
+        motion = {1.0: "Full", 0.5: "Half", 0.25: "Quarter"}.get(cfg["motion"], f"{cfg['motion']:g}x")
         lines += ["", head + f"{engine}, motion detail {motion}, RIFE {cfg['model']}"]
         lines += st.results(full_motion=cfg["motion"] >= 1)
     try:
@@ -245,7 +245,8 @@ def main() -> int:
     ap.add_argument("--capture", metavar="NAME|N|FILE",
                     help="a capture card by name or number (from --list-devices), or a video file standing in for "
                          "one (played in real time through the capture path, to test it without a card)")
-    ap.add_argument("--capture-size", default="1920x1080")
+    ap.add_argument("--capture-size", default=None, metavar="WxH",
+                    help="the size to ask the card for (default: Capture card resolution in the settings, 1080p)")
     ap.add_argument("--capture-fps", type=float, default=60.0)
     ap.add_argument("--capture-format", default="auto",
                     help="auto (NV12, then YUY2, then MJPEG: framegen/capture.py) or one the card lists")
@@ -379,7 +380,14 @@ def main() -> int:
     elif kind == "capture":
         if a.capture is None:
             ap.error("--source capture needs --capture N (a device) or --capture FILE")
-        cw, ch = map(int, a.capture_size.split("x"))
+        if a.capture_size:
+            cw, ch = map(int, a.capture_size.split("x"))
+        else:  # Capture card resolution (the settings are loaded again below, with the command line's overrides)
+            from framegen.settings import CAPTURE_SIZES
+            saved = Settings() if a.settings.lower() == "none" else Settings.load(Path(a.settings))
+            cw, ch = CAPTURE_SIZES[saved.capture_size]
+        print(f"[capture] asking the card for {cw}x{ch}" + ("" if (cw, ch) == (1920, 1080) else
+              " (Capture card resolution: every new frame is drawn at this size, so it costs more than 1080p)"))
         src = open_capture(a, cw, ch, test)
     elif kind == "window":
         if not a.window:
@@ -466,9 +474,12 @@ def main() -> int:
             return {"model": "vfg", "vfg_quality": settings.vfg_quality}
         if a.scale is not None:
             scale = a.scale
-        else:  # At 120 Hz three frames per 33 ms don't fit at full-resolution flow on an RTX 4070 Ti SUPER (~54 ms).
+        else:  # Auto. On an RTX 4070 Ti SUPER (scripts/benchmark.py), per 30 fps game frame (33 ms): 120 Hz at 1080p
+            # needs half (full ~54 ms with display work); 1440p at 90 too (38 ms; half 26); 4K even at 60 Hz needs a
+            # quarter (full 52 ms, half 36, quarter 30: its motion worked out at 960x540, as half's is at 1080p).
             scale = {"full": 1.0, "half": 0.5}.get(settings.motion) or (
-                0.5 if src.h > 1440 or settings.hz == 120 else 1.0)
+                0.25 if src.h > 1440 else
+                0.5 if settings.hz == 120 or (src.h > 1080 and settings.hz >= 90) else 1.0)
         engine = auto_engine(scale) if settings.engine == "auto" else settings.engine
         if dml_mode:
             engine = "dml"
