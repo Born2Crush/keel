@@ -46,6 +46,8 @@ namespace SmoovPlay
             public readonly List<string> Hints = new List<string>();  // a line under each choice ("" = none)
             public string AppliesKey;  // only used while that setting is one of AppliesValues (null: always)
             public readonly List<object> AppliesValues = new List<object>();
+            public readonly List<string> Sources = new List<string>();  // only used with these sources (none: all)
+            public readonly Dictionary<string, string> Elsewhere = new Dictionary<string, string>();  // source -> why not ("": any)
             public bool OnOff { get { return Choices.Count == 2 && Choices.All(c => c.Key is bool); } }
 
             public string Hint(object value)
@@ -57,6 +59,17 @@ namespace SmoovPlay
             public bool AppliesTo(Func<string, object> value)
             {
                 return AppliesKey == null || AppliesValues.Any(a => Same(a, value(AppliesKey)));
+            }
+
+            /// <summary>Why it isn't used with frames from this source (a SourceDef.Kind), or null if it is
+            /// (settings.py Spec.unused_with).</summary>
+            public string UnusedWith(string source)
+            {
+                if (Sources.Count == 0 || Sources.Contains(source)) return null;
+                string why;
+                if (Elsewhere.TryGetValue(source, out why) && !string.IsNullOrEmpty(why)) return why;
+                if (Elsewhere.TryGetValue("", out why) && !string.IsNullOrEmpty(why)) return why;
+                return "Not used with this source.";
             }
         }
 
@@ -157,6 +170,10 @@ namespace SmoovPlay
                     s.AppliesKey = (string)applies["key"];
                     s.AppliesValues.AddRange((object[])applies["values"]);
                 }
+                if (d.ContainsKey("sources") && d["sources"] is object[])
+                    s.Sources.AddRange(((object[])d["sources"]).OfType<string>());
+                if (d.ContainsKey("elsewhere") && d["elsewhere"] is Dictionary<string, object>)
+                    foreach (var kv in (Dictionary<string, object>)d["elsewhere"]) s.Elsewhere[kv.Key] = kv.Value as string;
                 var impact = d.ContainsKey("impact") ? d["impact"] as Dictionary<string, object> : null;
                 if (impact != null)
                 {
@@ -669,7 +686,10 @@ namespace SmoovPlay
                 {
                     var spec = row.Spec;
                     object v = value(spec);
-                    string off = why(spec.Key) ?? (row.Off != null ? why(row.Off.Key) : null);
+                    // Nothing playing: greyed out if it isn't used with the source picked on the Play page (playing,
+                    // the session says, in `disabled`). E.g. Capture card resolution with Remote Play.
+                    string off = why(spec.Key) ?? (row.Off != null ? why(row.Off.Key) : null)
+                                 ?? (live ? null : spec.UnusedWith(source.Kind));
                     bool on = !locked && off == null;
                     var ok = allowed != null && allowed.ContainsKey(spec.Key) ? allowed[spec.Key] as object[] : null;
                     Show(row.Element, spec.AppliesTo(valueOf));

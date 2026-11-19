@@ -62,7 +62,7 @@ from framegen.interpolator import MODELS, RifeInterpolator
 from framegen.io import (TICK, CaptureSource, FileSink, FileSource, GLWindowSink, MultiSink, Ps5SimSource,
                          WindowSink)
 from framegen.pipeline import Pipeline
-from framegen.settings import BY_KEY, DEFAULT_PATH, Settings
+from framegen.settings import BY_KEY, DEFAULT_PATH, SPECS, Settings
 from framegen.sources import TestMode, make_detector
 from framegen.vfg import vfg_unavailable
 
@@ -358,6 +358,7 @@ def main() -> int:
             a.chiaki_decoder = "d3d11va"
 
     kind = a.source or ("chiaki" if a.chiaki else "capture" if a.capture is not None else "file" if a.video else None)
+    picked = kind  # as asked for: an app's compressed frames on the tap become "chiaki" below, without chiaki-ng
     # Test mode ("Simulate a 30 fps game") works with any 60 Hz source; a video file simulates a PS5 by itself
     # unless --raw plays it as-is.
     test = TestMode(a.test_mode) if kind in ("chiaki", "capture", "tap") or (kind == "file" and a.raw) else None
@@ -557,9 +558,7 @@ def main() -> int:
     print(f"[run] {src.w}x{src.h}  {describe(cfg)}  output {settings.hz} Hz")
     cfg, interp = build_or_rife(cfg)
 
-    unavailable = {}
-    if kind != "chiaki":
-        unavailable["minimize_chiaki"] = "Only used with PS5 Remote Play."
+    unavailable = {s.key: why for s in SPECS if (why := s.unused_with(picked or ""))}  # e.g. Capture card resolution
     if test is None:
         unavailable["simulate_30"] = ("Not with window capture yet." if kind == "window" else
                                       "Video files already play as a 30 fps game.")
@@ -619,7 +618,7 @@ def main() -> int:
     hidden: list[int] = []
 
     def minimize_chiaki(key: str = "minimize_chiaki") -> None:
-        if key != "minimize_chiaki" or not (kind == "chiaki" and window is not None):
+        if key != "minimize_chiaki" or not (picked == "chiaki" and window is not None):
             return
         from framegen.winutil import SW_SHOWMINNOACTIVE, SW_SHOWNOACTIVATE, show, windows_of
         if settings.minimize_chiaki and not hidden:
@@ -635,7 +634,7 @@ def main() -> int:
         """For the video window's first seconds, and each time it's back in front after that (GLWindowSink.settle):
         chiaki-ng can show its window again just after the stream starts (its stream view opening), and Alt+Tab to it
         restores it, after it was minimised. Minimise it again."""
-        if not (kind == "chiaki" and settings.minimize_chiaki):
+        if not (picked == "chiaki" and settings.minimize_chiaki):
             return
         from framegen.winutil import SW_SHOWMINNOACTIVE, minimised, show, windows_of
         back = [h for h in windows_of("chiaki.exe") if not minimised(h)]

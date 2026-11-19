@@ -1325,6 +1325,7 @@ namespace SmoovPlay
             BuildSources();
             if (!changed) return;
             checks = null;  // the PC check's last card depends on the source
+            if (settingRows.Count > 0) RefreshSettings();  // settings only used with some sources (Spec.sources)
             if (playState == PlayState.Idle) SetPlayState(PlayState.Idle, null);
             Show(B("BtnPlayTest"), !(session != null && session.Running) && source.TestMode);
             if (page == "PageGuide") BuildGuide();

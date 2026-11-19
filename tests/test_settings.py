@@ -400,3 +400,17 @@ def test_capture_card_resolution_says_what_it_costs():
     assert "twice" in s.hints["1440p"] and "four times" in s.hints["2160p"] and "Recommended" in s.hints["1080p"]
     assert all("sluggish" in t for t in (s.hints["1440p"], s.hints["2160p"], s.help, s.impact["speed"]))
     assert "gains nothing" in s.help and "Capture cards only" in s.help
+
+
+def test_settings_for_one_source_say_why_not_with_the_others():
+    from framegen.settings import specs_json
+    size, mini = BY_KEY["capture_size"], BY_KEY["minimize_chiaki"]
+    assert size.unused_with("capture") is None and mini.unused_with("chiaki") is None
+    assert "1080p at most" in size.unused_with("chiaki")  # Remote Play: greyed out, and why
+    assert "1080p" in size.unused_with("window") and "own size" in size.unused_with("tap")
+    assert size.unused_with("file") == "Only used with a capture card."
+    assert mini.unused_with("tap") == mini.unused_with("capture") == "Only used with PS5 Remote Play."
+    assert BY_KEY["fill"].unused_with("tap") is None  # most settings: every source
+    rows = {d["key"]: d for d in specs_json()["specs"]}
+    assert rows["capture_size"]["sources"] == ["capture"] and rows["capture_size"]["elsewhere"][""]
+    assert rows["fill"]["sources"] is None and rows["fill"]["elsewhere"] is None

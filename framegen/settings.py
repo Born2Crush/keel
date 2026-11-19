@@ -40,6 +40,9 @@ class Spec:
     # and to speed or delay, shown in the launcher and the in-video menu (plain ASCII). Numbers are measured (IMPACT_PC).
     experimental: bool = False  # built without the hardware (or a real game) to test it: tagged as Experimental in the
     # launcher (with Send feedback) and in the in-video menu
+    sources: tuple = ()  # only used with these sources (framegen/sources.py kinds; () = all). With another one, the
+    # launcher (for the source picked on its Play page) and the in-video menu (run.py) grey it out, with its note:
+    elsewhere: dict = field(default_factory=dict)  # source kind -> why it isn't used there ("": any other source)
 
     def name(self, value: Any) -> str:
         return self.names.get(value, str(value))
@@ -47,6 +50,12 @@ class Spec:
     def applies_to(self, values: dict) -> bool:
         """Whether this setting is used with these values (e.g. VFG quality only while NVIDIA VFG is picked)."""
         return not self.applies or values.get(self.applies[0]) in self.applies[1]
+
+    def unused_with(self, source: str) -> str | None:
+        """Why this setting isn't used with frames from `source` (a framegen/sources.py kind), or None if it is."""
+        if not self.sources or source in self.sources:
+            return None
+        return self.elsewhere.get(source) or self.elsewhere.get("") or "Not used with this source."
 
 
 ON_OFF = {True: "On", False: "Off"}
@@ -213,7 +222,12 @@ SPECS: tuple[Spec, ...] = (
               "frame is drawn at this size, so it can run quite sluggish. A capture bigger than your screen gains "
               "nothing. The console must send it too. Experimental; applies the next time you press Play.",
          impact={"picture": "Sharper on a 1440p or 4K screen; no gain on a 1080p one.",
-                 "speed": "1440p: about twice the work of 1080p. 4K: about four times. Both can run sluggish."}),
+                 "speed": "1440p: about twice the work of 1080p. 4K: about four times. Both can run sluggish."},
+         sources=("capture",),
+         elsewhere={"chiaki": "Only used with a capture card. PS5 Remote Play streams 1080p at most.",
+                    "window": "Only used with a capture card. App window capture is scaled to 1080p.",
+                    "tap": "Only used with a capture card. The app sends its frames at its own size.",
+                    "": "Only used with a capture card."}),
     # framegen/looks.py (the looks; "Which look" lists the built-in ones, then the user's, from looks.CHOICES, which
     # the looks library keeps up to date) and framegen/looks_gl.py (drawing them, after the upscaler).
     Spec("look_on", "Look", (False, True), False, ON_OFF, group="Looks",
@@ -314,7 +328,8 @@ SPECS: tuple[Spec, ...] = (
          help="Minimises chiaki-ng's own window while SmoovPlay's video is open, so your graphics card doesn't "
               "spend time drawing a copy nobody sees. chiaki-ng keeps streaming, playing sound and reading your "
               "controller, and its window comes back when you stop.",
-         impact={"speed": "Saves the time your graphics card spends drawing chiaki-ng's window."}),
+         impact={"speed": "Saves the time your graphics card spends drawing chiaki-ng's window."},
+         sources=("chiaki",), elsewhere={"": "Only used with PS5 Remote Play."}),
     Spec("audio_sync", "Sound in sync", (True, False), True, ON_OFF, group="PS5 Remote Play",
          help="The sound (chiaki-ng's, or a capture card's, which SmoovPlay plays) would come as it arrives, while "
               "the picture spends a little longer in SmoovPlay. On holds the sound back by that time (about 30 ms "
@@ -413,6 +428,8 @@ def specs_json(specs: tuple[Spec, ...] = SPECS) -> dict:
         "specs": [{"key": s.key, "label": s.label, "group": s.group, "help": s.help, "default": s.default,
                    "live": s.live, "saved": s.saved, "later": s.later, "quick": s.quick, "impact": s.impact,
                    "experimental": s.experimental,
+                   "sources": list(s.sources) or None,
+                   "elsewhere": s.elsewhere or None,
                    "applies": {"key": s.applies[0], "values": list(s.applies[1])} if s.applies else None,
                    "choices": [{"value": v, "name": s.name(v), "hint": s.hints.get(v, "")} for v in s.choices]}
                   for s in specs],

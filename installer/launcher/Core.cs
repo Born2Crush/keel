@@ -1186,9 +1186,11 @@ namespace SmoovPlay
                 OnState(PlayState.Playing, null);
             else if (line.StartsWith("[chiaki] this stream was already running"))
                 OnNote("This stream started before SmoovPlay. In chiaki-ng, end the stream and connect again.");
-            else if (line.StartsWith("[chiaki] WARNING:"))
-                OnNote(line.Substring("[chiaki] WARNING:".Length).Trim());
-            else if (line.StartsWith("[chiaki] stream ended"))
+            else if (line.StartsWith("[tap] this stream was already running"))  // another app's compressed frames
+                OnNote("This stream started before SmoovPlay. Restart the stream in the app.");
+            else if (line.StartsWith("[chiaki] WARNING:") || line.StartsWith("[tap] WARNING:"))
+                OnNote(line.Substring(line.IndexOf("WARNING:") + "WARNING:".Length).Trim());
+            else if (line.StartsWith("[chiaki] stream ended") || line.StartsWith("[tap] the app stopped sending frames"))
                 streamEnded = true;
             else if (line.StartsWith("[window-keys] "))
                 OnWindowKeys(line.Substring("[window-keys] ".Length));
