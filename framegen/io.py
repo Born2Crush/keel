@@ -16,6 +16,8 @@ from typing import NamedTuple
 import cv2
 import numpy as np
 
+from .fill import Panorama, layout, panorama_t, visible, wider
+
 TICK = 1.0 / 60.0
 
 
@@ -480,6 +482,7 @@ class GLWindowSink:
 
     # Shown when the window opens, and again when the mouse moves over it.
     KEYS_HINT = "M: menu    F: fullscreen    Esc: quit"
+    fill, panorama = "fit", None  # Fill the screen (set from the settings in __init__)
 
     def __init__(self, w: int, h: int, settings=None, restart_reasons=None, choices: dict | None = None,
                  unavailable: dict | None = None, overlay_of=None, hdr: bool = False, hdr_peak: float = 1000.0,
@@ -516,6 +519,7 @@ class GLWindowSink:
         glfw.set_window_attrib(self.win, glfw.AUTO_ICONIFY, glfw.FALSE)
         self._set_icon(glfw)
         self.overlay, self.cmd, self.windowed_pos, self.remote = st.overlay, None, None, None
+        self.fill, self.panorama = st.fill, None  # Fill the screen (framegen/fill.py); Panorama's pass once used
         self._borderless = False  # fullscreen as a borderless window (_set_borderless)
         glfw.set_key_callback(self.win, self._on_key)
         glfw.set_cursor_pos_callback(self.win, self._on_mouse)
@@ -906,6 +910,13 @@ class GLWindowSink:
             self.vsr.quality = st.vsr_quality
         elif key == "overlay":
             self.overlay = st.overlay
+        elif key == "fill":
+            self.fill = st.fill
+            if not self.menu.open:  # a hotkey: say what it did, and that it's the same picture
+                from .settings import BY_KEY
+                self.toast(f"Fill the screen: {BY_KEY['fill'].name(st.fill)}"
+                           + ("" if st.fill == "fit" else "\nThe same 16:9 picture: consoles send 16:9 only"), 3.0)
+            return
         elif key == "fullscreen":
             if self.dx is not None and st.fullscreen and self.fs_style == "none":
                 self.toast("Fullscreen starts next time you press Play: Low delay works in a window only", 5.0)
@@ -1098,6 +1109,8 @@ class GLWindowSink:
                 st.set("overlay", False)
         elif key == glfw.KEY_U:
             st.step("scaler", 1, self.allowed)
+        elif key == glfw.KEY_Z:
+            st.step("fill", 1, self.allowed)
         elif key == glfw.KEY_K:
             self.looks.toggle()
         elif key == glfw.KEY_J:
@@ -1119,8 +1132,15 @@ class GLWindowSink:
         s = min(fw / self.w, fh / self.h)  # letterbox, keep aspect
         if self.overlay_of is not None:  # window capture: the frame is the app's window squeezed to the stream's
             return fw, fh, s, fw, fh, 0, 0  # size, so it's stretched back over it to fill the overlay exactly
-        dw, dh = int(self.w * s), int(self.h * s)
-        return fw, fh, s, dw, dh, (fw - dw) // 2, (fh - dh) // 2
+        dw, dh, x0, y0 = layout(self.fill, fw, fh, self.w, self.h)  # (Fill the screen: always the same 16:9 picture)
+        return fw, fh, s, dw, dh, x0, y0
+
+    def _panorama_on(self, fw: int, fh: int) -> bool:
+        return self.fill == "panorama" and self.overlay_of is None and wider(fw, fh, self.w, self.h)
+
+    def _ui_rect(self, fw: int, fh: int, dw: int, dh: int, x0: int, y0: int) -> tuple[int, int, int, int]:
+        """Where the menu, messages and stats go: the picture as seen on the screen."""
+        return (0, 0, fw, fh) if self._panorama_on(fw, fh) else visible(dw, dh, x0, y0, fw, fh)
 
     def _draw_ui(self, x0: int, y0: int, dw: int, dh: int) -> None:
         """Menu and messages, on top of everything else. Images are redrawn only when they change."""
@@ -1175,7 +1195,7 @@ class GLWindowSink:
                                  GL.GL_LINEAR)
             dots = "." * (1 + int(time.perf_counter() - t0) % 3)
             self.toast(f"{text}{dots:<3}", 1.0)
-            self._draw_ui(x0, y0, dw, dh)
+            self._draw_ui(*visible(dw, dh, x0, y0, fw, fh))
             self._present()
             self._events()
             if self.remote is not None and self.remote.poll() == "quit":  # live settings still apply; a
@@ -1203,7 +1223,7 @@ class GLWindowSink:
             GL.glClear(GL.GL_COLOR_BUFFER_BIT)
             GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)  # the last frame, plain (no upscaler or look)
             GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
-            self._draw_ui(x0, y0, dw, dh)
+            self._draw_ui(*visible(dw, dh, x0, y0, fw, fh))
             self._present()
         self.settle()
         self._events()
@@ -1234,9 +1254,16 @@ class GLWindowSink:
             GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, self.w, self.h, GL.GL_BGR,
                                GL.GL_HALF_FLOAT if host.dtype == np.float16 else GL.GL_UNSIGNED_BYTE, host)
         fw, fh, s, dw, dh, x0, y0 = self._layout()
-        target = self._target()
+        target = screen = self._target()
         GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, target)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+        ux, uy, uw, uh = self._ui_rect(fw, fh, dw, dh, x0, y0)
+        pano = self._panorama_on(fw, fh)
+        if pano:  # Panorama: the picture is drawn as for Fit (to the screen's height) into its texture, then bent
+            if self.panorama is None:  # across the whole screen below
+                self.panorama = Panorama(GL)
+            target, x0, y0 = self.panorama.target(dw, dh), 0, 0
+            GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, target)
         upscale = dw > self.w or dh > self.h
         mode = self.mode
         if mode == "vsr" and not on_gpu:  # a CPU frame: VSR needs it on the GPU
@@ -1267,13 +1294,16 @@ class GLWindowSink:
             # Image row 0 is the top; GL row 0 is the bottom, so blit with destination Y flipped.
             GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT,
                                  GL.GL_LINEAR)
+        if pano:
+            self.panorama.draw(screen, fw, fh, panorama_t(fw, fh, self.w, self.h))
+            label += " + panorama"
         self.timer.end(q, f"{label} {dw}x{dh}")
         if self.overlay and isinstance(text, MiniText):
-            self._draw_mini(text, x0, y0, dh)
+            self._draw_mini(text, ux, uy, uh)
         elif self.overlay and text:
             first, nl, rest = text.partition("\n")  # the upscaler goes on the first line; a second is the test line
-            self._blit_text(f"{first}  {label}{nl}{rest}", x0, y0 + dh, s)
-        self._draw_ui(x0, y0, dw, dh)
+            self._blit_text(f"{first}  {label}{nl}{rest}", ux, uy + uh, s)
+        self._draw_ui(ux, uy, uw, uh)
         self._present()
         self.settle()
         self._events()

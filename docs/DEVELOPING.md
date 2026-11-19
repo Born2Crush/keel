@@ -171,6 +171,13 @@ at 1080p), to memory on a side stream, and to NVENC (else AMF, QSV or x264) on a
 from the keyframe before the start (one a second) and remuxes to MP4 without re-encoding; a before & after video is
 composed and encoded by `python -m framegen.replay compose` in a low-priority process of its own.
 
+Fill the screen (`framegen/fill.py`): where the picture goes on a screen that isn't its shape. Consoles send 16:9 only,
+so on an ultrawide each mode lays out the same 16:9 picture: Fit and Zoom are a rectangle (Zoom's goes past the
+screen's edges), Stretch is the whole screen, and Panorama draws Fit into a half-float texture, then bends it across
+the screen with u = atan(t·x) / atan(t), t picked so the middle is 5% (21:9) to 15% (32:9) wider than true. Messages and
+the menu go on the part of the picture that's on screen. Clips and the instant replay record the stream, not the screen,
+so they're unchanged.
+
 Looks (`framegen/looks.py`, `framegen/looks_gl.py`): a look is JSON, `{"name", "nodes": [{"type", "on", "mix",
 ...}]}`, cleaned by `normalize()`. Yours are files in `%APPDATA%\framegen\looks`, with LUTs in its `luts` folder. The
 video window draws a look in passes: the per-pixel effects share one shader, and each effect that reads neighbouring

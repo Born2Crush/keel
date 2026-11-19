@@ -305,6 +305,8 @@ def main() -> int:
     ap.add_argument("--vsync", action=argparse.BooleanOptionalAction, default=None,
                     help="vsync the window (use with G-Sync/FreeSync displays)")
     ap.add_argument("--fullscreen", action=argparse.BooleanOptionalAction, default=None, help="start fullscreen")
+    ap.add_argument("--fill", default=None, choices=BY_KEY["fill"].choices,
+                    help="on a screen that isn't 16:9: fit (bars), zoom (crops), stretch or panorama; all of them the same 16:9 picture")
     ap.add_argument("--hdr", default=None, choices=BY_KEY["hdr"].choices,
                     help="an HDR stream from PS5 Remote Play: off (as before), sdr (tone-mapped to SDR) or hdr10 (HDR "
                          "output, Experimental: an HDR display with Windows' HDR on). Default: the saved setting")
@@ -407,7 +409,7 @@ def main() -> int:
                        ("interp", False if a.off else None), ("vsync", a.vsync), ("fullscreen", a.fullscreen),
                        ("minimize_chiaki", a.minimize_chiaki), ("simulate_30", True if a.test_mode else None),
                        ("steady_hud", a.steady_hud), ("vfg_quality", a.vfg_quality), ("present", a.present),
-                       ("hdr", a.hdr)):
+                       ("hdr", a.hdr), ("fill", a.fill)):
         if value is not None:
             settings.override(key, value)
     # --model: one of the settings' choices, or another RIFE version for testing (not something the menu offers)

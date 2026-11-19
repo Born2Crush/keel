@@ -111,7 +111,7 @@ def test_the_menus_keys_are_taken_only_while_it_is_open():
 
 def _sink(u):
     """A video window over an app, without GL or a window: just what acting on the keys needs."""
-    keys = "M TAB ESCAPE Q I S U K J F L R B UP DOWN LEFT RIGHT ENTER KP_ENTER BACKSPACE".split()
+    keys = "M TAB ESCAPE Q I S U Z K J F L R B UP DOWN LEFT RIGHT ENTER KP_ENTER BACKSPACE".split()
     glfw = SimpleNamespace(PRESS=1, REPEAT=2, MOD_SHIFT=1, poll_events=lambda: None,
                            **{"KEY_" + k: 1000 + i for i, k in enumerate(keys)})
     menu = SimpleNamespace(open=False, pressed=[])

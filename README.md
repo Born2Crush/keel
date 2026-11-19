@@ -157,6 +157,7 @@ must carry SmoovPlay's signature before they run.
 | **R** · **B** | Save the instant replay · a before & after video (**Ctrl+Alt+R** · **Ctrl+Alt+B** from any window) |
 | **K** · **J** | Look off and on · next look (**Shift+J** goes back) |
 | **S** · **U** | Stats overlay (off, minimal, detailed) · next upscaler |
+| **Z** | Fill an ultrawide screen: Fit, Zoom, Stretch or Panorama. Consoles send 16:9 only, so these crop or stretch the same picture: there's no more of the game to show |
 | **L** | Delay test (PS5 Remote Play) |
 | **Esc** or **Q** | Stop |
 

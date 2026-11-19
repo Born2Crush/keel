@@ -8,6 +8,14 @@
   shows the picture itself, so chiaki-ng's own window, hidden behind it, loses nothing. It's for SmoovPlay's
   sessions only: chiaki-ng's saved setting stays as it is. On NVIDIA nothing changes.
 
+**Display**
+- **Fill the screen, for ultrawide screens** (Settings, Display; key **Z** in the video window;
+  [#19](https://github.com/smoovplay/smoovplay/issues/19)). Consoles only send a 16:9 picture, to a TV, a capture
+  card or Remote Play, so there's no more of the game to show: this isn't real ultrawide, just different ways of
+  laying out the same 16:9 picture. **Fit** keeps all of it with black bars (the default, as before). **Zoom** fills
+  the screen by cutting off the top and bottom, which can cut the HUD. **Stretch** makes everything wider.
+  **Panorama** keeps the middle close to its true shape and stretches the sides, like a TV's wide zoom.
+
 ## 0.3.6
 
 **Picture**

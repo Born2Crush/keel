@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from . import looks
+from . import fill, looks
 
 DEFAULT_PATH = Path(os.environ.get("APPDATA", Path.home())) / "framegen" / "settings.json"
 
@@ -215,6 +215,19 @@ SPECS: tuple[Spec, ...] = (
          help="Fills the whole screen. It also skips the Windows desktop compositor, which removes about 12 ms "
               "of delay, so it's the best way to play. Key: F.",
          impact={"speed": "About 12 ms less delay than a window, and G-Sync or FreeSync works."}),
+    # framegen/fill.py. Consoles send 16:9 only, so on an ultrawide these are ways of laying out the same 16:9 picture,
+    # never more of the game: the names, hints and help say so.
+    Spec("fill", "Fill the screen", fill.FILLS, "fit",
+         {"fit": "Fit", "zoom": "Zoom", "stretch": "Stretch", "panorama": "Panorama"}, group="Display",
+         hints={"fit": "All of the picture, true to shape, with black bars on an ultrawide. The default.",
+                "zoom": "Fills the screen by cutting off the top and bottom of the picture, which can cut the HUD.",
+                "stretch": "Fills the screen by making everything wider.",
+                "panorama": "The middle stays close to true shape and the sides take the stretch, like a TV's wide "
+                            "zoom. Ultrawide only."},
+         help="For an ultrawide screen. Consoles send 16:9 only, so none of these is real ultrawide: there's no more "
+              "of the game to show. They crop or stretch the same 16:9 picture. Key: Z.",
+         impact={"picture": "The same 16:9 picture, cropped or stretched: consoles send 16:9 only.",
+                 "speed": "No real difference. Panorama adds one pass over the screen: about 0.02 ms."}),
     Spec("vsync", "VSync", (False, True), False, ON_OFF, group="Display",
          help="Off: the lowest delay, but fast camera turns can show a tear line across the picture. On: no "
               "tearing, with a little more delay. With a G-Sync or FreeSync display, On gives you both: no tearing "
