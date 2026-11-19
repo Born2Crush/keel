@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+**Picture**
+- **NVIDIA RTX VSR works in the installed app** (Experimental). The AI upscaler now comes with NVIDIA VFG's download
+  from NVIDIA (RTX 40 and 50 series), so once NVIDIA VFG is set up, Settings → Picture → Upscaler → NVIDIA RTX VSR
+  works, with nothing more to install. It's much slower than AMD FSR 1, which stays the default and looked about the
+  same in our testing: at 90 and 120 fps it can cost some of the extra frames. On a capture card's uncompressed
+  picture it uses NVIDIA's models for clean video. Not with HDR output yet.
+
 ## 0.3.5
 
 **Capture cards** (Experimental)

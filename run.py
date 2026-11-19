@@ -577,7 +577,8 @@ def main() -> int:
               GLWindowSink(src.w, src.h, settings, restart_reasons, choices, unavailable,
                            overlay_of=src.where if kind == "window" else None, hdr=hdr10[0],
                            window_keys=window_keys if kind == "window" else None,
-                           hdr_peak=min(hdr_peak or 1e9, 1000.0)) if a.display else None)
+                           hdr_peak=min(hdr_peak or 1e9, 1000.0),
+                           clean_source=kind == "capture" and bool(getattr(src, "raw", False))) if a.display else None)
     if hdr10[0] and not getattr(window, "hdr10", False):  # the window couldn't present HDR10: shown in SDR
         hdr10[0], hdr_out, hdr_peak = False, "sdr8", None
         for k in hdr10_rows:

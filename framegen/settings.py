@@ -161,13 +161,14 @@ SPECS: tuple[Spec, ...] = (
          {"fsr": "AMD FSR 1", "vsr": "NVIDIA RTX VSR", "bilinear": "Bilinear"}, group="Picture", quick=True,
          later="Support for other upscalers may come in a later version.",
          hints={"fsr": "Sharp and almost free: about 0.1\u00a0ms a frame. Recommended.",
-                "vsr": "NVIDIA's AI upscaler. Not in the installed app yet (it needs NVIDIA's RTX Video SDK), so "
-                       "picking it uses AMD FSR\u00a01 instead.",
+                "vsr": "NVIDIA's AI upscaler, Experimental. It comes with NVIDIA VFG's download (RTX 40 and 50 "
+                       "series); without it, FSR\u00a01 is used. Much slower.",
                 "bilinear": "Plain resizing, the softest. For comparison."},
          help="Enlarges the picture from the game (usually 1080p) to fill your window or screen, so it only "
               "matters when that's bigger than 1080p, like a 1440p or 4K display. Key: U.",
          impact={"picture": "Only matters on a display bigger than the stream, like 1440p or 4K.",
-                 "speed": "About 0.1 ms a frame for FSR 1. RTX VSR (not in the installed app) takes about 1.6 ms."}),
+                 "speed": "About 0.1 ms a frame for FSR 1. RTX VSR is much slower, which can cost in-between "
+                          "frames at 90 and 120 fps."}),
     Spec("fsr_sharpness", "FSR sharpening", (0.0, 0.25, 0.5, 1.0, 2.0), 0.5,
          {0.0: "Max", 0.25: "High", 0.5: "Medium", 1.0: "Low", 2.0: "Minimal"}, group="Picture", applies=("scaler", ("fsr",)),
          hints={0.0: "Crispest. Can make compression blocks stand out.", 0.5: "Balanced. The default.",
@@ -176,11 +177,13 @@ SPECS: tuple[Spec, ...] = (
               "of a weak Wi-Fi stream from standing out. Only used with AMD FSR 1.",
          impact={"picture": "More is crisper; less keeps a blocky stream calmer.", "speed": "No difference."}),
     Spec("vsr_quality", "RTX VSR quality", (1, 2, 3, 4), 2, {1: "Low", 2: "Medium", 3: "High", 4: "Ultra"},
-         group="Picture", applies=("scaler", ("vsr",)),
+         group="Picture", applies=("scaler", ("vsr",)), experimental=True,
          help="How hard RTX VSR works to clean up and sharpen the picture. Higher looks cleaner but takes longer, "
-              "which can cost in-between frames at 90 and 120 fps. Only used with RTX VSR.",
+              "which can cost in-between frames at 90 and 120 fps. Only used with RTX VSR, which comes with NVIDIA "
+              "VFG's download from NVIDIA. On a capture card's uncompressed picture it uses NVIDIA's models for "
+              "clean video.",
          impact={"picture": "Higher is cleaner and sharper.",
-                 "speed": "Per frame at 1440p: Low 1.3 ms, Medium 1.6, High 3.6, Ultra 4.9."}),
+                 "speed": "Each step up takes longer: High and Ultra much longer than Low and Medium."}),
     # framegen/hdr.py. Off by default, and then nothing changes: an HDR stream comes out washed out, and SmoovPlay says
     # so. "hdr10" needs the DXGI presentation (NVIDIA) and Windows' HDR; without them run.py uses "sdr" for the session.
     Spec("hdr", "HDR", ("off", "sdr", "hdr10"), "off",

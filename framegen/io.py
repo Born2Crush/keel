@@ -448,9 +448,9 @@ class GLWindowSink:
     Display settings come from `settings` (framegen.settings) and apply live; see SPECS there for what each
     does. vsync off presents immediately (lowest latency, may tear); on a G-Sync/FreeSync display vsync on lets
     VRR follow our frame timing instead of tearing. When the window is bigger than the frame it upscales: "fsr"
-    with AMD FSR 1 (~0.1 ms GPU at 1440p), "vsr" with NVIDIA RTX Video Super Resolution (needs the RTX Video SDK,
-    see framegen/rtxvsr.py, and frames on the GPU), "bilinear" with a plain filtered blit. A look (framegen/looks.py,
-    drawn by framegen/looks_gl.py) goes on after that, at the window's size.
+    with AMD FSR 1 (~0.1 ms GPU at 1440p), "vsr" with NVIDIA RTX Video Super Resolution (needs NVIDIA's package
+    or the RTX Video SDK, see framegen/rtxvsr.py, and frames on the GPU), "bilinear" with a plain filtered blit. A
+    look (framegen/looks.py, drawn by framegen/looks_gl.py) goes on after that, at the window's size.
     Keys: m/Tab = settings menu (arrows + Enter in it, Esc back a page), i = interpolation on/off for this session, s = stats
     overlay (off, minimal, detailed), f = fullscreen, u = next upscaler, k = look on/off, j = next look (Shift+J:
     the one before), l = delay test (PS5 Remote Play), r = save the instant replay, b = save a before & after video
@@ -483,7 +483,7 @@ class GLWindowSink:
 
     def __init__(self, w: int, h: int, settings=None, restart_reasons=None, choices: dict | None = None,
                  unavailable: dict | None = None, overlay_of=None, hdr: bool = False, hdr_peak: float = 1000.0,
-                 window_keys: dict | None = None) -> None:
+                 window_keys: dict | None = None, clean_source: bool = False) -> None:
         import glfw
         from OpenGL import GL
 
@@ -580,19 +580,19 @@ class GLWindowSink:
             print(f"[display] FSR 1 unavailable ({str(e)[:200]})")
         self.vsr_why = ("it isn't used with HDR output yet" if self.hdr10 else
                         "it needs frames decoded on the GPU (the default for PS5 Remote Play)")
+        self._vsr_args = None  # (w, h, clean) while RTX VSR can run but isn't made yet (_vsr_ready)
         if self.gpu and not self.hdr10:  # RTX VSR works on frames that are already CUDA tensors (8-bit ones)
-            from .rtxvsr import RtxVsr, unavailable_reason
+            from .rtxvsr import unavailable_reason
             why = unavailable_reason()
             if why is None:
-                try:
-                    self.vsr = RtxVsr(w, h, vsr_quality)
-                except Exception as e:  # noqa: BLE001 - VSR is optional
-                    why = str(e)[:200]
+                self._vsr_args = (w, h, clean_source)
             self.vsr_why = why
-            if self.vsr is None and scaler == "vsr":
+            if why is not None and scaler == "vsr":
                 print(f"[display] RTX VSR unavailable ({why})")
-        self.modes = [m for m, ok in (("fsr", self.fsr), ("vsr", self.vsr), ("bilinear", True)) if ok]
+        self.modes = [m for m, ok in (("fsr", self.fsr), ("vsr", self._vsr_args), ("bilinear", True)) if ok]
         self.mode = scaler if scaler in self.modes else self.modes[0]
+        if self.mode == "vsr" and not self._vsr_ready():
+            self.mode = self.modes[0]
         details = {"fsr": f" (sharpness {sharpness:g})", "vsr": f" (quality {vsr_quality})", "bilinear": ""}
         print(f"[display] upscaling with {self._name(self.mode)}{details[self.mode]}; u cycles "
               + " / ".join(self._name(m) for m in self.modes) + "; m opens the settings menu")
@@ -735,7 +735,30 @@ class GLWindowSink:
             self.toast(self.KEYS_HINT, 3.0 if self.hotkeys is None else 6.0)
 
     def _name(self, mode: str) -> str:
-        return f"RTX VSR q{self.vsr.quality}" if mode == "vsr" else self.NAMES[mode]
+        if mode == "vsr":
+            return f"RTX VSR q{self.vsr.quality if self.vsr is not None else self.settings.vsr_quality}"
+        return self.NAMES[mode]
+
+    def _vsr_ready(self) -> bool:
+        """Make RTX VSR the first time it's picked, so a session that never uses it loads nothing for it (NVIDIA's
+        model and its graphics memory). If it can't start, it comes off the list (False)."""
+        if self.vsr is not None:
+            return True
+        if self._vsr_args is None:
+            return False
+        from .rtxvsr import make_vsr
+        w, h, clean = self._vsr_args
+        try:
+            self.vsr = make_vsr(w, h, self.settings.vsr_quality, clean=clean)
+        except Exception as e:  # noqa: BLE001 - VSR is optional
+            self.vsr_why, self._vsr_args = str(e)[:200], None
+            if "vsr" in self.modes:
+                self.modes.remove("vsr")
+            print(f"[display] RTX VSR unavailable ({self.vsr_why})")
+            return False
+        print(f"[display] RTX VSR {self.vsr.how}"
+              + (": NVIDIA's models for clean video (a capture card's raw frames)" if clean else ""))
+        return True
 
     # ---- presentation ----------------------------------------------------------
     def _set_icon(self, glfw) -> None:
@@ -863,7 +886,7 @@ class GLWindowSink:
         return value in self.choices.get(key, (value,))
 
     def disabled(self, key: str) -> str | None:
-        if key == "vsr_quality" and self.vsr is None:
+        if key == "vsr_quality" and self.vsr is None and self._vsr_args is None:
             return f"RTX VSR isn't available: {self.vsr_why}."
         if key == "fsr_sharpness" and self.fsr is None:
             return "FSR 1 couldn't start on this GPU."
@@ -873,7 +896,10 @@ class GLWindowSink:
         """A setting changed (menu, hotkey or elsewhere): apply the ones the window owns."""
         st, glfw = self.settings, self.glfw
         if key == "scaler" and st.scaler in self.modes:
-            self.mode = st.scaler
+            if st.scaler != "vsr" or self._vsr_ready():
+                self.mode = st.scaler
+            else:
+                self.toast(f"RTX VSR couldn't start: {self.vsr_why}", 5.0)
         elif key == "fsr_sharpness" and self.fsr is not None:
             self.fsr.sharpness = st.fsr_sharpness
         elif key == "vsr_quality" and self.vsr is not None:
@@ -1269,7 +1295,7 @@ class GLWindowSink:
 
     def _vsr_render(self, dw: int, dh: int) -> tuple[int, int]:
         """RTX VSR into the window-sized texture (row 0 = the image's top); returns (texture, framebuffer)."""
-        if self.vsr_out is None or self.vsr_out[3:] != (dw, dh):
+        if self.vsr_out is None or self.vsr_out[3:5] != (dw, dh):
             self._vsr_target(dw, dh)
         tex, fbo, img = self.vsr_out[:3]
         stream = self.vsr.stream.cuda_stream
@@ -1281,20 +1307,30 @@ class GLWindowSink:
         return tex, fbo
 
     def _vsr_target(self, w: int, h: int) -> None:
-        """(Re)make the VSR output texture at the window's image size."""
+        """(Re)make the VSR output texture at the window's image size. RGBA8, or, for NVIDIA's package's packed
+        10-bit output, an R32UI texture that CUDA copies the words into, read by GL through an RGB10_A2 view of the
+        same memory (both 32 bits a pixel, R in the low bits as NVIDIA packs it), so nothing unpacks them."""
         from .glcuda import CudaGLImage
 
         GL = self.GL
         self._vsr_target_free()
-        tex = GL.glGenTextures(1)
-        GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+        store = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, store)
+        if self.vsr.out_format == "rgb10a2":
+            GL.glTexStorage2D(GL.GL_TEXTURE_2D, 1, GL.GL_R32UI, w, h)
+            tex = GL.glGenTextures(1)
+            GL.glTextureView(tex, GL.GL_TEXTURE_2D, store, GL.GL_RGB10_A2, 0, 1, 0, 1)
+            GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+            GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_SWIZZLE_A, GL.GL_ONE)  # NVIDIA leaves alpha 0 at times
+        else:
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
+            tex = store
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MIN_FILTER, GL.GL_NEAREST)
         GL.glTexParameteri(GL.GL_TEXTURE_2D, GL.GL_TEXTURE_MAG_FILTER, GL.GL_NEAREST)
-        GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
         fbo = GL.glGenFramebuffers(1)
         GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, fbo)
         GL.glFramebufferTexture2D(GL.GL_READ_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, tex, 0)
-        self.vsr_out = (tex, fbo, CudaGLImage(int(tex)), w, h)
+        self.vsr_out = (tex, fbo, CudaGLImage(int(store)), w, h, store)
 
     def _vsr_target_free(self) -> None:
         if self.vsr_out is not None:
@@ -1303,7 +1339,7 @@ class GLWindowSink:
                 self.vsr.forget(img.array)
             img.close()
             self.GL.glDeleteFramebuffers(1, [fbo])
-            self.GL.glDeleteTextures([tex])
+            self.GL.glDeleteTextures(sorted({int(tex), int(self.vsr_out[5])}))  # a view and its storage, or one
             self.vsr_out = None
 
     def _draw_mini(self, text: MiniText, x0: int, y0: int, dh: int) -> None:
@@ -1401,9 +1437,11 @@ class GLWindowSink:
             self.hotkeys = None
         self.GL.glFinish()
         self.timer._collect()
-        if self.timer.ms:
+        private = self.vsr is not None and self.vsr.private  # NVIDIA's package: its timings stay off the log
+        timed = {k: v for k, v in self.timer.ms.items() if not (private and "RTX VSR" in k)}
+        if timed:
             parts = [f"{k} p50 {np.median(v):.2f} / p95 {np.percentile(v, 95):.2f} ms (n={len(v)})"
-                     for k, v in sorted(self.timer.ms.items(), key=lambda kv: -len(kv[1]))]
+                     for k, v in sorted(timed.items(), key=lambda kv: -len(kv[1]))]
             print("[display] GPU time to draw each frame: " + "; ".join(parts))
         self.timer.close()
         self._unwatch()
@@ -1414,7 +1452,7 @@ class GLWindowSink:
             self._vsr_target_free()
             self.vsr.close()
             v = self.vsr.gpu_ms
-            if v:
+            if v and not self.vsr.private:
                 print(f"[display] RTX VSR q{self.vsr.quality} GPU time per frame: p50 {np.median(v):.2f} / "
                       f"p95 {np.percentile(v, 95):.2f} ms (n={len(v)})")
         if self.fsr is not None:

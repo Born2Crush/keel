@@ -136,7 +136,7 @@ made-up PCs.
 | Dip smoothing | Off / On (Experimental: a 30 fps game's dips become a brief slow-down) | live |
 | Upscaler | AMD FSR 1 / NVIDIA RTX VSR / Bilinear (others may come later) | live |
 | FSR sharpening | Max … Minimal | live |
-| RTX VSR quality | Low / Medium / High / Ultra | live |
+| RTX VSR quality | Low / Medium / High / Ultra (Experimental: RTX VSR comes with NVIDIA VFG's download) | live |
 | Stats overlay, Fullscreen, VSync | On / Off | live |
 | Stats overlay style | Minimal (frames on screen, the game's rate, the delay, a keeping-up dot) / Detailed | live |
 | Window presentation | Standard / Low delay (Experimental: DXGI flip model, so a window skips the compositor's copy and G-Sync works in a window; fullscreen uses Standard; `--present gl\|dxgi`). With Windows' HDR on for the main display it's always DXGI, fullscreen as a borderless window: OpenGL's own fullscreen switches the display to SDR while it's in front (`FRAMEGEN_KEEP_HDR=0` turns this off) | next Play |
@@ -222,12 +222,20 @@ When the window is bigger than the frame (fullscreen on a 1440p monitor, say), i
 - **AMD FSR 1** (default): edge-adaptive upscaling plus mild sharpening, run as two shader passes while the
   frame is drawn, so real and generated frames get the same treatment. It costs about 0.1 ms of GPU time per
   frame at 2560×1440 (bilinear: about 0.04 ms).
-- **NVIDIA RTX Video Super Resolution**: also cleans up compression artefacts, but costs 1.3–4.9 ms per frame
-  at 1440p (quality Low…Ultra, RTX 4070 Ti SUPER). At 90 Hz that's three passes per real frame, which costs
-  some of the extra in-between frames. In side-by-side use it looked about the same as FSR 1. It needs the
-  [RTX Video SDK](https://developer.nvidia.com/rtx-video-sdk) (free, NVIDIA developer login), unpacked wherever
-  `NV_RTX_VIDEO_SDK` points. Build `native\rtxvsr\build.bat` once. It only works when frames are decoded on the
-  GPU (the default for Remote Play).
+- **NVIDIA RTX Video Super Resolution** (Experimental): also cleans up compression artefacts, but takes much
+  longer than FSR 1. At 90 Hz that's three passes per real frame, which costs some of the extra in-between frames.
+  In side-by-side use it looked about the same as FSR 1. It only works when frames are decoded on the GPU (the
+  default for Remote Play), and not with HDR output yet. It runs one of two ways (`framegen/rtxvsr.py`):
+  - **NVIDIA's package** (what the installed app uses): the VideoSuperRes effect in `nvidia-vfx`, the package
+    NVIDIA VFG comes in, so it's there once NVIDIA VFG is set up (RTX 40 and 50 series). SmoovPlay ships nothing of
+    NVIDIA's. Frames go in and out as NVIDIA's packed 10-bit RGB; the window copies the output words into an R32UI
+    texture and draws it through an RGB10_A2 view of the same memory, so nothing unpacks them. A capture card's
+    uncompressed frames get NVIDIA's models for clean video. Its licence forbids publishing benchmark results, so
+    its timings stay out of the log.
+  - **The [RTX Video SDK](https://developer.nvidia.com/rtx-video-sdk)** (free, NVIDIA developer login), for
+    developers: unpack it wherever `NV_RTX_VIDEO_SDK` points and build `native\rtxvsr\build.bat` once. The wrapper
+    links a library from the SDK, so it can't ship in the MIT app. It costs 1.3–4.9 ms per frame at 1440p (quality
+    Low…Ultra, RTX 4070 Ti SUPER). `FRAMEGEN_VSR=sdk` picks it when NVIDIA's package is there too.
 
 The overlay names the scaler in use, and the GPU time per frame is printed on exit.
 </details>

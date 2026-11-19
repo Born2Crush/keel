@@ -57,8 +57,8 @@ There's nothing to install on the console, and it's free and open source.
   its own). In live PS5 play at 90 fps, the work for each real frame's two in-between frames took 17.6 ms (median),
   upload and all.
 - **Sharper on big screens.** The 1080p stream is sharpened and scaled to your monitor by AMD FSR 1 (in 0.1 ms),
-  or by NVIDIA RTX Video Super Resolution if you run SmoovPlay from source with NVIDIA's SDK (it isn't in the
-  installed app).
+  or by NVIDIA RTX Video Super Resolution (Experimental), which comes with NVIDIA VFG's download on RTX 40 and 50
+  series cards.
 - **Works with what you have.** A PS5 streams over Remote Play on your home network, through the open-source chiaki-ng,
   and your controller connects to the PC. An Xbox through its app, or any console through a capture card, are
   Experimental options.
@@ -290,7 +290,8 @@ and walks you through connecting your console.
 
 An optional second AI model for RTX 40 and 50 series cards: NVIDIA's own Video Frame Generation. It isn't part of
 SmoovPlay. **Set up NVIDIA VFG** on the Settings page, or in Auto-detect's results on an RTX 40 or 50 series card,
-downloads it from NVIDIA, only once you accept NVIDIA's licence. [More in the developer docs](docs/DEVELOPING.md#nvidia-vfg).
+downloads it from NVIDIA, only once you accept NVIDIA's licence. The same download brings NVIDIA RTX Video Super
+Resolution, an AI upscaler (Settings → Picture → Upscaler). [More in the developer docs](docs/DEVELOPING.md#nvidia-vfg).
 </details>
 
 <details>
