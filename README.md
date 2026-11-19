@@ -56,8 +56,9 @@ There's nothing to install on the console, and it's free and open source.
   game sends, in about 9 ms each on an RTX 4070 Ti SUPER (one 1080p in-between frame from RIFE 4.22 lite, timed on
   its own). In live PS5 play at 90 fps, the work for each real frame's two in-between frames took 17.6 ms (median),
   upload and all.
-- **Sharper on big screens.** The 1080p stream is sharpened and scaled to your monitor by AMD FSR 1 (in 0.1 ms)
-  or NVIDIA RTX Video Super Resolution.
+- **Sharper on big screens.** The 1080p stream is sharpened and scaled to your monitor by AMD FSR 1 (in 0.1 ms),
+  or by NVIDIA RTX Video Super Resolution if you run SmoovPlay from source with NVIDIA's SDK (it isn't in the
+  installed app).
 - **Works with what you have.** A PS5 streams over Remote Play on your home network, through the open-source chiaki-ng,
   and your controller connects to the PC. An Xbox through its app, or any console through a capture card, are
   Experimental options.

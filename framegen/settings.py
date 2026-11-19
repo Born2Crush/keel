@@ -161,8 +161,8 @@ SPECS: tuple[Spec, ...] = (
          {"fsr": "AMD FSR 1", "vsr": "NVIDIA RTX VSR", "bilinear": "Bilinear"}, group="Picture", quick=True,
          later="Support for other upscalers may come in a later version.",
          hints={"fsr": "Sharp and almost free: about 0.1\u00a0ms a frame. Recommended.",
-                "vsr": "NVIDIA's AI upscaler. Also smooths compression blocks, but takes about 1.6\u00a0ms a frame, "
-                       "which can cost in-between frames at 90 and 120 fps.",
+                "vsr": "NVIDIA's AI upscaler. Not in the installed app yet (it needs NVIDIA's RTX Video SDK), so "
+                       "picking it uses AMD FSR\u00a01 instead.",
                 "bilinear": "Plain resizing, the softest. For comparison."},
          help="Enlarges the picture from the game (usually 1080p) to fill your window or screen, so it only "
               "matters when that's bigger than 1080p, like a 1440p or 4K display. Key: U.",

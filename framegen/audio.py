@@ -10,10 +10,16 @@ output's pace, with the queue kept at the delay. Far off (at the start, or when 
 silence until it has filled, or the oldest sound skipped. Near it, the sound plays half a percent faster or slower
 until it's back, which nobody hears, so the card's clock and the output's can drift apart without the delay
 creeping.
+
+The queue never goes below the longest recent packet plus CUSHION_S, whatever delay is asked for. Sound comes in
+packets (20 ms from a card), and with less queued than that the output runs dry before the next one: a gap of
+silence every packet or so, heard as clicks as loud as the sound around them (issue 17, an Elgato HD60 X with a
+picture delay of 31 ms). Then the sound is up to that much later than the picture instead, which is hard to notice.
 """
 from __future__ import annotations
 
 import threading
+from collections import deque
 
 import numpy as np
 
@@ -21,6 +27,7 @@ JUMP_S = 0.040  # further than this from the delay: jump to it
 NUDGE_S = 0.004  # further than this: half a percent faster or slower until it's back
 NUDGE = 0.005
 MAX_S = 1.5  # never queue more than this
+CUSHION_S = 0.010  # always queued on top of the longest recent packet, for packets that come a little late
 
 
 class DelayLine:
@@ -31,7 +38,8 @@ class DelayLine:
         self.frame = channels * sample_bytes  # bytes per sample frame (all channels)
         self._buf = bytearray()
         self._lock = threading.Lock()
-        self.target = 0  # bytes to keep queued
+        self.target = 0  # bytes to keep queued (asked for: see _keep)
+        self._packets: deque = deque(maxlen=50)  # the last packets' sizes, in bytes (a second of a card's)
         self.underruns = 0  # blocks that came out short (padded with silence) because nothing had arrived
         self.jumps = 0
         self._filling = True  # silent until the queue reaches the delay
@@ -47,8 +55,20 @@ class DelayLine:
     def queued_s(self) -> float:
         return len(self._buf) / self.frame / self.rate
 
+    def _keep(self) -> int:
+        """Bytes to keep queued: the delay asked for, but never less than the longest recent packet and a cushion
+        (with the lock held)."""
+        return max(self.target, min(max(self._packets, default=0) + self._bytes(CUSHION_S), self._bytes(MAX_S / 2)))
+
+    @property
+    def kept_s(self) -> float:
+        """The delay the queue is kept at, in seconds (more than asked for when that's too short to play smoothly)."""
+        with self._lock:
+            return self._keep() / self.frame / self.rate
+
     def push(self, pcm: bytes) -> None:
         with self._lock:
+            self._packets.append(len(pcm) - len(pcm) % self.frame)
             self._buf += pcm
             over = len(self._buf) - self._bytes(MAX_S)
             if over > 0:
@@ -58,7 +78,7 @@ class DelayLine:
         """n bytes (whole sample frames) for the output."""
         nf = n // self.frame
         with self._lock:
-            err = len(self._buf) - self.target  # how far ahead of the delay the queue is
+            err = len(self._buf) - self._keep()  # how far ahead of the delay the queue is
             jump, nudge = self._bytes(JUMP_S), self._bytes(NUDGE_S)
             if err < -jump and not self._filling:  # too little queued (a stall, or a longer delay): refill
                 self._filling = True

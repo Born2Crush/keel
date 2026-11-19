@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+**Capture cards** (Experimental)
+- **No more popping in a capture card's sound** ([#17](https://github.com/smoovplay/smoovplay/issues/17), an Elgato
+  HD60 X). The card's sound comes in 20 ms packets, and when the picture's delay was shorter than that (31 ms with
+  NVIDIA VFG at 120 fps, less the sound output's own delay), SmoovPlay's sound ran out before the next packet: a
+  short gap many times a second, heard as pops as loud as the game. It now always keeps a packet and a little more
+  queued, so at worst the sound is about 20 ms later than the picture. The log says if the sound ever ran dry.
+
+**Settings**
+- **The launcher's Upscaler list says RTX VSR isn't in the installed app yet**
+  ([#17](https://github.com/smoovplay/smoovplay/issues/17)). It needs NVIDIA's RTX Video SDK, which can't be
+  included, so picking it used AMD FSR 1, and the list didn't say so.
+
 ## 0.3.4
 
 **Dip smoothing** (Experimental, please send feedback)

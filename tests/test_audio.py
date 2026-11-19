@@ -51,6 +51,29 @@ def test_the_delay_holds_when_the_card_clock_runs_fast_or_slow():
         assert line.jumps == 0  # nudged back, by playing a little faster or slower
 
 
+def test_a_short_delay_never_runs_dry_between_packets():
+    # Issue 17: a card's sound in 20 ms packets, a little late now and then, with less delay asked for than a packet
+    # lasts (the picture's delay, less the output's own): the queue ran dry every packet or so, a click each time.
+    import random
+    rnd = random.Random(1)
+    for asked in (0.0, 0.005, 0.015):
+        line = DelayLine(RATE, CH)
+        line.set_delay(asked)
+        events = sorted([(i * 0.02 + abs(rnd.gauss(0, 0.004)), "in") for i in range(1500)]  # 30 s
+                        + [(i * 0.010001, "out") for i in range(3000)])
+        for _, what in events:
+            if what == "in":
+                line.push(_pcm(0.02, 100))
+            else:
+                line.pull(int(0.01 * RATE) * FRAME)
+        assert line.underruns <= 1, (asked, line.underruns)  # (the first block, before anything came)
+        assert 0.025 <= line.kept_s <= 0.035  # a packet and the cushion: sound at most ~30 ms behind the picture
+    line = DelayLine(RATE, CH)
+    line.set_delay(0.08)
+    line.push(_pcm(0.02))
+    assert abs(line.kept_s - 0.08) < 1e-3  # a longer delay is kept as asked
+
+
 def test_a_big_change_jumps():
     line = DelayLine(RATE, CH)
     line.set_delay(0.3)
@@ -128,7 +151,8 @@ def test_a_recordings_sound_comes_out_with_its_picture(tmp_path):
                                   audio=lambda r, ch: outs.append(_Out(r, ch)) or outs[-1])
     assert src.can_delay_audio() and not src.can_press()
     src.set_audio_delay(40)
-    ticks = list(src)
+    from framegen.io import Waiting
+    ticks = [t for t in src if not isinstance(t, Waiting)]  # (a Waiting while the clip opens, when run on its own)
     src.close()
     out = outs[0]
     assert (out.rate, out.channels) == (RATE, CH) and out.delays == [pytest.approx(0.04)]

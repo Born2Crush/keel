@@ -740,6 +740,10 @@ class CardSource:
             pass
         if self.player is not None:
             self.player.close()
+            line = getattr(self.player, "line", None)
+            if line is not None and line.underruns:  # each a short gap of silence: a click
+                print(f"[capture] sound ran dry {line.underruns} times (short gaps, heard as clicks); held back "
+                      f"{line.kept_s * 1000:.0f} ms at the end")
         print(f"[capture] dropped frames: {self.dropped}")
 
 
