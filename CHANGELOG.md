@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.6
 
 **Picture**
 - **NVIDIA RTX VSR works in the installed app** (Experimental). The AI upscaler now comes with NVIDIA VFG's download
