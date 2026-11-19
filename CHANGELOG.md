@@ -9,6 +9,20 @@
   same in our testing: at 90 and 120 fps it can cost some of the extra frames. On a capture card's uncompressed
   picture it uses NVIDIA's models for clean video. Not with HDR output yet.
 
+**Capture cards** (Experimental)
+- **Fewer pops in a capture card's sound, in heavy games too** ([#17](https://github.com/smoovplay/smoovplay/issues/17)).
+  0.3.5 fixed most of the popping, but a little was left in a heavy game. Three things could still cause it:
+  - SmoovPlay gave Windows only about 20 ms of sound at a time, and a busy moment in SmoovPlay could make the next
+    lot later than that. Windows now gets about 50 ms, taken off the sound's delay, so it stays in step.
+  - The card's sound is read along with the picture, so when that's held up for a moment the sound comes in a
+    burst. SmoovPlay now keeps as much sound as the longest recent wait (up to 150 ms) ready to play.
+  - When the picture's delay changed by more than 40 ms, the sound skipped or paused to catch up. Changes of up to
+    120 ms now play the sound 1% faster or slower until it's back in step instead.
+  If the sound does run out, it now fades out and back in, and pauses once until there's enough again, where
+  before it could click several times in a row.
+- **The log says how the sound played:** once a minute if anything went wrong, and for the whole session at the
+  end. Copy diagnostics includes it.
+
 ## 0.3.5
 
 **Capture cards** (Experimental)
