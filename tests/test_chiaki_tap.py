@@ -118,3 +118,21 @@ def test_sound_ring_roundtrip_split_and_times():
         assert a.read_new() == [] and a.next is None
     finally:
         a.close()
+
+
+def test_the_patch_asks_chiaki_ng_for_opengl_once_and_only_when_told(tmp_path):
+    # chiaki_tap/apply_patch.py's edit to chiaki-ng's renderer choice (issue 19: Vulkan crashed on a Radeon): the
+    # launcher sets CHIAKI_FRAMETAP_RENDERER=opengl without an NVIDIA card. Applied to the anchor, twice: one edit.
+    sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1] / "chiaki_tap"))
+    import apply_patch as a
+    old, new = a.RENDERER_EDIT
+    f = tmp_path / "qmlmainwindow.cpp"
+    f.write_bytes(("void x()\r\n{\r\n" + old + "            reason = 1;\r\n").replace("\n", "\r\n").replace("\r\r", "\r")
+                  .encode())
+    a.patch_file(f, [a.RENDERER_EDIT], "CHIAKI_FRAMETAP_RENDERER")
+    a.patch_file(f, [a.RENDERER_EDIT], "CHIAKI_FRAMETAP_RENDERER")
+    text = f.read_bytes().decode()
+    assert text.count("CHIAKI_FRAMETAP_RENDERER") == 2 and text.count("CHIAKI_FORCE_VULKAN_FALLBACK") == 1
+    assert "\r\n" in text and "\n" not in text.replace("\r\n", "")  # chiaki-ng's line endings kept
+    assert text.index('== QLatin1String("opengl")') < text.index("CHIAKI_FORCE_VULKAN_FALLBACK")
+    assert "pending_renderer_fallback_reason.clear();" in text  # no dialog

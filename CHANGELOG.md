@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+**AMD and Intel graphics** (Experimental)
+- **chiaki-ng draws with OpenGL on AMD and Intel graphics** ([#19](https://github.com/smoovplay/smoovplay/issues/19),
+  a Radeon RX 9070 XT). chiaki-ng's default, Vulkan (which also decodes with Vulkan), crashed there. SmoovPlay
+  shows the picture itself, so chiaki-ng's own window, hidden behind it, loses nothing. It's for SmoovPlay's
+  sessions only: chiaki-ng's saved setting stays as it is. On NVIDIA nothing changes.
+
 ## 0.3.6
 
 **Picture**
