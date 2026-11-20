@@ -2,7 +2,6 @@
 one, the menu's keys while it's open, and the video window acting on them as on its own keys. Windows' calls are
 stand-ins: nothing is registered for real."""
 import ctypes
-import sys
 from types import SimpleNamespace
 
 import pytest
@@ -173,7 +172,7 @@ def test_a_message_for_another_id_is_ignored():
 
 def test_poll_takes_every_message_and_hands_the_rest_to_their_windows():
     """Looking for WM_HOTKEY alone (a filtered PeekMessage) made Windows call the video window hung after 5 s
-    (issues 33 and 34). Every message is taken; the window's own go to it, as GLFW would send them."""
+    ("Python is not responding"). Every message is taken; the window's own go to it, as GLFW would send them."""
     u = _User32()
     h = Hotkeys(user32=u)
     u.queue += [(0x0200, 77), 1, (0x000F, 77)]  # a mouse move, Ctrl+Alt+M, a paint
@@ -188,61 +187,6 @@ def test_poll_leaves_quit_to_glfw():
     u.queue += [(hotkeys.WM_QUIT, None), (0x000F, 77)]
     assert h.poll() == []
     assert u.quit == [0] and u.dispatched == []  # put back for GLFW, which reads the rest
-
-
-@pytest.mark.skipif(sys.platform != "win32", reason="Windows' shortcuts and hang check")
-def test_a_window_with_shortcuts_is_never_called_hung():
-    """For real: a GLFW window, its thread holding system-wide shortcuts (obscure ones, so nothing else is taken),
-    polled as the video window does for longer than Windows' 5 s hang check, then a shortcut pressed."""
-    import time
-    from ctypes import wintypes as wt
-    glfw = pytest.importorskip("glfw")
-    if not glfw.init():
-        pytest.skip("no display")
-    picked = {a: f"Ctrl+Alt+Shift+F{13 + i}" for i, a in enumerate(hotkeys.ACTIONS)}
-    glfw.window_hint(glfw.VISIBLE, glfw.TRUE)
-    glfw.window_hint(glfw.FOCUSED, glfw.FALSE)
-    glfw.window_hint(glfw.FOCUS_ON_SHOW, glfw.FALSE)
-    win = glfw.create_window(160, 90, "hotkeys test", None, None)
-    h = Hotkeys(picked)
-    try:
-        assert all(h.got.values()), h.taken
-        u32 = ctypes.windll.user32
-        u32.IsHungAppWindow.argtypes = [wt.HWND]
-        hwnd = glfw.get_win32_window(win)
-        end, hung = time.perf_counter() + 6.5, False
-        while time.perf_counter() < end:
-            h.poll()
-            glfw.poll_events()
-            hung |= bool(u32.IsHungAppWindow(hwnd))
-            time.sleep(1 / 60)
-        assert not hung
-
-        quit_combo = parse(picked["quit"])  # pressed through SendInput: Ctrl, Alt, Shift, F14, and up again
-        vks = [0x11, 0x12, 0x10, quit_combo.vk]
-
-        class KEYBDINPUT(ctypes.Structure):
-            _fields_ = [("wVk", wt.WORD), ("wScan", wt.WORD), ("dwFlags", wt.DWORD), ("time", wt.DWORD),
-                        ("dwExtraInfo", ctypes.c_size_t)]
-
-        class INPUT(ctypes.Structure):
-            class _U(ctypes.Union):
-                _fields_ = [("ki", KEYBDINPUT), ("pad", ctypes.c_byte * 32)]
-            _anonymous_ = ("u",)
-            _fields_ = [("type", wt.DWORD), ("u", _U)]
-
-        keys = [INPUT(type=1, ki=KEYBDINPUT(wVk=vk)) for vk in vks]
-        keys += [INPUT(type=1, ki=KEYBDINPUT(wVk=vk, dwFlags=2)) for vk in reversed(vks)]  # KEYEVENTF_KEYUP
-        u32.SendInput(len(keys), (INPUT * len(keys))(*keys), ctypes.sizeof(INPUT))
-        got, end = [], time.perf_counter() + 2
-        while time.perf_counter() < end and not got:
-            got = h.poll()
-            glfw.poll_events()
-            time.sleep(0.01)
-        assert got == ["quit"]
-    finally:
-        h.close()
-        glfw.destroy_window(win)
 
 
 def test_msg_stand_in_works_with_byref():

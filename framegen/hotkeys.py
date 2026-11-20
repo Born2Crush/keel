@@ -166,7 +166,7 @@ class Hotkeys:
         (glfw.poll_events then finds the queue empty). Looking for WM_HOTKEY alone (PeekMessage filtered to it) makes
         Windows call the thread hung after 5 s, however often GLFW looks at the messages after it: Windows then puts
         a frozen copy of the video window on screen, which window capture reads back as a black picture, and offers
-        to close SmoovPlay (issues 33 and 34: "Python is not responding" after 10 to 20 s or on a click elsewhere).
+        to close SmoovPlay ("Python is not responding" after 10 to 20 s, or on a click elsewhere).
         """
         import ctypes
         from ctypes import wintypes as wt
