@@ -321,6 +321,18 @@ def windows_hdr_on() -> bool:
         return False
 
 
+def window_monitor(win: tuple[int, int, int, int], monitors: list[tuple]):
+    """The monitor a window (x, y, w, h) is mostly on, of monitors given as (handle, x, y, w, h): the one with the
+    most of the window on it, or the first (GLFW lists the primary monitor first) when it's on none of them."""
+    x, y, w, h = win
+    best, most = monitors[0][0], 0
+    for mon, mx, my, mw, mh in monitors:
+        area = max(0, min(x + w, mx + mw) - max(x, mx)) * max(0, min(y + h, my + mh) - max(y, my))
+        if area > most:
+            best, most = mon, area
+    return best
+
+
 def _say_if_slow(what: str, t0: float, limit_ms: float = 250.0) -> None:
     """A line in the log when a window call took far longer than a frame (a stall worth reporting)."""
     ms = (time.perf_counter() - t0) * 1000
@@ -1048,11 +1060,24 @@ class GLWindowSink:
             glfw.set_window_monitor(win, None, x, y, ww, wh, 0)
         else:
             self.windowed_pos = (*glfw.get_window_pos(win), *glfw.get_window_size(win))
-            mon = glfw.get_primary_monitor()
+            mon = self._monitor_under_window()
             mode = glfw.get_video_mode(mon)
             glfw.set_window_monitor(win, mon, 0, 0, mode.size.width, mode.size.height, mode.refresh_rate)
         _say_if_slow("fullscreen " + ("on" if on else "off"), t0)
         glfw.swap_interval(1 if self.settings.vsync else 0)
+
+    def _monitor_under_window(self):
+        """Where fullscreen goes: the monitor the window is mostly on, so F fills the screen it was moved to rather
+        than the primary one."""
+        glfw = self.glfw
+        monitors = []
+        for mon in glfw.get_monitors() or []:
+            mode = glfw.get_video_mode(mon)
+            if mode is not None:
+                monitors.append((mon, *glfw.get_monitor_pos(mon), mode.size.width, mode.size.height))
+        if not monitors:
+            return glfw.get_primary_monitor()
+        return window_monitor((*glfw.get_window_pos(self.win), *glfw.get_window_size(self.win)), monitors)
 
     def _set_borderless(self, on: bool) -> None:
         """Fullscreen as a borderless window over the monitor, as games' borderless mode (the standard presentation's
@@ -1065,7 +1090,7 @@ class GLWindowSink:
         t0 = time.perf_counter()
         if on:
             self.windowed_pos = (*glfw.get_window_pos(win), *glfw.get_window_size(win))
-            mon = glfw.get_primary_monitor()
+            mon = self._monitor_under_window()
             mx, my = glfw.get_monitor_pos(mon)
             mode = glfw.get_video_mode(mon)
             glfw.set_window_attrib(win, glfw.DECORATED, glfw.FALSE)
