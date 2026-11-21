@@ -910,7 +910,8 @@ namespace SmoovPlay
         {
             if (Missed.Count == 0) return null;
             var m = Missed.First();
-            string fix = m.Value.Contains("minimised") ? "restore its window"
+            string fix = m.Value.Contains("full screen") ? "leave full screen (its full screen button, or Shift+Win+Enter)"
+                       : m.Value.Contains("minimised") ? "restore its window"
                        : m.Value.Contains("another desktop") ? "bring its window to this desktop"
                        : m.Value.Contains("too small") ? "make its window bigger"
                        : "open its window (not just the tray icon) and start streaming";
