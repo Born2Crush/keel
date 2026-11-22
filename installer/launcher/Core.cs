@@ -1084,7 +1084,7 @@ namespace SmoovPlay
             if (SystemCheck.GpuName == "unknown") SystemCheck.QueryGpu();  // fills in the GPU and driver
             log.WriteLine($"[launcher] SmoovPlay {BuildInfo.Version}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}, {(SystemCheck.GpuName == "unknown" && SystemCheck.OtherGpu != null ? SystemCheck.OtherGpu + " (DirectML)" : SystemCheck.GpuName + ", driver " + SystemCheck.Driver)}"
                           + (Source != "chiaki" ? ", source " + Source : "") + (TestMode ? ", test mode (60 fps game played as 30 fps)" : ""));
-            string args = "run.py " + Sources.RunArgs(Source, Source == "window" ? WindowApp : CaptureVideo, CaptureAudio)
+            string args = "keel.py " + Sources.RunArgs(Source, Source == "window" ? WindowApp : CaptureVideo, CaptureAudio)
                           + (Source == "window" && !string.IsNullOrEmpty(WindowKeysArg) ? " --window-keys \"" + WindowKeysArg.Replace("\"", "") + "\"" : "")
                           + " --display --control" + (TestMode ? " --test-mode" : "") + $" --results \"{ResultsPath}\" " + p.RunArgs;
             var psi = Proc.Python(p.Python, args.Trim(), p.App);

@@ -347,6 +347,9 @@ def main() -> int:
     ap.add_argument("--scaler", default=None, choices=["fsr", "vsr", "bilinear"],
                     help="how the window upscales when it is bigger than the frame (cycle live with 'u'); "
                          "vsr = NVIDIA RTX Video Super Resolution, needs the RTX Video SDK (framegen/rtxvsr.py)")
+    ap.add_argument("--output-size", default=None, choices=["window", "2160p"],
+                    help="window: draw at the window's size (default). 2160p: draw a 1080p stream at 4K with that "
+                         "upscaler, then fit it to the window (Experimental; frame generation stays at 1080p)")
     ap.add_argument("--vsr-quality", type=int, default=None, choices=[1, 2, 3, 4],
                     help="RTX VSR quality: 1 low ... 4 ultra (more GPU time per frame)")
     ap.add_argument("--fsr-sharpness", type=float, default=None, choices=BY_KEY["fsr_sharpness"].choices,
@@ -404,8 +407,18 @@ def main() -> int:
             test = None
     elif kind == "chiaki":
         from framegen.chiaki_tap import NAME, ChiakiSource
+        tap_name = a.chiaki_tap or NAME
+        # Keel (keel.py) owns the session. A stream that began earlier is restarted here, before the decoder
+        # attaches, so the missing-start banner never gets a chance. A test tap (--chiaki-tap) is left alone.
+        if os.environ.get("KEEL_OWN_SESSION") == "1" and not a.chiaki_tap:
+            from framegen.session_owner import SessionError, own_chiaki_stream
+            try:
+                own_chiaki_stream(tap_name)
+            except SessionError as e:
+                print(f"[keel] {e}", file=sys.stderr)
+                return 1
         src = ChiakiSource(a.chiaki_decoder, wait_s=600, log_path=a.chiaki_log or frame_log(a.results),
-                           tap_name=a.chiaki_tap or NAME, test=test)
+                           tap_name=tap_name, test=test)
     elif kind == "capture":
         if a.capture is None:
             ap.error("--source capture needs --capture N (a device) or --capture FILE")
@@ -445,6 +458,7 @@ def main() -> int:
                        ("fsr_sharpness", a.fsr_sharpness), ("engine", "trt" if a.trt else a.engine),
                        ("interp", False if a.off else None), ("vsync", a.vsync), ("fullscreen", a.fullscreen),
                        ("minimize_chiaki", a.minimize_chiaki), ("simulate_30", True if a.test_mode else None),
+                       ("output_size", a.output_size),
                        ("steady_hud", a.steady_hud), ("vfg_quality", a.vfg_quality), ("present", a.present),
                        ("hdr", a.hdr), ("fill", a.fill)):
         if value is not None:

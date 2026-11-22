@@ -202,6 +202,18 @@ SPECS: tuple[Spec, ...] = (
               "for clean video.",
          impact={"picture": "Higher is cleaner and sharper.",
                  "speed": "Each step up asks more of the GPU."}),
+    # framegen/output_size.py, applied in the play window (framegen/io.py). The stream stays 1080p through frame
+    # generation; only the upscaler's draw grows. A window that is already 4K needs nothing extra.
+    Spec("output_size", "Output size", ("window", "2160p"), "window",
+         {"window": "Window", "2160p": "4K"}, group="Picture", experimental=True,
+         hints={"window": "Drawn at the window's size. The default.",
+                "2160p": "A 1080p stream is drawn at 3840x2160, then fitted to the window. About 0.3 ms with FSR 1."},
+         help="For a 1080p stream, usually PS5 Remote Play. 4K draws it at 3840x2160 with the upscaler (AMD FSR 1 "
+              "unless you picked another), then fits that to the window. Frame generation stays at the stream's "
+              "size. On a 4K screen in fullscreen this is the normal draw. A 1080p screen shows no extra detail. "
+              "Experimental.",
+         impact={"picture": "Sharper on a 4K screen. No extra detail on a 1080p screen.",
+                 "speed": "About 0.3 ms a frame with FSR 1. RTX VSR at 4K can drop frames at 90 and 120 fps."}),
     # framegen/hdr.py. Off by default, and then nothing changes: an HDR stream comes out washed out, and SmoovPlay says
     # so. "hdr10" needs the DXGI presentation (NVIDIA) and Windows' HDR; without them run.py uses "sdr" for the session.
     Spec("hdr", "HDR", ("off", "sdr", "hdr10"), "off",

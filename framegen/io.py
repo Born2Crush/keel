@@ -21,6 +21,11 @@ from .fill import Panorama, layout, panorama_t, visible, wider
 TICK = 1.0 / 60.0
 
 
+def window_title() -> str:
+    """The play window's title. Keel sets FRAMEGEN_TITLE; anything else keeps the existing name."""
+    return os.environ.get("FRAMEGEN_TITLE") or "SmoovPlay"
+
+
 @dataclass
 class Tick:
     frame: np.ndarray  # HxWx3 uint8 BGR (or a CUDA tensor from a GPU decoder), never mutated after yield
@@ -542,7 +547,7 @@ class GLWindowSink:
                                     (glfw.FOCUSED, glfw.FALSE), (glfw.FOCUS_ON_SHOW, glfw.FALSE),
                                     (glfw.MOUSE_PASSTHROUGH, glfw.TRUE)):
                     glfw.window_hint(hint, value)
-            self.win = self.glwin = glfw.create_window(min(w, 1600), min(h, 900), "SmoovPlay", None, None)
+            self.win = self.glwin = glfw.create_window(min(w, 1600), min(h, 900), window_title(), None, None)
             glfw.default_window_hints()
             glfw.make_context_current(self.win)
         glfw.swap_interval(1 if st.vsync else 0)
@@ -552,6 +557,8 @@ class GLWindowSink:
         self._set_icon(glfw)
         self.overlay, self.cmd, self.windowed_pos, self.remote = st.overlay, None, None, None
         self.fill, self.panorama = st.fill, None  # Fill the screen (framegen/fill.py); Panorama's pass once used
+        self._uhd = None  # 4K output (output_size 2160p): the upscaler's offscreen image, when the window is smaller
+        self._said_4k = False
         self._borderless = False  # fullscreen as a borderless window (_set_borderless)
         glfw.set_key_callback(self.win, self._on_key)
         glfw.set_cursor_pos_callback(self.win, self._on_mouse)
@@ -853,7 +860,7 @@ class GLWindowSink:
             if not glwin:
                 raise RuntimeError("couldn't open an OpenGL context")
             glfw.window_hint(glfw.CLIENT_API, glfw.NO_API)
-            win = glfw.create_window(min(w, 1600), min(h, 900), "SmoovPlay", None, None)
+            win = glfw.create_window(min(w, 1600), min(h, 900), window_title(), None, None)
             glfw.default_window_hints()
             if not win:
                 raise RuntimeError("couldn't open the window")
@@ -1292,17 +1299,28 @@ class GLWindowSink:
             GL.glTexSubImage2D(GL.GL_TEXTURE_2D, 0, 0, 0, self.w, self.h, GL.GL_BGR,
                                GL.GL_HALF_FLOAT if host.dtype == np.float16 else GL.GL_UNSIGNED_BYTE, host)
         fw, fh, s, dw, dh, x0, y0 = self._layout()
-        target = screen = self._target()
-        GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, target)
+        from .output_size import picture_target
+        tw, th, offscreen = picture_target(self.settings.output_size, self.w, self.h, dw, dh)
+        screen = self._target()
+        GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, screen)
         GL.glClear(GL.GL_COLOR_BUFFER_BIT)
         ux, uy, uw, uh = self._ui_rect(fw, fh, dw, dh, x0, y0)
         pano = self._panorama_on(fw, fh)
-        if pano:  # Panorama: the picture is drawn as for Fit (to the screen's height) into its texture, then bent
+        if offscreen:  # 4K output into its own image; fitted to the window after the upscaler and the look
+            target, px, py, pw, ph = self._uhd_fbo(tw, th), 0, 0, tw, th
+            GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, target)
+            GL.glClear(GL.GL_COLOR_BUFFER_BIT)
+            if not self._said_4k:
+                self._said_4k = True
+                print(f"[display] 4K output: {self.w}x{self.h} drawn at {tw}x{th}, then fitted to the window")
+        elif pano:  # Panorama: the picture is drawn as for Fit (to the screen's height) into its texture, then bent
             if self.panorama is None:  # across the whole screen below
                 self.panorama = Panorama(GL)
-            target, x0, y0 = self.panorama.target(dw, dh), 0, 0
+            target, px, py, pw, ph = self.panorama.target(dw, dh), 0, 0, dw, dh
             GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, target)
-        upscale = dw > self.w or dh > self.h
+        else:
+            target, px, py, pw, ph = screen, x0, y0, dw, dh
+        upscale = pw > self.w or ph > self.h
         mode = self.mode
         if mode == "vsr" and not on_gpu:  # a CPU frame: VSR needs it on the GPU
             mode = "fsr" if self.fsr is not None else "bilinear"
@@ -1310,32 +1328,39 @@ class GLWindowSink:
         self._frame_no += 1
         plan = self.look_gl.plan(self.looks.current(), self.looks.rev) if self.look_gl is not None else None
         q = self.timer.begin()
-        if plan is not None:  # the upscaler draws into the look's input, and the look onto the screen
+        if plan is not None:  # the upscaler draws into the look's input, and the look onto the picture
             if upscale and mode == "fsr":
-                src, fbo = self.look_gl.input_target(dw, dh)
-                self.fsr.draw(self.tex, self.w, self.h, fbo, 0, 0, dw, dh)
+                src, fbo = self.look_gl.input_target(pw, ph)
+                self.fsr.draw(self.tex, self.w, self.h, fbo, 0, 0, pw, ph)
                 flip_in = True  # (FSR draws upright)
             elif upscale and mode == "vsr":
-                src, flip_in = self._vsr_render(dw, dh)[0], False
+                src, flip_in = self._vsr_render(pw, ph)[0], False
             else:
                 src, flip_in = self.tex, False  # the look's first pass resizes it
-            self.look_gl.draw(plan, src, flip_in, target, x0, y0, dw, dh, True, self._frame_no)
+            self.look_gl.draw(plan, src, flip_in, target, px, py, pw, ph, True, self._frame_no)
             GL.glViewport(0, 0, fw, fh)
             label += " + look"
         elif upscale and mode == "fsr":
-            self.fsr.draw(self.tex, self.w, self.h, target, x0, y0, dw, dh)
+            self.fsr.draw(self.tex, self.w, self.h, target, px, py, pw, ph)
             GL.glViewport(0, 0, fw, fh)
         elif upscale and mode == "vsr":
-            self._vsr_draw(x0, y0, dw, dh)
+            GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, target)
+            self._vsr_draw(px, py, pw, ph)
         else:
+            GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, target)
             GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, self.fbo)
             # Image row 0 is the top; GL row 0 is the bottom, so blit with destination Y flipped.
-            GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT,
+            GL.glBlitFramebuffer(0, 0, self.w, self.h, px, py + ph, px + pw, py, GL.GL_COLOR_BUFFER_BIT,
                                  GL.GL_LINEAR)
-        if pano:
+        if offscreen:
+            self._fit_uhd(screen, pano, fw, fh, dw, dh, x0, y0)
+            if pano:
+                label += " + panorama"
+            label += " 4K"
+        elif pano:
             self.panorama.draw(screen, fw, fh, panorama_t(fw, fh, self.w, self.h))
             label += " + panorama"
-        self.timer.end(q, f"{label} {dw}x{dh}")
+        self.timer.end(q, f"{label} {pw}x{ph}")
         if self.overlay and isinstance(text, MiniText):
             self._draw_stats(text, ux, uy, uw, uh)
         elif self.overlay and text:
@@ -1353,6 +1378,46 @@ class GLWindowSink:
             return "quit"
         cmd, self.cmd = self.cmd, None
         return cmd
+
+    def _uhd_fbo(self, w: int, h: int) -> int:
+        """The 4K image Output size draws into (RGBA8, or half floats with HDR output)."""
+        GL = self.GL
+        if self._uhd is not None and self._uhd[2:] == (w, h, self.hdr10):
+            return self._uhd[1]
+        if self._uhd is not None:
+            GL.glDeleteFramebuffers(1, [self._uhd[1]])
+            GL.glDeleteTextures([self._uhd[0]])
+        tex = GL.glGenTextures(1)
+        GL.glBindTexture(GL.GL_TEXTURE_2D, tex)
+        for p, v in ((GL.GL_TEXTURE_MIN_FILTER, GL.GL_LINEAR), (GL.GL_TEXTURE_MAG_FILTER, GL.GL_LINEAR),
+                     (GL.GL_TEXTURE_WRAP_S, GL.GL_CLAMP_TO_EDGE), (GL.GL_TEXTURE_WRAP_T, GL.GL_CLAMP_TO_EDGE)):
+            GL.glTexParameteri(GL.GL_TEXTURE_2D, p, v)
+        if self.hdr10:
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA16F, w, h, 0, GL.GL_RGBA, GL.GL_HALF_FLOAT, None)
+        else:
+            GL.glTexImage2D(GL.GL_TEXTURE_2D, 0, GL.GL_RGBA8, w, h, 0, GL.GL_RGBA, GL.GL_UNSIGNED_BYTE, None)
+        fbo = GL.glGenFramebuffers(1)
+        GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, fbo)
+        GL.glFramebufferTexture2D(GL.GL_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, tex, 0)
+        self._uhd = (tex, fbo, w, h, self.hdr10)
+        return fbo
+
+    def _fit_uhd(self, screen: int, pano: bool, fw: int, fh: int, dw: int, dh: int, x0: int, y0: int) -> None:
+        """The upright 4K image, fitted to the window's picture (or into Panorama's texture first)."""
+        GL = self.GL
+        src, tw, th = self._uhd[1], self._uhd[2], self._uhd[3]
+        if pano:
+            if self.panorama is None:
+                self.panorama = Panorama(GL)
+            dest = self.panorama.target(dw, dh)
+            GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, dest)
+            GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, src)
+            GL.glBlitFramebuffer(0, 0, tw, th, 0, 0, dw, dh, GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
+            self.panorama.draw(screen, fw, fh, panorama_t(fw, fh, self.w, self.h))
+            return
+        GL.glBindFramebuffer(GL.GL_DRAW_FRAMEBUFFER, screen)
+        GL.glBindFramebuffer(GL.GL_READ_FRAMEBUFFER, src)
+        GL.glBlitFramebuffer(0, 0, tw, th, x0, y0, x0 + dw, y0 + dh, GL.GL_COLOR_BUFFER_BIT, GL.GL_LINEAR)
 
     def _vsr_draw(self, x0: int, y0: int, dw: int, dh: int) -> None:
         """RTX VSR from the staged RGBA frame straight into a window-sized GL texture, then a 1:1 blit."""
