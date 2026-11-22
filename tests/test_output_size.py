@@ -1,4 +1,4 @@
-"""Output size: 1080p Remote Play drawn at 4K, or straight into the window when that's already 4K."""
+"""Output size: 1080p Remote Play is a 3840x2160 DLSS image, then fitted to the window."""
 
 from framegen.output_size import UHD_H, UHD_W, picture_target
 
@@ -16,6 +16,6 @@ def test_keel_defaults_to_remote_play_on_screen():
     assert _with_chiaki(["clip.mp4"]) == ["clip.mp4"]
 
 
-def test_a_4k_window_or_a_4k_stream_is_not_drawn_twice():
-    assert picture_target("2160p", 1920, 1080, UHD_W, UHD_H) == (UHD_W, UHD_H, False)
+def test_4k_is_always_3840x2160_unless_the_stream_already_is():
+    assert picture_target("2160p", 1920, 1080, UHD_W, UHD_H) == (UHD_W, UHD_H, True)
     assert picture_target("2160p", UHD_W, UHD_H, 1600, 900) == (1600, 900, False)

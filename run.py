@@ -348,8 +348,8 @@ def main() -> int:
                     help="how the window upscales when it is bigger than the frame (cycle live with 'u'); "
                          "vsr = NVIDIA RTX Video Super Resolution, needs the RTX Video SDK (framegen/rtxvsr.py)")
     ap.add_argument("--output-size", default=None, choices=["window", "2160p"],
-                    help="window: draw at the window's size (default). 2160p: draw a 1080p stream at 4K with that "
-                         "upscaler, then fit it to the window (Experimental; frame generation stays at 1080p)")
+                    help="window: draw at the window's size (default). 2160p: NVIDIA DLSS Performance, 1080p to 4K, "
+                         "then fit to the window (needs an RTX card; frame generation stays at 1080p)")
     ap.add_argument("--vsr-quality", type=int, default=None, choices=[1, 2, 3, 4],
                     help="RTX VSR quality: 1 low ... 4 ultra (more GPU time per frame)")
     ap.add_argument("--fsr-sharpness", type=float, default=None, choices=BY_KEY["fsr_sharpness"].choices,

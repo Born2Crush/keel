@@ -557,7 +557,8 @@ class GLWindowSink:
         self._set_icon(glfw)
         self.overlay, self.cmd, self.windowed_pos, self.remote = st.overlay, None, None, None
         self.fill, self.panorama = st.fill, None  # Fill the screen (framegen/fill.py); Panorama's pass once used
-        self._uhd = None  # 4K output (output_size 2160p): the upscaler's offscreen image, when the window is smaller
+        self._uhd = None  # 4K output: DLSS draws 3840x2160 here, then it is fitted to the window
+        self._dlss_gl = None  # CUDA copy into that image
         self._said_4k = False
         self._borderless = False  # fullscreen as a borderless window (_set_borderless)
         glfw.set_key_callback(self.win, self._on_key)
@@ -1312,7 +1313,7 @@ class GLWindowSink:
             GL.glClear(GL.GL_COLOR_BUFFER_BIT)
             if not self._said_4k:
                 self._said_4k = True
-                print(f"[display] 4K output: {self.w}x{self.h} drawn at {tw}x{th}, then fitted to the window")
+                print(f"[display] 4K output: NVIDIA DLSS, {self.w}x{self.h} to {tw}x{th}, then fitted to the window")
         elif pano:  # Panorama: the picture is drawn as for Fit (to the screen's height) into its texture, then bent
             if self.panorama is None:  # across the whole screen below
                 self.panorama = Panorama(GL)
@@ -1321,14 +1322,30 @@ class GLWindowSink:
         else:
             target, px, py, pw, ph = screen, x0, y0, dw, dh
         upscale = pw > self.w or ph > self.h
-        mode = self.mode
+        from .dlss import uses_dlss
+        mode = "dlss" if uses_dlss(self.settings.output_size, self.w, self.h) and upscale else self.mode
         if mode == "vsr" and not on_gpu:  # a CPU frame: VSR needs it on the GPU
             mode = "fsr" if self.fsr is not None else "bilinear"
-        label = self._name(mode) if upscale else "no upscale"
+        label = "DLSS" if mode == "dlss" else (self._name(mode) if upscale else "no upscale")
         self._frame_no += 1
         plan = self.look_gl.plan(self.looks.current(), self.looks.rev) if self.look_gl is not None else None
         q = self.timer.begin()
-        if plan is not None:  # the upscaler draws into the look's input, and the look onto the picture
+        drew = False
+        if mode == "dlss":
+            # The look reads its own input texture and draws into the 4K image, so DLSS must not
+            # write the texture the look is also reading.
+            dest = self.look_gl.input_target(pw, ph)[0] if plan is not None else self._uhd[0]
+            if self._draw_dlss(frame, on_gpu, dest, pw, ph):
+                if plan is not None:
+                    self.look_gl.draw(plan, dest, True, target, px, py, pw, ph, True, self._frame_no)
+                    GL.glViewport(0, 0, fw, fh)
+                    label += " + look"
+                drew = True
+            else:
+                mode, label = "bilinear", "DLSS unavailable"  # the stream still shows; FSR is not labeled DLSS
+        if drew:
+            pass
+        elif plan is not None:  # the upscaler draws into the look's input, and the look onto the picture
             if upscale and mode == "fsr":
                 src, fbo = self.look_gl.input_target(pw, ph)
                 self.fsr.draw(self.tex, self.w, self.h, fbo, 0, 0, pw, ph)
@@ -1378,6 +1395,34 @@ class GLWindowSink:
             return "quit"
         cmd, self.cmd = self.cmd, None
         return cmd
+
+    def _draw_dlss(self, frame, on_gpu: bool, tex: int, pw: int, ph: int) -> bool:
+        """NVIDIA DLSS into `tex` (RGBA8, pw x ph). False when DLSS can't run: the caller fits the stream."""
+        if self.hdr10:
+            why = "DLSS 4K is the 8-bit picture; HDR output is not upscaled with DLSS yet"
+        else:
+            from .dlss import session
+            scaler, why = session()
+            if scaler is not None:
+                try:
+                    # Tensor row 0 is the top of the picture. The 4K image is read upright, so the
+                    # bottom row has to land at GL y = 0.
+                    out = scaler.upscale(frame if on_gpu else _host(frame)).flip(0)
+                    self._upload_bgr(tex, pw, ph, out.contiguous())
+                    return True
+                except (OSError, RuntimeError, AttributeError) as e:
+                    why = str(e)[:200]
+        if not getattr(self, "_said_dlss_why", False):
+            self._said_dlss_why = True
+            print(f"[display] 4K output needs NVIDIA DLSS: {why}")
+        return False
+
+    def _upload_bgr(self, tex: int, w: int, h: int, bgr) -> None:
+        from .glcuda import CudaGLTexture
+        key = (int(tex), w, h)
+        if self._dlss_gl is None or self._dlss_gl[0] != key:
+            self._dlss_gl = (key, CudaGLTexture(int(tex), w, h, hdr=False))
+        self._dlss_gl[1].upload(bgr)
 
     def _uhd_fbo(self, w: int, h: int) -> int:
         """The 4K image Output size draws into (RGBA8, or half floats with HDR output)."""
