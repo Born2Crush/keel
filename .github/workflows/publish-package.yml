@@ -35,13 +35,13 @@ jobs:
         run: python installer/patch_stream_join.py
 
       - name: Build Keel-Setup.exe
-        run: python installer/build.py --app-setup --version 0.3.36
+        run: python installer/build.py --app-setup --version 0.3.37
 
       - name: Publish the installer
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.36
-          name: Keel 0.3.36
+          tag_name: v0.3.37
+          name: Keel 0.3.37
           make_latest: true
           files: installer/dist/Keel-Setup.exe
           body: |
