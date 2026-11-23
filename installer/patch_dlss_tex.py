@@ -95,12 +95,13 @@ METHODS = '''
         self._tex_alive.extend((arr, made, res, texdesc))
         return arr, made
 
-    def _array_surf(self, width, height):
+    def _array_surf(self, width, height, kind=1):
         c = self._ctypes
         rt = self._runtime()
         class Channel(c.Structure):
             _fields_ = [("x", c.c_int), ("y", c.c_int), ("z", c.c_int), ("w", c.c_int), ("f", c.c_int)]
-        ch = Channel(8, 8, 8, 8, 1)
+        bits, fmt = (16, 2) if kind == 3 else (8, 1)
+        ch = Channel(bits, bits, bits, bits, fmt)
         rt.cudaMallocArray.argtypes = [c.POINTER(c.c_void_p), c.POINTER(Channel), c.c_size_t, c.c_size_t, c.c_uint]
         rt.cudaMallocArray.restype = c.c_int
         arr = c.c_void_p()
@@ -132,15 +133,34 @@ METHODS = '''
         rc = rt.cudaMemcpy2DToArray(array, 0, 0, c.c_void_p(int(tensor.data_ptr())), row, row, int(tensor.shape[0]), 3)
         if rc != 0:
             raise RuntimeError("DLSS copy %s" % rc)
+        self._device_sync()
+
+    def _device_sync(self):
+        c = self._ctypes
+        rt = self._runtime()
+        rt.cudaDeviceSynchronize.restype = c.c_int
+        rc = rt.cudaDeviceSynchronize()
+        if rc != 0:
+            raise RuntimeError("DLSS sync %s" % rc)
 
     def _read_output(self):
+        self._device_sync()
         c = self._ctypes
         rt = self._cudart
+        row = 3840 * 4 * int(self._out4.element_size())
         rt.cudaMemcpy2DFromArray.argtypes = [c.c_void_p, c.c_size_t, c.c_void_p, c.c_size_t, c.c_size_t, c.c_size_t, c.c_size_t, c.c_int]
         rt.cudaMemcpy2DFromArray.restype = c.c_int
-        rc = rt.cudaMemcpy2DFromArray(c.c_void_p(int(self._out4.data_ptr())), 3840 * 4, self._out_array, 0, 0, 3840 * 4, 2160, 3)
+        rc = rt.cudaMemcpy2DFromArray(c.c_void_p(int(self._out4.data_ptr())), row, self._out_array, 0, 0, row, 2160, 3)
         if rc != 0:
             raise RuntimeError("DLSS copy %s" % rc)
+        self._device_sync()
+
+    def _shown(self):
+        import torch
+        x = torch.nan_to_num(self._out4[..., :3].float(), nan=0.0, posinf=1.0, neginf=0.0)
+        if float(x.amax()) > 4.0:
+            x = x * (1.0 / 255.0)
+        return (x.clamp(0, 1) * 255.0).to(torch.uint8).contiguous()
 
     def _pictures(self, rgb, h, w):
         import torch
@@ -149,13 +169,13 @@ METHODS = '''
             missing = True
         if missing:
             rgba = torch.empty((h, w, 4), dtype=torch.float16, device="cuda")
-            out4 = torch.empty((2160, 3840, 4), dtype=torch.uint8, device="cuda")
+            out4 = torch.empty((2160, 3840, 4), dtype=torch.float16, device="cuda")
             zeros = torch.zeros((h, w, 2), dtype=torch.float32, device="cuda")
             depth = torch.ones((h, w, 1), dtype=torch.float32, device="cuda")
             self._tex_alive = []
             self._rgba, self._out4, self._zeros, self._depth = rgba, out4, zeros, depth
             self._color_array, self._color_tex = self._array_tex(w, h, 4, 3, 0)
-            self._out_array, self._out_tex = self._array_surf(3840, 2160)
+            self._out_array, self._out_tex = self._array_surf(3840, 2160, 3)
             self._motion_array, self._motion_tex = self._array_tex(w, h, 2, 2, 0)
             self._depth_array, self._depth_tex = self._array_tex(w, h, 1, 2, 0)
             self._to_array(self._motion_array, self._zeros)
@@ -169,7 +189,7 @@ METHODS = '''
         import torch
         z = getattr(self, "_out_zero", None)
         if z is None:
-            z = torch.zeros((2160, 3840, 4), dtype=torch.uint8, device="cuda")
+            z = torch.zeros((2160, 3840, 4), dtype=torch.float16, device="cuda")
             self._out_zero = z
         self._to_array(self._out_array, z)
 
@@ -205,9 +225,11 @@ def patch(text: str) -> str:
     text = text.replace('self._set_ui(b"Color.SizeInBytes", w * h * 3)', 'self._set_ui(b"Color.SizeInBytes", w * h * 8)', 1)
     text = text.replace('self._set_ui(b"Color.SizeInBytes", w * h * 4)', 'self._set_ui(b"Color.SizeInBytes", w * h * 8)', 1)
     text = text.replace('self._set_ptr(b"Output", c.c_void_p(out.data_ptr()))', 'self._set_ptr(b"Output", c.c_void_p(c.addressof(self._out_tex)))', 1)
-    text = text.replace('self._set_ui(b"Output.Format", RGB8UI)', 'self._set_ui(b"Output.Format", 4)', 1)
-    text = text.replace('self._set_ui(b"Output.Format", 3)', 'self._set_ui(b"Output.Format", 4)', 1)
-    text = text.replace('self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 3)', 'self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 4)', 1)
+    text = text.replace('self._set_ui(b"Output.Format", RGB8UI)', 'self._set_ui(b"Output.Format", 5)', 1)
+    text = text.replace('self._set_ui(b"Output.Format", 4)', 'self._set_ui(b"Output.Format", 5)', 1)
+    text = text.replace('self._set_ui(b"Output.Format", 3)', 'self._set_ui(b"Output.Format", 5)', 1)
+    text = text.replace('self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 3)', 'self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 8)', 1)
+    text = text.replace('self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 4)', 'self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 8)', 1)
     text = text.replace(
         'self._set_i(b"DLSS.Feature.Create.Flags", FLAG_AUTO_EXPOSURE)',
         'self._set_i(b"DLSS.Feature.Create.Flags", 0)',
@@ -221,14 +243,14 @@ def patch(text: str) -> str:
     text = text.replace('self._set_ptr(b"Depth", c.c_void_p(self._depth.data_ptr()))', 'self._set_ptr(b"Depth", c.c_void_p(c.addressof(self._depth_tex)))', 1)
     text = text.replace(
         "        return out\n",
-        "        self._read_output()\n        return self._out4[..., :3].contiguous()\n",
+        "        self._read_output()\n        return self._shown()\n",
         1,
     )
     if OLD_BUFFERS in text:
         text = text.replace(OLD_BUFFERS, "", 1)
     if "def _pictures(self, rgb, h, w):" not in text:
         text = text.replace("\n_session = None\n", METHODS + "\n_session = None\n", 1)
-    if "cudaCreateTextureObject" not in text or "def _bind_exposure" not in text or 'b"Color.Format", 5' not in text or 'b"DLSS.Feature.Create.Flags", 0' not in text:
+    if "cudaCreateTextureObject" not in text or "def _shown" not in text or 'b"Color.Format", 5' not in text or 'b"Output.Format", 5' not in text or 'b"DLSS.Feature.Create.Flags", 0' not in text:
         raise SystemExit("DLSS texture patch did not apply")
     return text
 
