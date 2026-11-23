@@ -2,6 +2,8 @@ name: Publish installer
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: write
@@ -25,6 +27,9 @@ jobs:
 
       - name: Use RTX Video Super Resolution instead of DLSS
         run: python installer/use_vsr.py
+
+      - name: Ask for 200 Mbps and overlap the frame check
+        run: python installer/faster.py
 
       - name: Join a stream that is already running
         run: python installer/patch_stream_join.py
