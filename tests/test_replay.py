@@ -311,7 +311,7 @@ def test_settings_and_their_memory_hints():
         m = re.search(r"about ([\d.]+) (MB|GB)", s.hints[secs])
         mb = float(m.group(1)) * (1000 if m.group(2) == "GB" else 1)
         assert abs(mb - replay.memory_mb(secs)) / replay.memory_mb(secs) < 0.05, secs
-    assert BY_KEY["replay_save"].default == "smoovplay"  # what was shown, unless asked for more
+    assert BY_KEY["replay_save"].default == "keel"  # what was shown, unless asked for more
     for k in ("replay_save", "replay_layout"):
         assert BY_KEY[k].applies[0] == "replay" and 0 not in BY_KEY[k].applies[1]
 

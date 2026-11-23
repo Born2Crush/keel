@@ -36,8 +36,8 @@ Needs:
 
 * Roslyn `csc.exe` from Visual Studio 2019+ Build Tools.
 * WPF's assemblies from `C:\Windows\Microsoft.NET\Framework64\v4.0.30319\WPF`, which are part of Windows.
-* The patched chiaki-ng build: `--chiaki-build <folder>`, or set `SMOOVPLAY_CHIAKI_BUILD`.
-* Its source checkout, which supplies the licence texts and the patch as a git diff: `--chiaki-src <folder>`, or set `SMOOVPLAY_CHIAKI_SRC`.
+* The patched chiaki-ng build: `--chiaki-build <folder>`, or set `KEEL_CHIAKI_BUILD`.
+* Its source checkout, which supplies the licence texts and the patch as a git diff: `--chiaki-src <folder>`, or set `KEEL_CHIAKI_SRC`.
 * `models\flownet_v4.22.lite.pkl`.
 
 `build.py` pins the embeddable Python's SHA-256, and setup refuses a download that doesn't match it.
@@ -72,7 +72,7 @@ Not handled in the app:
 
 ## Connect your PS5
 
-The launcher opens on this page the first time it runs. It has eight steps the user ticks off, and Keel remembers them in `%APPDATA%\framegen\smoovplay-launcher.txt`:
+The launcher opens on this page the first time it runs. It has eight steps the user ticks off, and Keel remembers them in `%APPDATA%\framegen\keel-launcher.txt`:
 
 1. Turn on Remote Play.
 2. Rest-mode settings (optional).
@@ -126,7 +126,7 @@ Uninstall (Help → Uninstall, or Apps & features) removes only what setup creat
 
 The launcher finds new releases on GitHub and, with a click, installs them itself.
 
-**Finding one.** When the launcher opens, it asks GitHub for the newest release in `RELEASES_REPO` (set in `build.py`; empty turns updates off). Drafts are skipped; pre-releases count, so betas can go out as pre-releases. Tags are versions: `v0.2.0`, `v0.2.0-beta.2`. The answer is cached for 6 hours in `%APPDATA%\framegen\smoovplay-update.txt` (shared by every install), and the request carries only the app's version, in its User-Agent. **Check for updates** under the version in the rail asks again straight away. A newer release shows **Update available: v0.2.0** there instead, and the Help page mentions it too.
+**Finding one.** When the launcher opens, it asks GitHub for the newest release in `RELEASES_REPO` (set in `build.py`; empty turns updates off). Drafts are skipped; pre-releases count, so betas can go out as pre-releases. Tags are versions: `v0.2.0`, `v0.2.0-beta.2`. The answer is cached for 6 hours in `%APPDATA%\framegen\keel-update.txt` (shared by every install), and the request carries only the app's version, in its User-Agent. **Check for updates** under the version in the rail asks again straight away. A newer release shows **Update available: v0.2.0** there instead, and the Help page mentions it too.
 
 **Installing it.** Clicking that line asks **Update to v0.2.0?** (Update now, What's new, Later). Update now:
 
@@ -139,24 +139,24 @@ The launcher finds new releases on GitHub and, with a click, installs them itsel
 3. Closes chiaki-ng if it's running from this install, starts `Keel-Setup.exe --update --dir <install> --wait <launcher pid>`, and closes the launcher.
 4. Setup waits for the launcher to exit, then runs its usual steps in place. Python and packages already there are kept, and pip only adds what changed. Engines stay cached, and settings, looks and clips are kept. Then it opens Keel again.
 
-The next launcher start deletes the downloaded setup. A dev launcher (`SMOOVPLAY_APP`), or a build without the update key, only links to the release page.
+The next launcher start deletes the downloaded setup. A dev launcher (`KEEL_APP`), or a build without the update key, only links to the release page.
 
 **Publishing a release.** Build with `--version`, then upload **both** `installer\dist\Keel-Setup.exe` and `Keel-Setup.exe.sig` to a GitHub release tagged `v<version>`. A release without the `.sig` only gets a link to its page.
 
-**The signing key.** The first build makes an RSA-3072 key at `%USERPROFILE%\.smoovplay\update-signing-key.xml` (`SMOOVPLAY_SIGNING_KEY` overrides it), outside the repo. Back it up somewhere safe and never commit it:
+**The signing key.** The first build makes an RSA-3072 key at `%USERPROFILE%\.keel\update-signing-key.xml` (`KEEL_SIGNING_KEY` overrides it), outside the repo. Back it up somewhere safe and never commit it:
 
 * Without it, installed copies can't update themselves. Running a new setup by hand still updates them.
 * With it, anyone could sign a setup that installed copies would accept.
 
 `installer\build\SignUpdate.exe sign <key> <file> <version>` signs a file by hand.
 
-**While the repo is private** GitHub's API hides its releases from anyone not signed in, so installed copies find no update. `SMOOVPLAY_GITHUB_TOKEN=<token>` lets a test machine see them; it's sent only to api.github.com, never to the download host it redirects to.
+**While the repo is private** GitHub's API hides its releases from anyone not signed in, so installed copies find no update. `KEEL_GITHUB_TOKEN=<token>` lets a test machine see them; it's sent only to api.github.com, never to the download host it redirects to.
 
 Test switches:
 
-* `SMOOVPLAY_UPDATE_CHECK=0` turns updates off.
-* `SMOOVPLAY_RELEASES_REPO=owner/name` points the check at another repo.
-* `SMOOVPLAY_RELEASES_API=http://127.0.0.1:<port>` sends it to a stand-in for GitHub's API.
+* `KEEL_UPDATE_CHECK=0` turns updates off.
+* `KEEL_RELEASES_REPO=owner/name` points the check at another repo.
+* `KEEL_RELEASES_API=http://127.0.0.1:<port>` sends it to a stand-in for GitHub's API.
 
 ## Command line
 
@@ -173,34 +173,34 @@ Keel.exe --check-signature file.exe      # exit 0 if Microsoft-signed (tests the
 
 Dev mode runs the launcher against a dev checkout:
 
-* `SMOOVPLAY_PYTHON` and `SMOOVPLAY_APP`: the venv Python and the repo.
-* `SMOOVPLAY_CHIAKI` and `SMOOVPLAY_CHIAKI_ARGS`: what "chiaki-ng" is. The fake PS5 stream can stand in for it.
-* `SMOOVPLAY_RUN_ARGS`: extra `run.py` arguments.
+* `KEEL_PYTHON` and `KEEL_APP`: the venv Python and the repo.
+* `KEEL_CHIAKI` and `KEEL_CHIAKI_ARGS`: what "chiaki-ng" is. The fake PS5 stream can stand in for it.
+* `KEEL_RUN_ARGS`: extra `run.py` arguments.
 
 Other test switches:
 
-* `SMOOVPLAY_SHOTS=<folder>`: saves a PNG of the window on every page or state change. WPF renders it itself, so it's never a screen capture.
-* `SMOOVPLAY_RECORD=<folder>`: records the window as video (`frames.mkv`, lossless, encoded on the GPU by ffmpeg on `PATH`) with each frame's time in `frames.txt`. Also rendered by WPF, never a screen capture. `SMOOVPLAY_RECORD_FPS` (default 30) and `SMOOVPLAY_RECORD_SCALE` (default 1.5) tune it. The frames arrive unevenly, so resample a recording to an even frame rate before editing it.
-* `SMOOVPLAY_SETTINGS=<file>`: uses this settings file instead of the real one, to show chosen settings without changing yours. Give `run.py` the same file (`--settings` in `SMOOVPLAY_RUN_ARGS`), or the Settings page and the pipeline read different files.
-* `SMOOVPLAY_PREFS=<file>`: keeps the guide's ticks out of the real profile.
-* `SMOOVPLAY_SOURCES=all`: also offers the video sources that aren't ready yet (`python -m framegen.sources`), with a picker on the Play page (`source-<kind>`), a setup guide for each, and a PC check card for a capture card in place of the home network. `SMOOVPLAY_CAPTURE=<index or video file>` is the capture card (a file stands in for one, played in real time through the capture path), and `SMOOVPLAY_SOURCE_FILE=<video file>` is the "Video file" source.
+* `KEEL_SHOTS=<folder>`: saves a PNG of the window on every page or state change. WPF renders it itself, so it's never a screen capture.
+* `KEEL_RECORD=<folder>`: records the window as video (`frames.mkv`, lossless, encoded on the GPU by ffmpeg on `PATH`) with each frame's time in `frames.txt`. Also rendered by WPF, never a screen capture. `KEEL_RECORD_FPS` (default 30) and `KEEL_RECORD_SCALE` (default 1.5) tune it. The frames arrive unevenly, so resample a recording to an even frame rate before editing it.
+* `KEEL_SETTINGS=<file>`: uses this settings file instead of the real one, to show chosen settings without changing yours. Give `run.py` the same file (`--settings` in `KEEL_RUN_ARGS`), or the Settings page and the pipeline read different files.
+* `KEEL_PREFS=<file>`: keeps the guide's ticks out of the real profile.
+* `KEEL_SOURCES=all`: also offers the video sources that aren't ready yet (`python -m framegen.sources`), with a picker on the Play page (`source-<kind>`), a setup guide for each, and a PC check card for a capture card in place of the home network. `KEEL_CAPTURE=<index or video file>` is the capture card (a file stands in for one, played in real time through the capture path), and `KEEL_SOURCE_FILE=<video file>` is the "Video file" source.
 * `FRAMEGEN_VFX_PATH=<folder>`: where NVIDIA VFG goes (a dev launcher only; an install always uses `runtime\vfx`). On the Settings page, under Interpolation model, **Set up NVIDIA VFG** shows NVIDIA's licence first, then runs `python -m framegen.vfg_setup --install --accept-nvidia-licence` into that folder (NVIDIA's pinned wheel from pypi.nvidia.com, output in `logs\vfg-setup.txt`) and picks it; **Remove** deletes it (only a folder with Keel's marker file). The NVIDIA VFG choice is greyed out until it's set up. Copy diagnostics leaves out a test report that includes NVIDIA VFG, because NVIDIA's licence forbids publishing its results.
-* `SMOOVPLAY_DETECT_ARGS=--timing 9.3,6.8`: Auto-detect uses these times (full, half motion detail, in ms) instead of timing the AI model, so UI tests don't load the graphics card.
-* `SMOOVPLAY_FAKE_CHECKS=vc,driver,display,lan,net,longpaths`: shows those checks as problems, to see the fix-it UI on a PC that passes. The fixes still act for real.
-* `SMOOVPLAY_TRACE=<file>`: developer tracing.
-* `SMOOVPLAY_SHOW_RESULTS=<results .txt>`: opens with that test report on the Play page, to see the results card without playing.
+* `KEEL_DETECT_ARGS=--timing 9.3,6.8`: Auto-detect uses these times (full, half motion detail, in ms) instead of timing the AI model, so UI tests don't load the graphics card.
+* `KEEL_FAKE_CHECKS=vc,driver,display,lan,net,longpaths`: shows those checks as problems, to see the fix-it UI on a PC that passes. The fixes still act for real.
+* `KEEL_TRACE=<file>`: developer tracing.
+* `KEEL_SHOW_RESULTS=<results .txt>`: opens with that test report on the Play page, to see the results card without playing.
 
 Every named element has a UI Automation id, so tests can drive the window: `Invoke` on buttons, `SelectionItem` on the rail, `Value` on the folder box. On the Settings page, switches are `Set_<key>` (`Toggle`) and dropdowns are `Set_<key>` (`ExpandCollapse`). A row of two to four choices is `Set_<key>`, and each choice `Set_<key>_<value>` (`SelectionItem`, its hint as `HelpText`); the frame-rate pick at the top is `Set_hz`, with `Set_hz_off` for frame generation off. A section's header is `SetFold_<group>` without spaces (`Invoke`; `ItemStatus` says open or closed); a setting that doesn't apply right now (FSR sharpening with RTX VSR picked, say) isn't shown. A dropdown's entries, `Set_<key>_<value>` (`SelectionItem`, e.g. `Set_hz_90`), exist once it has been expanded; look them up under the dropdown, not the window (the popup's own copy has no `SelectionItem`). `Set_<key>_later` is the "may come later" note, which can't be selected. Each entry's hint is its `HelpText`. Auto-detect: `BtnDetect`, `DetectProgress` while it runs, then `Detect_<key>` (a suggestion: "60 fps → 90 fps", or "Auto already set"), `BtnDetectApply` and `BtnDetectDismiss`.
 
 Use a separate tap name so a real chiaki-ng isn't disturbed:
 
 ```
-set SMOOVPLAY_PYTHON=%CD%\.venv\Scripts\python.exe
-set SMOOVPLAY_APP=%CD%
-set SMOOVPLAY_CHIAKI=%CD%\.venv\Scripts\python.exe
-set SMOOVPLAY_CHIAKI_ARGS=scripts\frametap_fake.py testdata\clip_1080p60.mp4 --seconds 20 --delay 1 --tap Local\sp-test
-set SMOOVPLAY_RUN_ARGS=--settings %TEMP%\sp-settings.json --no-minimize-chiaki --chiaki-tap Local\sp-test
-set SMOOVPLAY_SETTINGS=%TEMP%\sp-settings.json
+set KEEL_PYTHON=%CD%\.venv\Scripts\python.exe
+set KEEL_APP=%CD%
+set KEEL_CHIAKI=%CD%\.venv\Scripts\python.exe
+set KEEL_CHIAKI_ARGS=scripts\frametap_fake.py testdata\clip_1080p60.mp4 --seconds 20 --delay 1 --tap Local\sp-test
+set KEEL_RUN_ARGS=--settings %TEMP%\sp-settings.json --no-minimize-chiaki --chiaki-tap Local\sp-test
+set KEEL_SETTINGS=%TEMP%\sp-settings.json
 installer\dist\Keel.exe
 ```
 

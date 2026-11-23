@@ -22,7 +22,7 @@ import threading
 import time
 from dataclasses import asdict, dataclass, replace
 
-# Sources that work but aren't offered in the launcher: video files are for testing. SMOOVPLAY_SOURCES=all shows
+# Sources that work but aren't offered in the launcher: video files are for testing. KEEL_SOURCES=all shows
 # them anyway.
 HIDDEN = {"file"}
 # Offered as Experimental: built from the best information available, without the hardware to test every setup. The
@@ -257,7 +257,7 @@ def list_sources(show_all: bool = False) -> list[dict]:
 def main(argv: list[str] | None = None) -> int:
     import os
     argv = sys.argv[1:] if argv is None else argv
-    show_all = os.environ.get("SMOOVPLAY_SOURCES", "").lower() == "all" or "--all" in argv
+    show_all = os.environ.get("KEEL_SOURCES", "").lower() == "all" or "--all" in argv
     sources = list_sources(show_all)
     if "--json" in argv:
         print(json.dumps({"sources": sources}))

@@ -123,7 +123,7 @@ class DelayTest:
         return f"DELAY TEST: press {self.pressed} of {self.presses}" + (
             f"  PS5 answered in {np.median(self.ms):.0f} ms" if self.ms else "")
 
-    def result(self, smoovplay_ms: float | None) -> str:
+    def result(self, keel_ms: float | None) -> str:
         """The answer, in a line: the PS5 and Remote Play's part, Keel's, and the two together."""
         if self.error and not self.ms:
             return (f"Delay test: {self.error}. Try where Options opens a menu, standing still"
@@ -132,7 +132,7 @@ class DelayTest:
         remote = float(np.median(self.ms))
         text = (f"Delay test: PS5 and Remote Play {remote:.0f} ms (button sent to the answer arriving, median of "
                 f"{len(self.ms)})")
-        if smoovplay_ms is not None:
-            text += (f", Keel {smoovplay_ms:.0f} ms: {remote + smoovplay_ms:.0f} ms from button to "
+        if keel_ms is not None:
+            text += (f", Keel {keel_ms:.0f} ms: {remote + keel_ms:.0f} ms from button to "
                      "Keel's screen, plus your controller's link and your monitor")
         return text

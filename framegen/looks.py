@@ -43,7 +43,7 @@ W709 = (0.2126, 0.7152, 0.0722)  # luma weights
 
 
 def looks_dir() -> Path:
-    env = os.environ.get("SMOOVPLAY_LOOKS_DIR")
+    env = os.environ.get("KEEL_LOOKS_DIR")
     return Path(env) if env else Path(os.environ.get("APPDATA", Path.home())) / "framegen" / "looks"
 
 

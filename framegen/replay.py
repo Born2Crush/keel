@@ -277,9 +277,9 @@ def _cut(ring: list, start: int, end: int, at_key: bool = True) -> list:
 
 # ---- saving ---------------------------------------------------------------------------------------------------
 def videos_folder() -> Path:
-    """Where clips go: SMOOVPLAY_REPLAY_DIR if set, else Videos\\Keel (wherever Windows keeps Videos)."""
-    if os.environ.get("SMOOVPLAY_REPLAY_DIR"):
-        return Path(os.environ["SMOOVPLAY_REPLAY_DIR"])
+    """Where clips go: KEEL_REPLAY_DIR if set, else Videos\\Keel (wherever Windows keeps Videos)."""
+    if os.environ.get("KEEL_REPLAY_DIR"):
+        return Path(os.environ["KEEL_REPLAY_DIR"])
     base = Path.home() / "Videos"
     if sys.platform == "win32":
         try:
@@ -370,7 +370,7 @@ class Recorder:
     """Instant replay. The pipeline calls frame() for each frame it shows, real_frame() for each new frame from the
     game, and set_delay() with its delay; attach_sound() gives it the game's sound. save() writes a clip.
 
-    length_s: how much to keep (0: off; set_length changes it). clip: what save() writes by default ("smoovplay",
+    length_s: how much to keep (0: off; set_length changes it). clip: what save() writes by default ("keel",
     "compare" or "both"); layout: a before & after video's ("split" or "side"). device: "cuda" (YUV made on the
     graphics card), "cpu" (OpenCV), or "auto". notify(text, seconds): messages for the user (the window's toasts).
     hotkeys: Ctrl+Alt+R and Ctrl+Alt+B from anywhere while it's on. size: the stream's (w, h), so warm_up() can
@@ -380,7 +380,7 @@ class Recorder:
     on during play, the encoder's thread does it, and play pauses for that long once.
     """
 
-    def __init__(self, length_s: int = 0, clip: str = "smoovplay", layout: str = "split", out_dir: Path | None = None,
+    def __init__(self, length_s: int = 0, clip: str = "keel", layout: str = "split", out_dir: Path | None = None,
                  encoder: str | None = None, device: str = "auto", notify=None, hotkeys: bool = False,
                  drop_when_behind: bool = True, size: tuple | None = None, mark_dir: Path | None = None) -> None:
         self.clip, self.layout = clip, layout
@@ -812,7 +812,7 @@ class Recorder:
 
     # ---- saving
     def save(self, kind: str | None = None, layout: str | None = None, wait: bool = False) -> list:
-        """Save the replay: "smoovplay" (what was shown), "compare" (before & after) or "both"; default self.clip.
+        """Save the replay: "keel" (what was shown), "compare" (before & after) or "both"; default self.clip.
         In the background unless wait=True, which returns the files written."""
         kind, layout = kind or self.clip, layout or self.layout
         if not self.length:
@@ -864,7 +864,7 @@ class Recorder:
         folder.mkdir(parents=True, exist_ok=True)
         stamp = time.strftime("%Y-%m-%d %H-%M-%S")
         saved = []
-        if kind in ("smoovplay", "both"):
+        if kind in ("keel", "both"):
             path = _unique(folder / f"Keel {stamp}.mp4")
             t0 = time.perf_counter()
             to_mp4(path, (head, after), sound, base, end)
@@ -883,7 +883,7 @@ class Recorder:
             labels = (f"Original {_snap_fps(max(1, n_b - 1) / span_b)} fps",
                       f"Keel {_snap_fps((len(after) - 1) / max(1e-6, secs))} fps")
             path = _unique(folder / f"Keel {stamp} before and after.mp4")
-            tmp = Path(tempfile.mkdtemp(prefix="smoovplay-replay-"))
+            tmp = Path(tempfile.mkdtemp(prefix="keel-replay-"))
             _write_ts(tmp / "after.ts", head, after)
             _write_ts(tmp / "before.ts", bhead, before)
             cmd = [sys.executable, "-m", "framegen.replay", "compose", "--after", str(tmp / "after.ts"),

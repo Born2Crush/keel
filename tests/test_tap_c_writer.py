@@ -12,7 +12,7 @@ import pytest
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="the frame tap is Windows-only")
 
 ROOT = Path(__file__).resolve().parent.parent
-NAME = "Local\\smoovplay-tap-ctest"
+NAME = "Local\\keel-tap-ctest"
 GCC = next((p for p in (Path(r"C:\msys64\mingw64\bin\gcc.exe"), Path(r"D:\msys64\mingw64\bin\gcc.exe"))
             if p.exists()), None)
 

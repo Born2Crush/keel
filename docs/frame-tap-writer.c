@@ -5,7 +5,7 @@
 // as a repeat. Build and run (MSYS2 gcc or MSVC), then start Keel with `run.py --source tap --display`:
 //
 //   gcc -O2 -Wall -o frame-tap-writer.exe docs/frame-tap-writer.c
-//   frame-tap-writer.exe [frames, default 600] [shared-memory name, default Local\smoovplay-tap]
+//   frame-tap-writer.exe [frames, default 600] [shared-memory name, default Local\keel-tap]
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -111,7 +111,7 @@ static void tap_end(Tap *t)
 int main(int argc, char **argv)
 {
 	int frames = argc > 1 ? atoi(argv[1]) : 600;
-	const char *name = argc > 2 ? argv[2] : "Local\\smoovplay-tap";
+	const char *name = argc > 2 ? argv[2] : "Local\\keel-tap";
 	const uint32_t w = 1920, h = 1080;
 	Tap tap = {0};
 	if(!tap_open(&tap, name) || !tap_begin(&tap, TAP_CODEC_BGRA, w, h, 60))

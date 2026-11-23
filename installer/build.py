@@ -5,7 +5,7 @@
 
 The setup is signed for updates (Keel-Setup.exe.sig, which goes up to the release with it): the launcher
 installs an update only if its signature checks out against the public key built into it. The private key stays on
-this PC, outside the repo: %USERPROFILE%\\.smoovplay\\update-signing-key.xml (SMOOVPLAY_SIGNING_KEY overrides
+this PC, outside the repo: %USERPROFILE%\\.keel\\update-signing-key.xml (KEEL_SIGNING_KEY overrides
 it), made by the first build. Back it up: without it, installed copies can't update themselves (a new setup run by
 hand still updates them).
 
@@ -33,8 +33,8 @@ import numpy as np
 
 VERSION = "0.3.12"  # a pre-release sorts before its release: 0.1.0-beta.2 and 0.1.0 both show as updates
 # "owner/name" of the GitHub repo whose releases the launcher checks for updates; empty turns the check off
-RELEASES_REPO = "smoovplay/smoovplay"
-SIGNING_KEY = Path(os.environ.get("SMOOVPLAY_SIGNING_KEY") or Path.home() / ".smoovplay" / "update-signing-key.xml")
+RELEASES_REPO = "Born2Crush/keel"
+SIGNING_KEY = Path(os.environ.get("KEEL_SIGNING_KEY") or Path.home() / ".keel" / "update-signing-key.xml")
 PYTHON_VERSION = "3.12.10"
 PYTHON_URL = f"https://www.python.org/ftp/python/{PYTHON_VERSION}/python-{PYTHON_VERSION}-embed-amd64.zip"
 # python.org lists only an MD5 for this file (fe8ef205f2e9c3ba44d0cf9954e1abd3, which matched); this is its SHA-256.
@@ -99,9 +99,9 @@ def write_buildinfo(sha: str, update_key: str) -> Path:
 def icon_rgba(size: int) -> np.ndarray:
     """The app icon at one size, BGRA: a purple K up to 32 px, the full KEEL word from 40 px.
     Each size is a PNG in installer/icon, drawn from the Keel mark."""
-    img = cv2.imread(str(HERE / "icon" / f"smoovplay-{size}.png"), cv2.IMREAD_UNCHANGED)
+    img = cv2.imread(str(HERE / "icon" / f"keel-{size}.png"), cv2.IMREAD_UNCHANGED)
     if img is None or img.shape != (size, size, 4):
-        sys.exit(f"[build] installer/icon/smoovplay-{size}.png is missing or not {size}x{size} RGBA")
+        sys.exit(f"[build] installer/icon/keel-{size}.png is missing or not {size}x{size} RGBA")
     return img
 
 
@@ -253,11 +253,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--launcher-only", action="store_true", help="build only Keel.exe")
     ap.add_argument("--version", default=VERSION, help=f"the version to build (default {VERSION}), e.g. 0.2.0-beta.1")
-    ap.add_argument("--chiaki-build", type=Path, default=os.environ.get("SMOOVPLAY_CHIAKI_BUILD"),
+    ap.add_argument("--chiaki-build", type=Path, default=os.environ.get("KEEL_CHIAKI_BUILD"),
                     help="the patched chiaki-ng build folder (chiaki_tap/build_windows.sh output); "
-                         "default: SMOOVPLAY_CHIAKI_BUILD")
-    ap.add_argument("--chiaki-src", type=Path, default=os.environ.get("SMOOVPLAY_CHIAKI_SRC"),
-                    help="the chiaki-ng source checkout it was built from; default: SMOOVPLAY_CHIAKI_SRC")
+                         "default: KEEL_CHIAKI_BUILD")
+    ap.add_argument("--chiaki-src", type=Path, default=os.environ.get("KEEL_CHIAKI_SRC"),
+                    help="the chiaki-ng source checkout it was built from; default: KEEL_CHIAKI_SRC")
     a = ap.parse_args()
     if not re.fullmatch(r"\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?", a.version):
         sys.exit(f"[build] {a.version} isn't a version like 0.2.0 or 0.2.0-beta.1")
@@ -267,7 +267,7 @@ def main() -> int:
     DIST.mkdir(parents=True, exist_ok=True)
     tool = sign_tool()
     sources = sorted((HERE / "launcher").glob("*.cs")) + [write_buildinfo(python_sha256(), update_key(tool))]
-    icon = BUILD / "smoovplay.ico"
+    icon = BUILD / "keel.ico"
     write_ico(icon)
     cv2.imwrite(str(BUILD / "icon-256.png"), icon_rgba(256))
     launcher = DIST / "Keel.exe"
@@ -275,8 +275,8 @@ def main() -> int:
     if a.launcher_only:
         return 0
     if a.chiaki_build is None or a.chiaki_src is None:
-        sys.exit("[build] say where chiaki-ng is: --chiaki-build and --chiaki-src, or set SMOOVPLAY_CHIAKI_BUILD "
-                 "and SMOOVPLAY_CHIAKI_SRC")
+        sys.exit("[build] say where chiaki-ng is: --chiaki-build and --chiaki-src, or set KEEL_CHIAKI_BUILD "
+                 "and KEEL_CHIAKI_SRC")
     for p, what in ((a.chiaki_build / "chiaki.exe", "chiaki-ng build"), (a.chiaki_src / "COPYING", "chiaki-ng source")):
         if not p.exists():
             sys.exit(f"[build] {what} not found ({p})")

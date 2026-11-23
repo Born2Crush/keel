@@ -31,7 +31,7 @@ from .chiaki_tap import (AUDIO_SUFFIX, CODEC_NAMES, CODECS, COLOURS, FEATURE_VAR
 from .io import Tick
 from .sync import CAPTURE_LOCK
 
-DEFAULT_NAME = "Local\\smoovplay-tap"  # chiaki-ng's is Local\chiaki-frametap
+DEFAULT_NAME = "Local\\keel-tap"  # chiaki-ng's is Local\chiaki-frametap
 
 
 def wait_for_writer(tap: FrameTap, wait_s: float) -> Header:

@@ -41,7 +41,7 @@ before it's shown, with what it knows about it:
 .venv\Scripts\python scripts\frametap_send.py testdata\clip_1080p60.mp4 --hints    # in another terminal
 ```
 
-Either can start first. `run.py --tap NAME` reads another name (in the launcher: set `SMOOVPLAY_TAP=NAME` before
+Either can start first. `run.py --tap NAME` reads another name (in the launcher: set `KEEL_TAP=NAME` before
 starting it). `frametap_send.py` options:
 
 - `--format bgra` sends BGRA instead of NV12.
@@ -54,7 +54,7 @@ Windows only. Three named objects, all opened with "create, or open if it exists
 
 | Object | Name | What |
 |---|---|---|
-| File mapping | `Local\smoovplay-tap` (any name; `run.py --tap NAME`) | The header and the frame slots: always **4096 + 64 MiB = 67,112,960 bytes** |
+| File mapping | `Local\keel-tap` (any name; `run.py --tap NAME`) | The header and the frame slots: always **4096 + 64 MiB = 67,112,960 bytes** |
 | Auto-reset event | the name + `-frame` | Set after each frame, so the reader wakes at once |
 | File mapping (optional) | the name + `-audio` | The [sound ring](#sound-optional): 64 + 512 × 8192 = 4,194,368 bytes |
 

@@ -250,7 +250,7 @@ def test_passes():
 
 # ---- the launcher's way in
 def test_the_command_line(lib, monkeypatch, capsys, tmp_path):
-    monkeypatch.setenv("SMOOVPLAY_LOOKS_DIR", str(tmp_path))
+    monkeypatch.setenv("KEEL_LOOKS_DIR", str(tmp_path))
 
     def run(*argv, stdin=""):
         monkeypatch.setattr("sys.stdin", io.StringIO(stdin))
@@ -294,7 +294,7 @@ def test_the_remote_link_takes_look_commands():
     assert seen == [("show", {"name": "x", "nodes": []}), "hide", "reload"]
 
 
-def test_looks_in_clips_only_on_the_smoovplay_side(tmp_path):
+def test_looks_in_clips_only_on_the_keel_side(tmp_path):
     from test_replay import _feed, _probe
     from framegen import replay
     import av

@@ -1,13 +1,13 @@
-# Snapshots of the launcher at several window sizes, for checking the layout (SMOOVPLAY_SHOTS: the window as WPF
+# Snapshots of the launcher at several window sizes, for checking the layout (KEEL_SHOTS: the window as WPF
 # renders it, never a screen capture). Opens and closes the launcher once per case, with its own prefs and settings
 # files, so your own are never touched. Uses the GPU only to draw the window.
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\launcher_shots.ps1 [-Exe installer\dist\Keel.exe] [-Only settings]
 #
-# Dev mode needs SMOOVPLAY_PYTHON (a Python with the app's packages), or -Python. Writes out\launcher_shots\<case>\.
+# Dev mode needs KEEL_PYTHON (a Python with the app's packages), or -Python. Writes out\launcher_shots\<case>\.
 param(
     [string]$Exe = "installer\dist\Keel.exe",
-    [string]$Python = $env:SMOOVPLAY_PYTHON,
+    [string]$Python = $env:KEEL_PYTHON,
     [string]$Out = "out\launcher_shots",
     [int]$Seconds = 7,
     [string]$Only = ""  # only the cases whose name starts with this, e.g. "settings"
@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent $PSScriptRoot
 $Exe = (Resolve-Path (Join-Path $repo $Exe)).Path
-if (-not $Python) { throw "Say which Python: -Python or SMOOVPLAY_PYTHON" }
+if (-not $Python) { throw "Say which Python: -Python or KEEL_PYTHON" }
 $Out = Join-Path $repo $Out
 
 $groups = "set-open:Smoothness", "set-open:Picture", "set-open:Display", "set-open:PS5 Remote Play"
@@ -43,9 +43,9 @@ foreach ($v in "FRAMEGEN_VFX_PATH", "FRAMEGEN_TRT_PATH", "NV_RTX_VIDEO_SDK") {  
         if ($u) { Set-Item "env:$v" $u }
     }
 }
-$env:SMOOVPLAY_PYTHON = $Python
-$env:SMOOVPLAY_APP = $repo
-$env:SMOOVPLAY_UPDATE_CHECK = "0"
+$env:KEEL_PYTHON = $Python
+$env:KEEL_APP = $repo
+$env:KEEL_UPDATE_CHECK = "0"
 
 foreach ($c in $cases) {
     $name, $page, $size, $prefs, $settings = $c
@@ -58,10 +58,10 @@ foreach ($c in $cases) {
     Set-Content -Encoding ascii (Join-Path $tmp "prefs.txt") (@("guide-seen") + $prefs)
     $sfile = Join-Path $tmp "settings.json"
     if ($settings) { [IO.File]::WriteAllText($sfile, $settings) }
-    $env:SMOOVPLAY_SHOTS = $dir
-    $env:SMOOVPLAY_SIZE = $size
-    $env:SMOOVPLAY_PREFS = Join-Path $tmp "prefs.txt"
-    $env:SMOOVPLAY_SETTINGS = $sfile
+    $env:KEEL_SHOTS = $dir
+    $env:KEEL_SIZE = $size
+    $env:KEEL_PREFS = Join-Path $tmp "prefs.txt"
+    $env:KEEL_SETTINGS = $sfile
     $p = Start-Process -FilePath $Exe -ArgumentList "--page", $page -PassThru
     Start-Sleep -Seconds $Seconds
     if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }

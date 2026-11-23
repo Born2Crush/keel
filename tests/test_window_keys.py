@@ -62,7 +62,7 @@ def test_after_the_first_seconds_only_the_usual_takers(monkeypatch, capsys):
     s.fg = (200, "steam.exe")
     _poll(w)
     assert s.brought == 1  # later, a program that isn't one of ours is left alone
-    for exe in ("smoovplay.exe", "explorer.exe", "chiaki.exe"):
+    for exe in ("keel.exe", "explorer.exe", "chiaki.exe"):
         s.fg = (200, exe)
         _poll(w)
     assert s.brought == 4

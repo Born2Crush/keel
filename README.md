@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/smoovplay-lockup-dark.svg">
-    <img src="docs/brand/smoovplay-lockup.svg" width="440" alt="Keel">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/keel-lockup-dark.svg">
+    <img src="docs/brand/keel-lockup.svg" width="440" alt="Keel">
   </picture>
 </h1>
 
@@ -10,12 +10,8 @@
   Play 30 fps console games at 60, 90 or up to 120 fps on your PC, with real-time AI frame generation and upscaling on the video your console sends.
 </p>
 
-<p align="center">The original project is SmoovPlay, under the MIT license.</p>
-
 <p align="center">
-  <a href="https://github.com/smoovplay/smoovplay/releases/latest"><b>⬇ Download for Windows</b></a>
-  &nbsp;·&nbsp; <a href="https://smoovplay.github.io/"><b>🌐 Website</b></a>
-  &nbsp;·&nbsp; <a href="https://smoovplay.github.io/compare/"><b>▶ Watch it at full frame rate</b></a>
+  <a href="https://github.com/Born2Crush/keel/releases/latest"><b>⬇ Download for Windows</b></a>
   &nbsp;·&nbsp; <a href="#what-it-does">What it does</a>
   &nbsp;·&nbsp; <a href="#get-it">Install</a>
   &nbsp;·&nbsp; <a href="#how-it-works">How it works</a>
@@ -23,18 +19,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Status: early release" src="https://img.shields.io/badge/status-early%20release-7C5CFF?style=flat-square"></a>
-  <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Downloads of Keel-Setup.exe, all releases" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsmoovplay%2Fsmoovplay%2Fstats%2Fdownloads.json&style=flat-square"></a>
+  <a href="https://github.com/Born2Crush/keel/releases"><img alt="Status: early release" src="https://img.shields.io/badge/status-early%20release-7C5CFF?style=flat-square"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-3A4250?style=flat-square">
   <img alt="Graphics: NVIDIA RTX 30, 40 or 50 series; AMD and Intel as an Experimental option" src="https://img.shields.io/badge/GPU-NVIDIA%20RTX%2030%20%7C%2040%20%7C%2050%2C%20AMD%20%26%20Intel%20experimental-3A4250?style=flat-square">
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3A4250?style=flat-square"></a>
-</p>
-
-<p align="center">
-  <a href="https://smoovplay.github.io/compare/"><img src="https://smoovplay.github.io/compare/media/poster60.jpg" width="880" alt="A 30 fps PS5 Remote Play stream left of a dividing line and Keel's output right of it. Opens the comparison page."></a><br>
-  <a href="https://smoovplay.github.io/compare/"><b>▶ See six clips at full frame rate</b></a>: split, side by side, or flip between the 30 fps stream
-  and Keel at 60 or 90 fps, played at their real frame rate. Most social sites play video at 60 fps or less.<br>
-  <sub>GTA VI gameplay © Rockstar Games (An Extended Look), run through Keel as a simulated Remote Play stream.</sub>
 </p>
 
 <p align="center">
@@ -45,8 +33,7 @@ Keel streams your console to your PC, where your graphics card draws new frames 
 sends, live. A 30 fps game plays at **60, 90 or up to 120 fps** to match your screen, sharpened to fit it.
 There's nothing to install on the console, and it's free and open source.
 
-**New here?** The website, [smoovplay.github.io](https://smoovplay.github.io/), shows what it does and
-[how it works](https://smoovplay.github.io/how-it-works/), with a step-by-step start and an FAQ.
+**New here?** Start with [What it does](#what-it-does) and [Install](#get-it).
 
 ## What it does
 
@@ -102,7 +89,7 @@ Updates are signed: an installed copy checks Keel's signature before it runs one
 | **Network** | Ethernet for the console and the PC, or 5 GHz or 6 GHz Wi-Fi (not needed with a capture card) |
 | **Screen** | Any: 60 Hz gets 60 fps, 90 Hz gets 90, 120 Hz or faster gets up to 120. G-Sync or FreeSync helps. |
 
-**1. Install.** Download `Keel-Setup.exe` from [Releases](https://github.com/smoovplay/smoovplay/releases/latest)
+**1. Install.** Download `Keel-Setup.exe` from [Releases](https://github.com/Born2Crush/keel/releases/latest)
 and run it. It isn't code-signed yet, so your browser and Windows warn you first:
 [here's how to get past it](#smartscreen). Setup takes 10 to 20 minutes and never asks for admin rights.
 
@@ -133,7 +120,7 @@ So the first time, you get past two warnings:
 2. **Windows** says "Windows protected your PC" when you run it. Click **More info**, then **Run anyway**.
 
 Setup installs for your Windows user only, so it never asks for admin rights. To be sure you have the real file,
-download it only from this repo's [Releases](https://github.com/smoovplay/smoovplay/releases) page and compare its
+download it only from this repo's [Releases](https://github.com/Born2Crush/keel/releases) page and compare its
 SHA-256 with the one listed there (`Get-FileHash .\Keel-Setup.exe` in PowerShell). Updates from inside the app
 must carry Keel's signature before they run.
 </details>
@@ -233,7 +220,7 @@ Keel is new, so finding what breaks is the most useful help right now:
   window, or an AMD or Intel card. Most have met only one or two real setups so far, so any report helps, even "it
   didn't start".
 
-Report bugs and feedback in [Issues](https://github.com/smoovplay/smoovplay/issues). In the app, **Help → Copy
+Report bugs and feedback in [Issues](https://github.com/Born2Crush/keel/issues). In the app, **Help → Copy
 diagnostics** copies your PC and settings details: paste them in with the game and what happened.
 
 ### Only have 60 fps games? Use test mode
@@ -258,7 +245,7 @@ console, as you would in Sony's app.
 
 Turn off HDCP on the PS5: **Settings → System → HDMI**, turn off **Enable HDCP**, then connect again. Turn it back
 on for video apps like Netflix when you're done. Still black? Press **Q**, then **Help → Copy diagnostics**, and
-paste it into an [issue](https://github.com/smoovplay/smoovplay/issues).
+paste it into an [issue](https://github.com/Born2Crush/keel/issues).
 </details>
 
 <details>
@@ -343,7 +330,7 @@ replay and Looks work inside, the scheduler, upscaling, NVIDIA VFG, measured res
 ## Credits and licences
 
 Thanks to everyone who has reported issues and sent fixes: see the
-[contributors](https://github.com/smoovplay/smoovplay/graphs/contributors) and the [changelog](CHANGELOG.md).
+[contributors](https://github.com/Born2Crush/keel/graphs/contributors) and the [changelog](CHANGELOG.md).
 
 RIFE by hzwer ([Practical-RIFE](https://github.com/hzwer/Practical-RIFE), MIT). Model definitions and weights
 from [vs-rife](https://github.com/HolyWu/vs-rife) by HolyWu (MIT). FSR 1 shaders by AMD

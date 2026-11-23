@@ -21,7 +21,7 @@ namespace Keel
 
         static string RepoUrl
         {
-            get { return "https://github.com/" + (BuildInfo.ReleasesRepo.Length > 0 ? BuildInfo.ReleasesRepo : "smoovplay/smoovplay"); }
+            get { return "https://github.com/" + (BuildInfo.ReleasesRepo.Length > 0 ? BuildInfo.ReleasesRepo : "Born2Crush/keel"); }
         }
 
         /// <summary>The new-issue page for feedback on a feature ("" for general feedback), with the form's title and

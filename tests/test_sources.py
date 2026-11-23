@@ -255,7 +255,7 @@ def test_capture_cards_app_windows_and_the_frame_tap_are_marked_experimental():
 def test_run_py_lists_sources_quickly_without_loading_the_pipeline():
     t0 = time.perf_counter()
     r = subprocess.run([sys.executable, str(ROOT / "run.py"), "--list-sources", "--json"], capture_output=True,
-                       text=True, cwd=ROOT, env={**os.environ, "SMOOVPLAY_SOURCES": ""})
+                       text=True, cwd=ROOT, env={**os.environ, "KEEL_SOURCES": ""})
     assert r.returncode == 0, r.stderr
     data = json.loads(r.stdout)
     assert [s["kind"] for s in data["sources"]] == ["chiaki", "capture", "window", "tap", "file"]

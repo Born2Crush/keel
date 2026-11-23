@@ -63,7 +63,7 @@ FULL_SCREEN = "in full screen"  # find_windows' reason for a Store app in full s
 # screen, switching to another window (the launcher, to press Look again) suspends it and takes its window out.
 STORE_PACKAGES = {"microsoft.gamingapp_8wekyb3d8bbwe": "xboxpcapp.exe"}
 SKIP_EXE = {"explorer.exe", "textinputhost.exe", STORE_FRAME, "shellexperiencehost.exe",
-            "searchhost.exe", "startmenuexperiencehost.exe", "systemsettings.exe", "smoovplay.exe"}
+            "searchhost.exe", "startmenuexperiencehost.exe", "systemsettings.exe", "keel.exe"}
 CHECK_S = 0.5  # how often the window's place is looked at
 RETRY_S = 10.0  # capture that keeps failing is tried again for this long (a screen mode change can take seconds)
 

@@ -98,16 +98,16 @@ def unavailable_reason() -> str | None:
 
 def pick_adapter() -> dict:
     """The adapter with the most dedicated memory (the graphics card, not integrated graphics).
-    SMOOVPLAY_DML_ADAPTER=<index> picks one instead (e.g. to try integrated graphics)."""
+    KEEL_DML_ADAPTER=<index> picks one instead (e.g. to try integrated graphics)."""
     found = adapters()
     if not found:
         raise RuntimeError("no DirectX 12 graphics adapter found")
-    forced = os.environ.get("SMOOVPLAY_DML_ADAPTER")
+    forced = os.environ.get("KEEL_DML_ADAPTER")
     if forced is not None:
         for a in found:
             if a["index"] == int(forced):
                 return a
-        raise RuntimeError(f"SMOOVPLAY_DML_ADAPTER={forced}: no such adapter ({[a['index'] for a in found]})")
+        raise RuntimeError(f"KEEL_DML_ADAPTER={forced}: no such adapter ({[a['index'] for a in found]})")
     return max(found, key=lambda a: a["vram_gb"])
 
 

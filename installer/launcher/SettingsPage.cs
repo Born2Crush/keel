@@ -823,7 +823,7 @@ namespace Keel
             if (page == "PageSettings") SnapLater("settings-state", 400);
         }
 
-        /// <summary>SMOOVPLAY_SHOTS: a dropdown's list is a popup (a window of its own), so the usual snapshot
+        /// <summary>KEEL_SHOTS: a dropdown's list is a popup (a window of its own), so the usual snapshot
         /// leaves it out. This one draws it over the window where it opened.</summary>
         void SnapDropDown(ComboBox drop, string key)
         {

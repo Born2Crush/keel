@@ -331,10 +331,10 @@ SPECS: tuple[Spec, ...] = (
          impact={"picture": "None.",
                  "speed": "About 0.3 ms of graphics card time a frame; the encoding is on its video encoder, not "
                           "the AI's part."}),
-    Spec("replay_save", "Saved clip", ("smoovplay", "compare", "both"), "smoovplay",
-         {"smoovplay": "Keel video", "compare": "Before & after", "both": "Both"},
+    Spec("replay_save", "Saved clip", ("keel", "compare", "both"), "keel",
+         {"keel": "Keel video", "compare": "Before & after", "both": "Both"},
          group="Instant replay", applies=("replay", (30, 60, 120, 300)),
-         hints={"smoovplay": "What you saw, with the game's sound. Saved in a second or two.",
+         hints={"keel": "What you saw, with the game's sound. Saved in a second or two.",
                 "compare": "The game's own frames next to Keel's, in one video. Made in the background, in "
                            "about as long as the clip.",
                 "both": "Both videos."},

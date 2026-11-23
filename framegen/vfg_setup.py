@@ -30,7 +30,7 @@ PACKAGE, VERSION = "nvidia-vfx", "0.2.0.0"
 WHEEL_SHA256 = "cebaa12411f7e22b39293205c5c4d07b8073d14ca1e0e7727ee4375207a36445"
 INDEX = "https://pypi.nvidia.com"
 SIZE_MB = 540  # installed size, for the launcher's "about 540 MB"
-MARKER = "smoovplay-vfg.json"
+MARKER = "keel-vfg.json"
 MIN_COMPUTE = (8, 9)  # Ada (RTX 40) and newer. NVIDIA doesn't support VFG on RTX 20/30; nothing here works around it.
 LICENCES = {
     "NVIDIA Software License Agreement":
@@ -122,7 +122,7 @@ def install(folder: str, proxy: str = "") -> int:
         print(f"[vfg] {folder} already has files that Keel didn't put there; not touching it")
         return 2
     staging = target.with_name(target.name + ".partial")
-    sentinel = staging / ".smoovplay-staging"
+    sentinel = staging / ".keel-staging"
     if staging.exists():
         if not sentinel.exists():
             print(f"[vfg] {staging} is in the way and isn't Keel's; move it and try again")

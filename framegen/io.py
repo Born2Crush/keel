@@ -682,7 +682,7 @@ class GLWindowSink:
     # Programs that take the keys by themselves during play: chiaki-ng (its stream window), the launcher (minimising
     # itself) and the desktop (where the keys land when the window in front goes away). Any program in the first
     # seconds, when the window has just opened.
-    TAKERS = ("chiaki.exe", "smoovplay.exe", "explorer.exe", "")
+    TAKERS = ("chiaki.exe", "keel.exe", "explorer.exe", "")
 
     def settle(self) -> None:
         """Four times a second: in the first seconds, settle_hook (run.py: minimise chiaki-ng again if it showed its
@@ -794,8 +794,8 @@ class GLWindowSink:
 
     # ---- presentation ----------------------------------------------------------
     def _set_icon(self, glfw) -> None:
-        """Keel's logo in the title bar and on the taskbar instead of Python's: the plain SP at 16-32 px, the
-        full logo at 48 and 64 (framegen/assets, from docs/brand). A missing icon never stops a session."""
+        """Keel's logo in the title bar and on the taskbar instead of Python's: a K at 16-32 px, the
+        KEEL word at 48 and 64 (framegen/assets). A missing icon never stops a session."""
         try:
             from pathlib import Path
 

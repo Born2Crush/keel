@@ -12,16 +12,16 @@
 //                --uninstall [--yes]                                               remove an installed copy
 //                --diagnostics <file>                                              write what "Copy diagnostics" copies
 //                --page <check|play|guide|settings|looks|help>                           open the launcher on that page
-// Dev/testing:   SMOOVPLAY_PYTHON, SMOOVPLAY_APP, SMOOVPLAY_CHIAKI, SMOOVPLAY_CHIAKI_ARGS environment variables run
+// Dev/testing:   KEEL_PYTHON, KEEL_APP, KEEL_CHIAKI, KEEL_CHIAKI_ARGS environment variables run
 //                the launcher against a dev checkout (e.g. the repo's venv with scripts\frametap_fake.py as "chiaki");
-//                SMOOVPLAY_RUN_ARGS adds arguments to run.py; SMOOVPLAY_TRACE=<file> traces; SMOOVPLAY_PREFS=<file>
-//                keeps the launcher's own memory (the PS5 guide's ticks) somewhere else; SMOOVPLAY_SHOTS=<folder>
-//                saves a PNG of the window on every page or state change; SMOOVPLAY_RECORD=<folder> records it as
-//                video (Ui.StartRecorder); SMOOVPLAY_SETTINGS=<file> reads another settings.json.
-//                SMOOVPLAY_SOURCES=all offers the sources that aren't ready yet (video files) on the Play page;
-//                SMOOVPLAY_WINDOW=<app> overrides the app window picked there (framegen/window.py's --window),
-//                SMOOVPLAY_CAPTURE=<name|index|video file> overrides the capture card picked there, and
-//                SMOOVPLAY_SOURCE_FILE=<video file> feeds the video file source.
+//                KEEL_RUN_ARGS adds arguments to run.py; KEEL_TRACE=<file> traces; KEEL_PREFS=<file>
+//                keeps the launcher's own memory (the PS5 guide's ticks) somewhere else; KEEL_SHOTS=<folder>
+//                saves a PNG of the window on every page or state change; KEEL_RECORD=<folder> records it as
+//                video (Ui.StartRecorder); KEEL_SETTINGS=<file> reads another settings.json.
+//                KEEL_SOURCES=all offers the sources that aren't ready yet (video files) on the Play page;
+//                KEEL_WINDOW=<app> overrides the app window picked there (framegen/window.py's --window),
+//                KEEL_CAPTURE=<name|index|video file> overrides the capture card picked there, and
+//                KEEL_SOURCE_FILE=<video file> feeds the video file source.
 // Built by installer\build.py, which also generates BuildInfo.cs (version, Python download and its SHA-256).
 
 using System;
@@ -82,8 +82,8 @@ namespace Keel
                                            System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
         }
 
-        static readonly string TraceFile = Environment.GetEnvironmentVariable("SMOOVPLAY_TRACE");
-        /// <summary>Developer tracing (SMOOVPLAY_TRACE=file): timestamped, with the thread id.</summary>
+        static readonly string TraceFile = Environment.GetEnvironmentVariable("KEEL_TRACE");
+        /// <summary>Developer tracing (KEEL_TRACE=file): timestamped, with the thread id.</summary>
         public static void Trace(string msg)
         {
             if (string.IsNullOrEmpty(TraceFile)) return;
@@ -175,16 +175,16 @@ namespace Keel
 
         public static Paths Detect()
         {
-            string py = Environment.GetEnvironmentVariable("SMOOVPLAY_PYTHON");
+            string py = Environment.GetEnvironmentVariable("KEEL_PYTHON");
             if (string.IsNullOrEmpty(py))
                 return ForInstall(ExeDir);
             var p = new Paths { Dev = true, Python = py };
-            p.App = Environment.GetEnvironmentVariable("SMOOVPLAY_APP") ?? ExeDir;
+            p.App = Environment.GetEnvironmentVariable("KEEL_APP") ?? ExeDir;
             p.Install = p.App;
             p.Runtime = Path.Combine(Path.GetTempPath(), "Keel-dev");
-            p.Chiaki = Environment.GetEnvironmentVariable("SMOOVPLAY_CHIAKI") ?? "";
-            p.ChiakiArgs = Environment.GetEnvironmentVariable("SMOOVPLAY_CHIAKI_ARGS") ?? "";
-            p.RunArgs = Environment.GetEnvironmentVariable("SMOOVPLAY_RUN_ARGS") ?? "";
+            p.Chiaki = Environment.GetEnvironmentVariable("KEEL_CHIAKI") ?? "";
+            p.ChiakiArgs = Environment.GetEnvironmentVariable("KEEL_CHIAKI_ARGS") ?? "";
+            p.RunArgs = Environment.GetEnvironmentVariable("KEEL_RUN_ARGS") ?? "";
             p.Logs = Path.Combine(p.Runtime, "logs");
             p.Ready = Path.Combine(p.Runtime, "ready.txt");
             p.Vfx = Environment.GetEnvironmentVariable("FRAMEGEN_VFX_PATH") ?? Path.Combine(p.Runtime, "vfx");
@@ -216,10 +216,10 @@ namespace Keel
         {
             get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "framegen"); }
         }
-        /// <summary>The pipeline's settings (SMOOVPLAY_SETTINGS overrides it, for tests and recordings).</summary>
+        /// <summary>The pipeline's settings (KEEL_SETTINGS overrides it, for tests and recordings).</summary>
         public static string SettingsFile
         {
-            get { return Environment.GetEnvironmentVariable("SMOOVPLAY_SETTINGS") ?? Path.Combine(SettingsDir, "settings.json"); }
+            get { return Environment.GetEnvironmentVariable("KEEL_SETTINGS") ?? Path.Combine(SettingsDir, "settings.json"); }
         }
         public bool RuntimeReady { get { return Dev ? File.Exists(Python) : File.Exists(Ready) && File.Exists(Python); } }
         public bool IsInstall { get { return File.Exists(Path.Combine(App, "run.py")); } }
@@ -750,7 +750,7 @@ namespace Keel
     }
 
     /// <summary>The video sources. PS5 Remote Play is the one offered; capture cards and video files work in the
-    /// pipeline but are hidden until they're ready (SMOOVPLAY_SOURCES=all shows them, for testing).</summary>
+    /// pipeline but are hidden until they're ready (KEEL_SOURCES=all shows them, for testing).</summary>
     static class Sources
     {
         public static readonly SourceDef RemotePlay = new SourceDef { Kind = "chiaki", Name = "PS5 Remote Play" };
@@ -815,15 +815,15 @@ namespace Keel
         public static string RunArgs(string kind, string video = null, string audio = null)
         {
             if (kind == "capture")
-                return "--source capture --capture " + Quote(Environment.GetEnvironmentVariable("SMOOVPLAY_CAPTURE") ?? video ?? "0")
+                return "--source capture --capture " + Quote(Environment.GetEnvironmentVariable("KEEL_CAPTURE") ?? video ?? "0")
                        + (audio != null ? " --capture-audio " + Quote(audio) : "");
             if (kind == "window")  // video: the app's window, as AppWindows.Query gives it
-                return "--source window --window " + Quote(Environment.GetEnvironmentVariable("SMOOVPLAY_WINDOW") ?? video ?? "ps-remote-play");
-            if (kind == "tap")  // SMOOVPLAY_TAP: another shared-memory name (docs/frame-tap.md)
-                return "--source tap" + (Environment.GetEnvironmentVariable("SMOOVPLAY_TAP") != null
-                                         ? " --tap " + Quote(Environment.GetEnvironmentVariable("SMOOVPLAY_TAP")) : "");
+                return "--source window --window " + Quote(Environment.GetEnvironmentVariable("KEEL_WINDOW") ?? video ?? "ps-remote-play");
+            if (kind == "tap")  // KEEL_TAP: another shared-memory name (docs/frame-tap.md)
+                return "--source tap" + (Environment.GetEnvironmentVariable("KEEL_TAP") != null
+                                         ? " --tap " + Quote(Environment.GetEnvironmentVariable("KEEL_TAP")) : "");
             if (kind == "file")
-                return "--source file " + Quote(Environment.GetEnvironmentVariable("SMOOVPLAY_SOURCE_FILE") ?? "") + " --raw --realtime";
+                return "--source file " + Quote(Environment.GetEnvironmentVariable("KEEL_SOURCE_FILE") ?? "") + " --raw --realtime";
             return "--source chiaki";
         }
 
@@ -1404,7 +1404,7 @@ namespace Keel
     {
         static string File_
         {
-            get { return Environment.GetEnvironmentVariable("SMOOVPLAY_PREFS") ?? Path.Combine(Paths.SettingsDir, "smoovplay-launcher.txt"); }
+            get { return Environment.GetEnvironmentVariable("KEEL_PREFS") ?? Path.Combine(Paths.SettingsDir, "keel-launcher.txt"); }
         }
 
         public static HashSet<string> Load()

@@ -13,7 +13,7 @@ from framegen.chiaki_tap import (CAPACITY, FEATURE_VARIABLE, FLAG_NEW, FLAG_REPE
                                  FrameTap, raw_layout)
 from framegen.io import Tick, Waiting  # noqa: E402
 
-NAME = "Local\\smoovplay-tap-test"
+NAME = "Local\\keel-tap-test"
 
 
 @pytest.fixture

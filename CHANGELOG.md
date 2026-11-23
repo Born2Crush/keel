@@ -4,41 +4,41 @@
 
 **App window** (Experimental)
 - **The Xbox app in full screen is no longer just missing from the list**
-  ([#49](https://github.com/smoovplay/smoovplay/issues/49), [#43](https://github.com/smoovplay/smoovplay/issues/43)). In
+  ([#49](https://github.com/Born2Crush/keel/issues/49), [#43](https://github.com/Born2Crush/keel/issues/43)). In
   full screen, Windows moves a Store app's window out of the list of windows Keel reads, so the Xbox app wasn't
   offered, and nothing said why. The launcher now says it's in full screen and how to leave it (its full screen button,
   or Shift+Win+Enter), and so does Play. In a window, it's found as before.
 
 **Smoothness**
 - **Auto motion detail picks Half on cards too slow for Full**
-  ([#46](https://github.com/smoovplay/smoovplay/issues/46)). Auto used Full at 60 and 90 fps on any card, and on an RTX
+  ([#46](https://github.com/Born2Crush/keel/issues/46)). Auto used Full at 60 and 90 fps on any card, and on an RTX
   2080 Ti Full doesn't keep up even at 60. Auto-detect now keeps its timings, and Auto goes by them: Half wherever Full
   won't keep up at the frame rate you picked. On an existing install, run Auto-detect once (at the top of the Settings
   page) to save them.
 
 **AMD and Intel graphics** (Experimental)
-- **The delay test (L) no longer slows the picture** ([#48](https://github.com/smoovplay/smoovplay/issues/48)). It read
+- **The delay test (L) no longer slows the picture** ([#48](https://github.com/Born2Crush/keel/issues/48)). It read
   every pixel of each frame on the CPU, which cost about 5 ms a frame without an NVIDIA card and dropped the frame rate
   while it ran. It now reads every 4th pixel, with the same result. Thanks to
   [@DEATHRIDER28310](https://github.com/DEATHRIDER28310) for measuring it!
 
 **Video window**
-- **F goes full screen on the monitor the window is on** ([#30](https://github.com/smoovplay/smoovplay/issues/30)). It
+- **F goes full screen on the monitor the window is on** ([#30](https://github.com/Born2Crush/keel/issues/30)). It
   always filled the main monitor, so a window moved to a second screen jumped back to the first.
 
 ## 0.3.11
 
 **App window** (Experimental)
 - **No more "Python is not responding" and a black picture after a few seconds**
-  ([#33](https://github.com/smoovplay/smoovplay/issues/33), [#34](https://github.com/smoovplay/smoovplay/issues/34)).
+  ([#33](https://github.com/Born2Crush/keel/issues/33), [#34](https://github.com/Born2Crush/keel/issues/34)).
   Keel checked for its shortcuts (Ctrl+Alt+M and the rest) in a way that made Windows treat the video window as
   not responding after 5 seconds. Windows then put a frozen copy of the window on screen, which window capture read
   back as a black picture, and offered to close Keel. Thanks to
-  [@KazimeirzOdnowiciel](https://github.com/KazimeirzOdnowiciel) ([#39](https://github.com/smoovplay/smoovplay/pull/39))!
+  [@KazimeirzOdnowiciel](https://github.com/KazimeirzOdnowiciel) ([#39](https://github.com/Born2Crush/keel/pull/39))!
 
 **Capture cards** (Experimental)
-- **A damaged frame from the card no longer stops capture** ([#38](https://github.com/smoovplay/smoovplay/issues/38),
-  [#41](https://github.com/smoovplay/smoovplay/issues/41)). Cards and sticks that send compressed video (MJPEG), as
+- **A damaged frame from the card no longer stops capture** ([#38](https://github.com/Born2Crush/keel/issues/38),
+  [#41](https://github.com/Born2Crush/keel/issues/41)). Cards and sticks that send compressed video (MJPEG), as
   many USB ones do at 1080p 60, sometimes send a frame that can't be read, often right at the start. Keel
   stopped capturing at the first one, so the video window closed straight away or never showed a picture. Such frames
   are now skipped, and the log counts them. If none of the card's frames can be read for 5 seconds, capture stops
@@ -46,13 +46,13 @@
   graphics card to the CPU.
 
 **AMD and Intel graphics** (Experimental)
-- **Less CPU use while playing** ([#40](https://github.com/smoovplay/smoovplay/issues/40)). Without an NVIDIA card,
+- **Less CPU use while playing** ([#40](https://github.com/Born2Crush/keel/issues/40)). Without an NVIDIA card,
   part of Keel's work runs on the CPU every frame, and the threads doing it kept most of the CPU's cores busy
   between frames while they waited for the next one. They now wait asleep.
 
 **Diagnostics**
 - **The results no longer say the PC is falling behind at 60 fps when it keeps up**
-  ([#20](https://github.com/smoovplay/smoovplay/issues/20)). At 60 fps they counted frames waiting for the screen's
+  ([#20](https://github.com/Born2Crush/keel/issues/20)). At 60 fps they counted frames waiting for the screen's
   next refresh as the PC falling behind, but with VSync every frame waits for it, so a fast PC looked slow. The
   verdict now goes by how long each frame took to make, and a new line says how many took longer than a 60 fps frame
   lasts. At 90 and 120 fps it still goes by how many of the extra frames were shown.
@@ -63,32 +63,32 @@
 ## 0.3.10
 
 **Capture cards** (Experimental)
-- **Game frame rate: 30 fps no longer hitches on a capture card** ([#20](https://github.com/smoovplay/smoovplay/issues/20)).
+- **Game frame rate: 30 fps no longer hitches on a capture card** ([#20](https://github.com/Born2Crush/keel/issues/20)).
   When the PC fell behind for a moment and a frame was dropped, Keel lost count of which frames were new, and
   catching up a moment later showed as a hitch. Frames are now numbered as they come off the card, so a dropped one
   no longer moves the count.
-- **The card's sound is found on AVerMedia cards** ([#23](https://github.com/smoovplay/smoovplay/issues/23)). Names
+- **The card's sound is found on AVerMedia cards** ([#23](https://github.com/Born2Crush/keel/issues/23)). Names
   ending in "-Video" and "-Audio" now match, and AVerMedia's extra sound device called "Not To Use" is never picked.
   Before, the two tied and Keel played the picture without sound.
 
 **App window** (Experimental)
 - **Capture keeps trying for 10 seconds when Windows takes it away**
-  ([#21](https://github.com/smoovplay/smoovplay/issues/21)), for example when the screen changes mode. It used to
+  ([#21](https://github.com/Born2Crush/keel/issues/21)), for example when the screen changes mode. It used to
   give up after two seconds. The log now says Windows' reason in words.
 
 **Setup**
 - **Keel installs into a folder whose name has letters outside English**
-  ([#24](https://github.com/smoovplay/smoovplay/issues/24)), such as Chinese, or an accented Windows user name.
+  ([#24](https://github.com/Born2Crush/keel/issues/24)), such as Chinese, or an accented Windows user name.
   Setup's "Optimise for your graphics card" step failed there.
 
 **Test mode**
 - **Simulate a 30 fps game turns itself off on a game that's at 30 fps already**
-  ([#26](https://github.com/smoovplay/smoovplay/issues/26)). It halved such a game to 15 fps, which stutters. It
+  ([#26](https://github.com/Born2Crush/keel/issues/26)). It halved such a game to 15 fps, which stutters. It
   stays on through a 60 fps game's 30 fps cutscenes. In the video window's menu (M) it's now under Smoothness, next
   to Game frame rate.
 
 **Diagnostics**
-- **The log says how evenly the game's frames arrived** ([#25](https://github.com/smoovplay/smoovplay/issues/25)):
+- **The log says how evenly the game's frames arrived** ([#25](https://github.com/Born2Crush/keel/issues/25)):
   frames that came late or bunched together point at Wi-Fi or the capture, not the PC.
 - **Copy diagnostics includes your last game session's log**, also when copied right after setup.
 
@@ -112,21 +112,21 @@
   unless PS5 Remote Play is picked. Switches that can't be changed now look it.
 
 **Frame tap** (Experimental, for app developers)
-- **Another app's frames aren't called chiaki-ng any more** ([#18](https://github.com/smoovplay/smoovplay/issues/18)).
+- **Another app's frames aren't called chiaki-ng any more** ([#18](https://github.com/Born2Crush/keel/issues/18)).
   For an app sending compressed video through the frame tap, the log says "[tap] frames: ..." and the notes say
   "the app", and a chiaki-ng running on its own is no longer minimised.
 
 ## 0.3.7
 
 **AMD and Intel graphics** (Experimental)
-- **chiaki-ng draws with OpenGL on AMD and Intel graphics** ([#19](https://github.com/smoovplay/smoovplay/issues/19),
+- **chiaki-ng draws with OpenGL on AMD and Intel graphics** ([#19](https://github.com/Born2Crush/keel/issues/19),
   a Radeon RX 9070 XT). chiaki-ng's default, Vulkan (which also decodes with Vulkan), crashed there. Keel
   shows the picture itself, so chiaki-ng's own window, hidden behind it, loses nothing. It's for Keel's
   sessions only: chiaki-ng's saved setting stays as it is. On NVIDIA nothing changes.
 
 **Display**
 - **Fill the screen, for ultrawide screens** (Settings, Display; key **Z** in the video window;
-  [#19](https://github.com/smoovplay/smoovplay/issues/19)). Consoles only send a 16:9 picture, to a TV, a capture
+  [#19](https://github.com/Born2Crush/keel/issues/19)). Consoles only send a 16:9 picture, to a TV, a capture
   card or Remote Play, so there's no more of the game to show: this isn't real ultrawide, just different ways of
   laying out the same 16:9 picture. **Fit** keeps all of it with black bars (the default, as before). **Zoom** fills
   the screen by cutting off the top and bottom, which can cut the HUD. **Stretch** makes everything wider.
@@ -150,7 +150,7 @@
   for clean video. Not with HDR output yet.
 
 **Capture cards** (Experimental)
-- **Fewer pops in a capture card's sound, in heavy games too** ([#17](https://github.com/smoovplay/smoovplay/issues/17)).
+- **Fewer pops in a capture card's sound, in heavy games too** ([#17](https://github.com/Born2Crush/keel/issues/17)).
   0.3.5 fixed most of the popping, but a little was left in a heavy game. Three things could still cause it:
   - Keel gave Windows only about 20 ms of sound at a time, and a busy moment in Keel could make the next
     lot later than that. Windows now gets about 50 ms, taken off the sound's delay, so it stays in step.
@@ -166,7 +166,7 @@
 ## 0.3.5
 
 **Capture cards** (Experimental)
-- **No more popping in a capture card's sound** ([#17](https://github.com/smoovplay/smoovplay/issues/17), an Elgato
+- **No more popping in a capture card's sound** ([#17](https://github.com/Born2Crush/keel/issues/17), an Elgato
   HD60 X). The card's sound comes in 20 ms packets, and when the picture's delay was shorter than that (31 ms with
   NVIDIA VFG at 120 fps, less the sound output's own delay), Keel's sound ran out before the next packet: a
   short gap many times a second, heard as pops as loud as the game. It now always keeps a packet and a little more
@@ -174,7 +174,7 @@
 
 **Settings**
 - **The launcher's Upscaler list says RTX VSR isn't in the installed app yet**
-  ([#17](https://github.com/smoovplay/smoovplay/issues/17)). It needs NVIDIA's RTX Video SDK, which can't be
+  ([#17](https://github.com/Born2Crush/keel/issues/17)). It needs NVIDIA's RTX Video SDK, which can't be
   included, so picking it used AMD FSR 1, and the list didn't say so.
 
 ## 0.3.4
@@ -190,7 +190,7 @@
   dips. While it's smoothing it adds 17 to 50 ms of delay (more for longer dips, and more at 90 fps than at 60 or
   120), and every frame shown is a generated one, so the graphics card works harder: on a busy card some of the
   extra 90 or 120 fps frames fall back to 60 (in our test at 90 fps, 79-83% were shown against 97% with it off). If
-  you try it, tell us how it went in a [GitHub issue](https://github.com/smoovplay/smoovplay/issues).
+  you try it, tell us how it went in a [GitHub issue](https://github.com/Born2Crush/keel/issues).
 
 **Play**
 - **The in-video menu is in sections, so it's no longer one long list.** Press M: the main page has the quick picks
@@ -224,30 +224,30 @@
 **Play**
 - **Steady HUD works with NVIDIA VFG too**, not only RIFE: the map, health bar and subtitles stay as the game drew
   them while the scene behind them moves. Still off by default (Settings, Smoothness). Thanks to
-  [@Vadko](https://github.com/Vadko) ([#11](https://github.com/smoovplay/smoovplay/pull/11))!
+  [@Vadko](https://github.com/Vadko) ([#11](https://github.com/Born2Crush/keel/pull/11))!
 - **Auto-detect tells RTX 40 and 50 series owners their card can run NVIDIA VFG**, with a button to set it up.
   Nothing is downloaded until you accept NVIDIA's licence, and once it's set up, Auto-detect times it and suggests it
-  if it keeps up. Thanks to [@Vadko](https://github.com/Vadko) ([#7](https://github.com/smoovplay/smoovplay/pull/7))!
+  if it keeps up. Thanks to [@Vadko](https://github.com/Vadko) ([#7](https://github.com/Born2Crush/keel/pull/7))!
 
 **Fixes**
 - **Fullscreen keeps Windows' HDR on.** With Use HDR on in Windows, fullscreen switched the display to SDR while the
   video was in front and back to HDR with every Alt+Tab or click, so the colours kept changing (and fullscreen could
   look yellowish). With Windows' HDR on, the video window now uses the DXGI presentation, and fullscreen is a
   borderless window, so the display stays in HDR. Thanks to [@Vadko](https://github.com/Vadko)
-  ([#6](https://github.com/smoovplay/smoovplay/pull/6))!
+  ([#6](https://github.com/Born2Crush/keel/pull/6))!
 - **Each choice on the Settings page shows its own tooltip** as the mouse moves along a row (AMD FSR 1, NVIDIA RTX
   VSR, Bilinear), instead of the first one's staying up. Thanks to [@Vadko](https://github.com/Vadko)
-  ([#10](https://github.com/smoovplay/smoovplay/pull/10))!
+  ([#10](https://github.com/Born2Crush/keel/pull/10))!
 
 **Capture cards** (Experimental)
 - **Sound from cards that carry it on their video device**, as the AVerMedia Live Gamer 4K (GC573) does
-  ([#9](https://github.com/smoovplay/smoovplay/issues/9)). Keel only looked for a separate sound device named
+  ([#9](https://github.com/Born2Crush/keel/issues/9)). Keel only looked for a separate sound device named
   like the card; when there's none, it now tries the card itself, and plays the picture alone if that has no sound
   either.
 
 **Setup**
 - **A folder Windows won't let Keel write to is caught before installing**, such as a Program Files folder on
-  another drive ([#9](https://github.com/smoovplay/smoovplay/issues/9)). Setup used to stop with an "access denied"
+  another drive ([#9](https://github.com/Born2Crush/keel/issues/9)). Setup used to stop with an "access denied"
   error; it now tries writing there first (leaving nothing behind) and asks for another folder.
 
 ## 0.3.1
@@ -279,12 +279,12 @@
   between 30 and 60 fps and that its frames were evened out.
 - **chiaki-ng stays minimised after Alt+Tab.** It was only minimised in the stream's first seconds, so after
   switching to its window and back, its unsmoothed picture stayed up beside Keel's. Thanks to
-  [@Vadko](https://github.com/Vadko) ([#5](https://github.com/smoovplay/smoovplay/pull/5))!
+  [@Vadko](https://github.com/Vadko) ([#5](https://github.com/Born2Crush/keel/pull/5))!
 - **The PC check recognises 6 GHz Wi-Fi** (Windows 11), which it used to call 2.4 or 5 GHz. Thanks to
-  [@Vadko](https://github.com/Vadko) ([#4](https://github.com/smoovplay/smoovplay/pull/4))!
+  [@Vadko](https://github.com/Vadko) ([#4](https://github.com/Born2Crush/keel/pull/4))!
 
 **Capture cards** (Experimental)
-- **Finding cards is sturdier** ([#2](https://github.com/smoovplay/smoovplay/issues/2), an Elgato HD60 X that
+- **Finding cards is sturdier** ([#2](https://github.com/Born2Crush/keel/issues/2), an Elgato HD60 X that
   wasn't listed):
   - Keel now reads device names from Windows' list without loading each camera's driver, as OBS does. Before,
     it opened every camera and virtual camera to see what it carried, so one faulty driver could stop the whole
@@ -300,8 +300,8 @@
   Keel can't read yet: it uses 8-bit, so turn HDR off on the console if the picture looks washed out.
 
 **App window** (Experimental)
-- **The Xbox app is found again** ([#1](https://github.com/smoovplay/smoovplay/issues/1),
-  [#3](https://github.com/smoovplay/smoovplay/issues/3)). Its current version runs as XboxPcAppCE.exe, which
+- **The Xbox app is found again** ([#1](https://github.com/Born2Crush/keel/issues/1),
+  [#3](https://github.com/Born2Crush/keel/issues/3)). Its current version runs as XboxPcAppCE.exe, which
   Keel didn't know, and Microsoft Store apps draw inside a frame window that Keel skipped. Both are listed
   now, under the app's own name.
 - **When a streaming app is running but can't be picked** (in the tray, on another desktop, too small), the Play

@@ -3,11 +3,11 @@
 // While a stream plays the launcher waits in the taskbar, its button showing a coloured dot, and comes back up when
 // the session ends or fails.
 //
-// SMOOVPLAY_SHOTS=<folder> saves a PNG of the window (rendered by WPF itself, never a screen capture) whenever the
+// KEEL_SHOTS=<folder> saves a PNG of the window (rendered by WPF itself, never a screen capture) whenever the
 // page or state changes, for testing and docs.
-// SMOOVPLAY_RECORD=<folder> records it frame by frame the same way, for demo videos (see StartRecorder).
-// SMOOVPLAY_SHOW_RESULTS=<results .txt> opens with that test report on the Play page, for testing the card.
-// SMOOVPLAY_SIZE=<width>x<height> opens at that size, centred (and saves neither), for snapshots at several sizes.
+// KEEL_RECORD=<folder> records it frame by frame the same way, for demo videos (see StartRecorder).
+// KEEL_SHOW_RESULTS=<results .txt> opens with that test report on the Play page, for testing the card.
+// KEEL_SIZE=<width>x<height> opens at that size, centred (and saves neither), for snapshots at several sizes.
 
 using System;
 using System.Collections.Concurrent;
@@ -51,7 +51,7 @@ namespace Keel
         bool allowClose, finishSetup;
         string page;
         readonly HashSet<string> prefs;
-        readonly string shots = Environment.GetEnvironmentVariable("SMOOVPLAY_SHOTS");
+        readonly string shots = Environment.GetEnvironmentVariable("KEEL_SHOTS");
         int shotNo;
         string updateUrl, updateTag;  // the newer release's page and tag, once UpdateCheck finds one
         bool updating;  // downloading it (Updater)
@@ -140,7 +140,7 @@ namespace Keel
         /// It doesn't maximise: the layout is made for a window, and it keeps its shadow.</summary>
         void WireSize()
         {
-            string forced = Environment.GetEnvironmentVariable("SMOOVPLAY_SIZE");
+            string forced = Environment.GetEnvironmentVariable("KEEL_SIZE");
             string saved = forced ?? prefs.Where(p => p.StartsWith("window:")).Select(p => p.Substring(7)).FirstOrDefault();
             var m = Regex.Match(saved ?? "", @"^\s*(\d+)\s*x\s*(\d+)\s*$");
             if (m.Success)
@@ -585,7 +585,7 @@ namespace Keel
             T("CheckTitle").Text = "Your PC";
             T("CheckSub").Text = "What Keel found. Anything that needs attention can be fixed from here.";
             SetPlayState(PlayState.Idle, null);
-            string showResults = Environment.GetEnvironmentVariable("SMOOVPLAY_SHOW_RESULTS");  // testing and docs
+            string showResults = Environment.GetEnvironmentVariable("KEEL_SHOW_RESULTS");  // testing and docs
             if (!string.IsNullOrEmpty(showResults) && File.Exists(showResults)) ShowResults(showResults);
             if (!paths.RuntimeReady) { ShowFinishSetup(); return; }
             LoadSettingSpecs();
@@ -2460,12 +2460,12 @@ namespace Keel
         }
 
         // ------------------------------------------------------------------------------------------- recording
-        // SMOOVPLAY_RECORD=<folder> records the window as WPF renders it (never the screen), for demo videos:
+        // KEEL_RECORD=<folder> records the window as WPF renders it (never the screen), for demo videos:
         // <folder>\frames.mkv (lossless, encoded on the GPU by ffmpeg on PATH; the rounded corners come out black),
-        // frames.txt (when each frame was taken, ms) and size.txt. SMOOVPLAY_RECORD_FPS (30) and _SCALE (1.5).
+        // frames.txt (when each frame was taken, ms) and size.txt. KEEL_RECORD_FPS (30) and _SCALE (1.5).
         void StartRecorder()
         {
-            string dir = Environment.GetEnvironmentVariable("SMOOVPLAY_RECORD");
+            string dir = Environment.GetEnvironmentVariable("KEEL_RECORD");
             if (string.IsNullOrEmpty(dir)) return;
             Func<string, double, double> num = (name, dflt) =>
             {
@@ -2473,7 +2473,7 @@ namespace Keel
                 return double.TryParse(Environment.GetEnvironmentVariable(name), System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out v) && v > 0 ? v : dflt;
             };
-            double fps = num("SMOOVPLAY_RECORD_FPS", 30), scale = num("SMOOVPLAY_RECORD_SCALE", 1.5);
+            double fps = num("KEEL_RECORD_FPS", 30), scale = num("KEEL_RECORD_SCALE", 1.5);
             Directory.CreateDirectory(dir);
             var root = E<Grid>("Root");
             var queue = new System.Collections.Concurrent.BlockingCollection<byte[]>(240);

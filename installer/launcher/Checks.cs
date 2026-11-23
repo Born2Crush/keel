@@ -89,9 +89,9 @@ namespace Keel
             if (Faked(c.Id)) Fake(c);
         }
 
-        // ---- testing: SMOOVPLAY_FAKE_CHECKS=vc,driver,display,lan,net,longpaths shows those as problems, to try the fixes'
+        // ---- testing: KEEL_FAKE_CHECKS=vc,driver,display,lan,net,longpaths shows those as problems, to try the fixes'
         // looks on a PC that passes everything. (The fixes themselves still act for real.)
-        static readonly string[] fakes = (Environment.GetEnvironmentVariable("SMOOVPLAY_FAKE_CHECKS") ?? "").Split(',');
+        static readonly string[] fakes = (Environment.GetEnvironmentVariable("KEEL_FAKE_CHECKS") ?? "").Split(',');
         static bool Faked(string id) { return fakes.Contains(id); }
 
         static void Fake(Check c)
@@ -563,7 +563,7 @@ namespace Keel
             catch (Exception) { return null; }  // FolderProblem says why
             while (probe != null && !Directory.Exists(probe)) probe = Path.GetDirectoryName(probe);
             if (probe == null) return null;
-            string test = Path.Combine(probe, ".smoovplay-write-test-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            string test = Path.Combine(probe, ".keel-write-test-" + Guid.NewGuid().ToString("N").Substring(0, 8));
             try
             {
                 Directory.CreateDirectory(test);

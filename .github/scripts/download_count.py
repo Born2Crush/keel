@@ -15,7 +15,7 @@ import sys
 import urllib.request
 
 SETUP = "Keel-Setup.exe"
-REPO = os.environ.get("GITHUB_REPOSITORY", "smoovplay/smoovplay")
+REPO = os.environ.get("GITHUB_REPOSITORY", "Born2Crush/keel")
 BASELINE = pathlib.Path(__file__).resolve().parent.parent / "download-baseline.json"
 
 
@@ -24,7 +24,7 @@ def live_counts() -> dict[str, int]:
     out, page = {}, 1
     while True:
         req = urllib.request.Request(f"https://api.github.com/repos/{REPO}/releases?per_page=100&page={page}",
-                                     headers={"Accept": "application/vnd.github+json", "User-Agent": "smoovplay-stats"})
+                                     headers={"Accept": "application/vnd.github+json", "User-Agent": "keel-stats"})
         if os.environ.get("GITHUB_TOKEN"):
             req.add_header("Authorization", f"Bearer {os.environ['GITHUB_TOKEN']}")
         with urllib.request.urlopen(req, timeout=30) as r:

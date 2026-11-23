@@ -47,7 +47,7 @@ namespace Keel
                     using (var w = new StreamWriter(log, false))
                     {
                         string args = "-m framegen.autodetect --settings \"" + Paths.SettingsFile + "\" "
-                                      + Environment.GetEnvironmentVariable("SMOOVPLAY_DETECT_ARGS");  // testing: --timing FULL,HALF
+                                      + Environment.GetEnvironmentVariable("KEEL_DETECT_ARGS");  // testing: --timing FULL,HALF
                         rc = Proc.Run(Proc.Python(paths.Python, args, paths.App), line =>
                         {
                             lock (w) w.WriteLine(line);

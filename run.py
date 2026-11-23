@@ -304,7 +304,7 @@ def main() -> int:
                          "Simulate a 30 fps game). Remote Play, a capture card, or a video file with --raw")
     ap.add_argument("--chiaki-tap", default=None, help=argparse.SUPPRESS)  # another shared-memory name, for tests
     ap.add_argument("--tap", metavar="NAME", default=None,
-                    help="--source tap: the frame tap's shared-memory name (default Local\\smoovplay-tap; "
+                    help="--source tap: the frame tap's shared-memory name (default Local\\keel-tap; "
                          "docs/frame-tap.md)")
     ap.add_argument("--raw", action="store_true",
                     help="play the file's frames as-is (a real capture recording) instead of simulating PS5 30fps")

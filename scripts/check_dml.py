@@ -1,7 +1,7 @@
 """Checks the DirectML engine (framegen/dml.py) against the CUDA engine on real frames, and times it.
 
     .venv\\Scripts\\python scripts\\check_dml.py testdata\\skate_1080p60.mp4
-    set SMOOVPLAY_DML_ADAPTER=1 && .venv\\Scripts\\python scripts\\check_dml.py testdata\\skate_1080p60.mp4
+    set KEEL_DML_ADAPTER=1 && .venv\\Scripts\\python scripts\\check_dml.py testdata\\skate_1080p60.mp4
 
 Without an NVIDIA card it skips the comparison and only times DirectML. The second form runs on another graphics
 adapter (the indexes are listed first), e.g. integrated graphics.

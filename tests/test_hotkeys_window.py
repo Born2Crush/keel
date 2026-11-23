@@ -1,6 +1,6 @@
 """App window mode's shortcuts for real (framegen/hotkeys.py): a GLFW window whose thread holds system-wide shortcuts
 stays answering past Windows' 5 s hang check, and a shortcut pressed still arrives. It shows a small window for about
-7 s and presses keys through SendInput, so it only runs when asked: SMOOVPLAY_WINDOW_TESTS=1, with nobody playing.
+7 s and presses keys through SendInput, so it only runs when asked: KEEL_WINDOW_TESTS=1, with nobody playing.
 The stand-in tests are in test_hotkeys.py."""
 import ctypes
 import os
@@ -13,8 +13,8 @@ from framegen.hotkeys import Hotkeys, parse
 
 pytestmark = [
     pytest.mark.skipif(sys.platform != "win32", reason="Windows' shortcuts and hang check"),
-    pytest.mark.skipif(os.environ.get("SMOOVPLAY_WINDOW_TESTS") != "1",
-                       reason="shows a window and presses keys: set SMOOVPLAY_WINDOW_TESTS=1"),
+    pytest.mark.skipif(os.environ.get("KEEL_WINDOW_TESTS") != "1",
+                       reason="shows a window and presses keys: set KEEL_WINDOW_TESTS=1"),
 ]
 
 

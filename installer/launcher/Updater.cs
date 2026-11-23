@@ -22,8 +22,8 @@ namespace Keel
 
     /// <summary>
     /// GitHub's releases API. The repo is BuildInfo.ReleasesRepo (empty: no updates). For testing,
-    /// SMOOVPLAY_RELEASES_REPO picks another repo, SMOOVPLAY_RELEASES_API another server (a local stand-in), and
-    /// SMOOVPLAY_GITHUB_TOKEN is sent to the API, which a private repo needs; never to where downloads redirect.
+    /// KEEL_RELEASES_REPO picks another repo, KEEL_RELEASES_API another server (a local stand-in), and
+    /// KEEL_GITHUB_TOKEN is sent to the API, which a private repo needs; never to where downloads redirect.
     /// Requests carry only the app's version, in the User-Agent.
     /// </summary>
     static class GitHub
@@ -34,13 +34,13 @@ namespace Keel
         {
             get
             {
-                string r = Environment.GetEnvironmentVariable("SMOOVPLAY_RELEASES_REPO") ?? BuildInfo.ReleasesRepo;
+                string r = Environment.GetEnvironmentVariable("KEEL_RELEASES_REPO") ?? BuildInfo.ReleasesRepo;
                 return Regex.IsMatch(r ?? "", @"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$") ? r : null;
             }
         }
 
-        static string Api { get { return (Environment.GetEnvironmentVariable("SMOOVPLAY_RELEASES_API") ?? "https://api.github.com").TrimEnd('/'); } }
-        static string Token { get { return Environment.GetEnvironmentVariable("SMOOVPLAY_GITHUB_TOKEN"); } }
+        static string Api { get { return (Environment.GetEnvironmentVariable("KEEL_RELEASES_API") ?? "https://api.github.com").TrimEnd('/'); } }
+        static string Token { get { return Environment.GetEnvironmentVariable("KEEL_GITHUB_TOKEN"); } }
 
         public static string Page(string repo, string tag) { return "https://github.com/" + repo + "/releases/tag/" + Uri.EscapeDataString(tag); }
 
@@ -247,17 +247,17 @@ namespace Keel
 
     /// <summary>
     /// Asks GitHub for the newest release (GitHub above) when the launcher opens, at most every 6 hours, and when
-    /// the rail's "Check for updates" is clicked; SMOOVPLAY_UPDATE_CHECK=0 turns the automatic check off. A newer one shows a link in the launcher, which installs it (Updater) or opens its page.
+    /// the rail's "Check for updates" is clicked; KEEL_UPDATE_CHECK=0 turns the automatic check off. A newer one shows a link in the launcher, which installs it (Updater) or opens its page.
     /// </summary>
     static class UpdateCheck
     {
-        static string CacheFile { get { return Path.Combine(Paths.SettingsDir, "smoovplay-update.txt"); } }
+        static string CacheFile { get { return Path.Combine(Paths.SettingsDir, "keel-update.txt"); } }
 
         /// <summary>Calls onNewer(tag, release page) on a worker thread if a release is newer than this build.</summary>
         public static void Start(Action<string, string> onNewer)
         {
             string repo = GitHub.Repo;
-            if (Environment.GetEnvironmentVariable("SMOOVPLAY_UPDATE_CHECK") == "0" || repo == null) return;
+            if (Environment.GetEnvironmentVariable("KEEL_UPDATE_CHECK") == "0" || repo == null) return;
             System.Threading.ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
