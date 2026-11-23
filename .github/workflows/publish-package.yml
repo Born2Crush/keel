@@ -20,21 +20,23 @@ jobs:
           python-version: "3.12"
 
       - name: Build the Windows package
-        run: python installer/make_package.py
+        run: |
+          sed -i 's/VERSION = "0.3.12"/VERSION = "0.3.13"/' installer/build.py
+          python installer/make_package.py
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.12
-          name: Keel 0.3.12 for Windows
+          tag_name: v0.3.13
+          name: Keel 0.3.13 for Windows
           make_latest: true
           body: |
-            Unzip Keel-0.3.12-windows.zip and run Install-Keel.bat.
-            It installs Keel for the current user and downloads Python, PyTorch, and TensorRT (about 5 GB).
-            chiaki-ng is not in the zip. After install, set KEEL_CHIAKI in keel-local.cmd to chiaki.exe.
+            Unzip Keel-0.3.13-windows.zip and run Install-Keel.bat.
+            Keel starts the chiaki-ng already installed by SmoovPlay, with the frame tap on.
+            Python, PyTorch, and TensorRT download on install if they are not there yet (about 5 GB the first time).
           files: |
-            installer/dist/Keel-0.3.12-windows.zip
-            installer/dist/Keel-0.3.12-windows.zip.sha256
+            installer/dist/Keel-0.3.13-windows.zip
+            installer/dist/Keel-0.3.13-windows.zip.sha256
 
       - name: Install ORAS
         run: |
@@ -45,6 +47,6 @@ jobs:
       - name: Publish the package
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
-          oras push "ghcr.io/born2crush/keel:0.3.12" \
-            installer/dist/Keel-0.3.12-windows.zip:application/zip \
-            installer/dist/Keel-0.3.12-windows.zip.sha256:text/plain
+          oras push "ghcr.io/born2crush/keel:0.3.13" \
+            installer/dist/Keel-0.3.13-windows.zip:application/zip \
+            installer/dist/Keel-0.3.13-windows.zip.sha256:text/plain
