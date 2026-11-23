@@ -29,17 +29,16 @@ jobs:
         run: python installer/patch_dlss_ui.py
 
       - name: Build Keel-Setup.exe
-        run: python installer/build.py --app-setup --version 0.3.22
+        run: python installer/build.py --app-setup --version 0.3.23
 
       - name: Publish the installer
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.22
-          name: Keel 0.3.22
+          tag_name: v0.3.23
+          name: Keel 0.3.23
           make_latest: true
           files: installer/dist/Keel-Setup.exe
           body: |
             Double-click Keel-Setup.exe.
             It installs Keel as an app: a window, a Start menu shortcut, and an entry in Windows Settings under Apps.
-            The window uses the purple Keel wordmark. Check for updates, in the left rail, installs a newer release over this copy. Your settings stay. You do not uninstall. Play starts chiaki-ng from the copy already on this PC. There is no terminal.
-            Uninstall is in the Keel window on the Help page, and in Settings, Apps.
+            The window uses the purple Keel wordmark. A stream Keel just started is no longer called one that started before Keel. Check for updates installs a newer release over this copy. Your settings stay.
