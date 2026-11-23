@@ -6,7 +6,7 @@
 <text x="28" y="95.0" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" font-weight="600" fill="#F3EFE8">From your console</text>
 <text x="28" y="114.0" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace" font-size="12.5" letter-spacing="1" fill="#C3C6CD">30 FPS</text>
 <text x="28" y="189.0" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" font-weight="600" fill="#F3EFE8">On your screen</text>
-<text x="28" y="208.0" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace" font-size="12.5" letter-spacing="1" fill="#FFB02E">90 FPS</text>
+<text x="28" y="208.0" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace" font-size="12.5" letter-spacing="1" fill="#8B6CFF">90 FPS</text>
 <rect x="225.0" y="76" width="151.5" height="42" rx="9" fill="#DDE3EC"/>
 <text x="300.8" y="103" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#1A1206">A</text>
 <rect x="382.5" y="76" width="151.5" height="42" rx="9" fill="#DDE3EC"/>
@@ -17,30 +17,30 @@
 <text x="773.2" y="103" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="16" font-weight="700" fill="#1A1206">D</text>
 <rect x="225.0" y="170" width="46.5" height="42" rx="9" fill="#DDE3EC"/>
 <text x="248.2" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#1A1206">A</text>
-<rect x="277.5" y="170" width="46.5" height="42" rx="9" fill="#FFB02E"/>
+<rect x="277.5" y="170" width="46.5" height="42" rx="9" fill="#8B6CFF"/>
 <text x="300.8" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1A1206">AI</text>
-<rect x="330.0" y="170" width="46.5" height="42" rx="9" fill="#FFB02E"/>
+<rect x="330.0" y="170" width="46.5" height="42" rx="9" fill="#8B6CFF"/>
 <text x="353.2" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1A1206">AI</text>
 <rect x="382.5" y="170" width="46.5" height="42" rx="9" fill="#DDE3EC"/>
 <text x="405.8" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#1A1206">B</text>
-<rect x="435.0" y="170" width="46.5" height="42" rx="9" fill="#FFB02E"/>
+<rect x="435.0" y="170" width="46.5" height="42" rx="9" fill="#8B6CFF"/>
 <text x="458.2" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1A1206">AI</text>
-<rect x="487.5" y="170" width="46.5" height="42" rx="9" fill="#FFB02E"/>
+<rect x="487.5" y="170" width="46.5" height="42" rx="9" fill="#8B6CFF"/>
 <text x="510.8" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1A1206">AI</text>
 <rect x="540.0" y="170" width="46.5" height="42" rx="9" fill="#DDE3EC"/>
 <text x="563.2" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#1A1206">C</text>
-<rect x="592.5" y="170" width="46.5" height="42" rx="9" fill="#FFB02E"/>
+<rect x="592.5" y="170" width="46.5" height="42" rx="9" fill="#8B6CFF"/>
 <text x="615.8" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1A1206">AI</text>
-<rect x="645.0" y="170" width="46.5" height="42" rx="9" fill="#FFB02E"/>
+<rect x="645.0" y="170" width="46.5" height="42" rx="9" fill="#8B6CFF"/>
 <text x="668.2" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1A1206">AI</text>
 <rect x="697.5" y="170" width="46.5" height="42" rx="9" fill="#DDE3EC"/>
 <text x="720.8" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#1A1206">D</text>
-<rect x="750.0" y="170" width="46.5" height="42" rx="9" fill="#FFB02E"/>
+<rect x="750.0" y="170" width="46.5" height="42" rx="9" fill="#8B6CFF"/>
 <text x="773.2" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1A1206">AI</text>
-<rect x="802.5" y="170" width="46.5" height="42" rx="9" fill="#FFB02E"/>
+<rect x="802.5" y="170" width="46.5" height="42" rx="9" fill="#8B6CFF"/>
 <text x="825.8" y="196" text-anchor="middle" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="12.5" font-weight="700" fill="#1A1206">AI</text>
-<g fill="none" stroke="#FFB02E" stroke-width="1.6" stroke-opacity="0.75" stroke-linecap="round"><path d="M300.8,121 C300.8,140 327.0,132 327.0,154"/><path d="M458.2,121 C458.2,140 327.0,132 327.0,154"/><path d="M280.5,164 V154 H373.5 V164"/></g>
-<text x="472.2" y="150" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace" font-size="12" fill="#FFB02E">drawn from A and B</text>
+<g fill="none" stroke="#8B6CFF" stroke-width="1.6" stroke-opacity="0.75" stroke-linecap="round"><path d="M300.8,121 C300.8,140 327.0,132 327.0,154"/><path d="M458.2,121 C458.2,140 327.0,132 327.0,154"/><path d="M280.5,164 V154 H373.5 V164"/></g>
+<text x="472.2" y="150" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace" font-size="12" fill="#8B6CFF">drawn from A and B</text>
 <line x1="222" y1="238" x2="852" y2="238" stroke="#252B35" stroke-width="1.5"/>
 <line x1="222.0" y1="232" x2="222.0" y2="244" stroke="#8E949F" stroke-width="1.5"/>
 <text x="222.0" y="260" text-anchor="middle" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace" font-size="12" fill="#8E949F">0</text>

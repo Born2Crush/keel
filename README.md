@@ -23,7 +23,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Status: early release" src="https://img.shields.io/badge/status-early%20release-FFB02E?style=flat-square"></a>
+  <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Status: early release" src="https://img.shields.io/badge/status-early%20release-7C5CFF?style=flat-square"></a>
   <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Downloads of Keel-Setup.exe, all releases" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsmoovplay%2Fsmoovplay%2Fstats%2Fdownloads.json&style=flat-square"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-3A4250?style=flat-square">
   <img alt="Graphics: NVIDIA RTX 30, 40 or 50 series; AMD and Intel as an Experimental option" src="https://img.shields.io/badge/GPU-NVIDIA%20RTX%2030%20%7C%2040%20%7C%2050%2C%20AMD%20%26%20Intel%20experimental-3A4250?style=flat-square">
@@ -51,7 +51,7 @@ There's nothing to install on the console, and it's free and open source.
 ## What it does
 
 <p align="center">
-  <img src="docs/media/strip-overview.png" width="100%" alt="What it does, in three pictures: a diagram of your console sending 30 frames a second to your PC, where Keel runs, and your screen getting 60, 90 or 120; a stack of four frames, real, AI, AI, real; and the same picture small at 1080p, then sharpened and scaled up to your screen’s resolution.">
+  <img src="docs/media/strip-overview.svg" width="100%" alt="What it does, in three pictures: a diagram of your console sending 30 frames a second to your PC, where Keel runs, and your screen getting 60, 90 or 120; a stack of frames, real then an AI frame drawn by Keel then real; and 1080p drawn up to the screen with DLSS.">
 </p>
 
 - **Up to four times the frames.** RIFE, an open-source AI model, draws 1, 2 or 3 new frames between each pair the
@@ -107,7 +107,7 @@ and run it. It isn't code-signed yet, so your browser and Windows warn you first
 [here's how to get past it](#smartscreen). Setup takes 10 to 20 minutes and never asks for admin rights.
 
 <p align="center">
-  <img src="docs/media/strip-setup.png" width="100%" alt="Setup in three steps: Keel checks your graphics card, display and network and helps fix anything that's off; downloads about 5 GB and tunes itself to your graphics card; and is ready to play from the Start menu.">
+  <img src="docs/media/strip-setup.svg" width="100%" alt="Setup in three steps: Keel checks your graphics card, display and network; downloads about 5 GB and tunes itself to your graphics card; and is ready to play from the Start menu.">
 </p>
 
 Setup ends by picking settings for your PC, from a short test of your graphics card and display. To check again,
@@ -118,7 +118,7 @@ in to PSN in chiaki-ng and register the console. About five minutes, once. For a
 (Experimental), pick **App window** or **Capture card** on the Play page. Then press **Play**.
 
 <p align="center">
-  <img src="docs/media/strip-play.png" width="100%" alt="Playing in three steps: a short guide connects your console to your PC once, you press Play, and the same game runs at 60, 90 or up to 120 fps.">
+  <img src="docs/media/strip-play.svg" width="100%" alt="Playing in three steps: a short guide connects your console to your PC once, you press Play, and the same game runs at 60, 90 or up to 120 fps.">
 </p>
 
 <a id="smartscreen"></a>
@@ -141,7 +141,7 @@ must carry Keel's signature before they run.
 ## Make it yours
 
 <p align="center">
-  <img src="docs/media/strip-custom.png" width="100%" alt="Make it yours: the frame rate and upscaler settings with Auto-detect; one beach picture in Original, Golden hour and Noir; and the in-game menu, open on Which look, set to Neon night.">
+  <img src="docs/media/strip-custom.svg" width="100%" alt="Make it yours: frame rate and 4K output with Auto-detect; a picture in Original, Golden hour and Noir; and the in-game menu, open on Which look, set to Neon night.">
 </p>
 
 - **Settings apply as you play.** Change the frame rate, upscaler or AI model on the Settings page, or press **M**

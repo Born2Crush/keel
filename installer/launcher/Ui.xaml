@@ -871,7 +871,7 @@
               </Border>
               <Viewbox>
                 <Canvas Width="1024" Height="1024">
-                  <!-- the logo (docs/brand/smoovplay-icon.svg): a controller in the S, a play button in the P -->
+                  <!-- the logo (docs/brand/smoovplay-icon.svg): the Keel wordmark -->
                   <Rectangle Width="1024" Height="1024" RadiusX="228" RadiusY="228">
                     <Rectangle.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Offset="0" Color="#FFBD24"/><GradientStop Offset="0.5" Color="#FC930B"/><GradientStop Offset="1" Color="#FC5F03"/></LinearGradientBrush></Rectangle.Fill>
                   </Rectangle>

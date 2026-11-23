@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 520" width="1280" height="520">
+<title>Keel setup</title>
+<rect width="1280" height="520" rx="28" fill="#140E22"/>
+<text x="48" y="56" fill="#C4B5FD" font-family="ui-monospace, Consolas, monospace" font-size="14" letter-spacing="2">SETUP · 10 TO 20 MINUTES</text>
+<text x="1120" y="52" fill="#F5F3FF" font-family="Georgia, serif" font-size="22" font-weight="700">Keel</text>
+<g font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect x="40" y="88" width="380" height="280" rx="18" fill="#1C1630" stroke="#3B2F66"/>
+  <text x="64" y="130" fill="#A39BB8" font-size="13">GRAPHICS CARD</text>
+  <text x="64" y="154" fill="#F5F3FF" font-size="18">RTX card</text>
+  <text x="64" y="196" fill="#A39BB8" font-size="13">DISPLAY</text>
+  <text x="64" y="220" fill="#F5F3FF" font-size="18">60 Hz or faster</text>
+  <text x="64" y="262" fill="#A39BB8" font-size="13">HOME NETWORK</text>
+  <text x="64" y="286" fill="#F5F3FF" font-size="18">Wired if you can</text>
+  <text x="64" y="334" fill="#C4B5FD" font-size="15" font-weight="700">Your PC is ready for Keel</text>
+
+  <rect x="450" y="88" width="380" height="280" rx="18" fill="#1C1630" stroke="#3B2F66"/>
+  <text x="474" y="160" fill="#F5F3FF" font-size="42" font-weight="700">85%</text>
+  <rect x="474" y="184" width="280" height="14" rx="7" fill="#2A2144"/>
+  <rect x="474" y="184" width="230" height="14" rx="7" fill="#8B6CFF"/>
+  <text x="474" y="236" fill="#C4B5FD" font-size="16">Download Python</text>
+  <text x="474" y="266" fill="#C4B5FD" font-size="16">Download PyTorch</text>
+  <text x="474" y="296" fill="#F5F3FF" font-size="16">Tune for this graphics card</text>
+
+  <rect x="860" y="88" width="380" height="280" rx="18" fill="#1C1630" stroke="#3B2F66"/>
+  <circle cx="1050" cy="180" r="46" fill="none" stroke="#8B6CFF" stroke-width="6"/>
+  <path d="M1030 180 l14 14 28-32" fill="none" stroke="#C4B5FD" stroke-width="6" stroke-linecap="round"/>
+  <text x="1050" y="270" text-anchor="middle" fill="#F5F3FF" font-size="26" font-weight="700">Keel is ready</text>
+  <rect x="960" y="296" width="180" height="42" rx="10" fill="#8B6CFF"/>
+  <text x="1050" y="323" text-anchor="middle" fill="#1A1033" font-size="16" font-weight="700">Open Keel</text>
+
+  <text x="230" y="420" text-anchor="middle" fill="#F5F3FF" font-size="18" font-weight="700">1  Checks your PC</text>
+  <text x="640" y="420" text-anchor="middle" fill="#F5F3FF" font-size="18" font-weight="700">2  Sets itself up</text>
+  <text x="1050" y="420" text-anchor="middle" fill="#F5F3FF" font-size="18" font-weight="700">3  Ready to play</text>
+  <text x="230" y="448" text-anchor="middle" fill="#A39BB8" font-size="14">Graphics, display, and the home network.</text>
+  <text x="640" y="448" text-anchor="middle" fill="#A39BB8" font-size="14">About 5 GB, then a tune for this card.</text>
+  <text x="1050" y="448" text-anchor="middle" fill="#A39BB8" font-size="14">Start menu. No admin rights.</text>
+</g>
+</svg>

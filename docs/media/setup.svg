@@ -12,15 +12,15 @@
               <stop offset="0" stop-color="#2b1d5c"/><stop offset="0.6" stop-color="#c2477a"/><stop offset="1" stop-color="#f39a4c"/>
             </linearGradient>
             <marker id="pm-n" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#AEB4BE"/></marker>
-            <marker id="pm-a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#FFB02E"/></marker>
+            <marker id="pm-a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="#8B6CFF"/></marker>
             <marker id="pm-m" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0L10,5L0,10z" fill="#6E7682"/></marker>
             <marker id="pm-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L10,5L0,10z" fill="#AEB4BE"/></marker>
           </defs>
 
           <!-- zoom from the PC into the panel below -->
-          <polygon points="900,540 1010,540 1090,604 10,604" fill="#FFB02E" fill-opacity="0.05"/>
-          <line x1="900" y1="540" x2="10" y2="604" stroke="#FFB02E" stroke-opacity="0.35" stroke-dasharray="4 5"/>
-          <line x1="1010" y1="540" x2="1090" y2="604" stroke="#FFB02E" stroke-opacity="0.35" stroke-dasharray="4 5"/>
+          <polygon points="900,540 1010,540 1090,604 10,604" fill="#8B6CFF" fill-opacity="0.05"/>
+          <line x1="900" y1="540" x2="10" y2="604" stroke="#8B6CFF" stroke-opacity="0.35" stroke-dasharray="4 5"/>
+          <line x1="1010" y1="540" x2="1090" y2="604" stroke="#8B6CFF" stroke-opacity="0.35" stroke-dasharray="4 5"/>
           <text class="m" x="560" y="592" font-size="12" text-anchor="middle">INSIDE THE PC</text>
 
           <!-- desk and floor -->
@@ -52,11 +52,11 @@
             <path d="M746,262 q18,-6 32,4 M746,262 q12,-16 30,-16 M746,262 q-14,-14 -32,-9 M746,262 q-18,0 -27,14" stroke-width="3.2"/>
           </g>
           <rect x="488" y="86" width="164" height="24" rx="12" fill="#000" fill-opacity="0.55"/>
-          <text x="570" y="102.5" font-size="12" font-weight="600" text-anchor="middle" fill="#FFCB5C" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif">Keel · 90 fps</text>
+          <text x="570" y="102.5" font-size="12" font-weight="600" text-anchor="middle" fill="#C4B5FD" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif">Keel · 90 fps</text>
           <rect x="556" y="332" width="28" height="34" fill="#2C333E"/>
           <rect x="506" y="366" width="128" height="14" rx="3" fill="#2C333E"/>
           <rect x="385" y="332" width="14" height="7" rx="1" fill="#6E7682"/>
-          <rect x="753" y="332" width="14" height="7" rx="1" fill="#FFB02E"/>
+          <rect x="753" y="332" width="14" height="7" rx="1" fill="#8B6CFF"/>
 
           <!-- PS5 -->
           <text class="t" x="130" y="118" font-size="16" font-weight="700" text-anchor="middle">PS5</text>
@@ -85,26 +85,26 @@
           <text class="t" x="884" y="428" font-size="16" font-weight="700" text-anchor="end">Your PC</text>
           <text class="s" x="884" y="446" font-size="12.5" text-anchor="end">NVIDIA RTX card</text>
           <rect x="900" y="404" width="110" height="136" rx="6" fill="#1D222B" stroke="#4A5260"/>
-          <circle cx="996" cy="416" r="3.5" fill="#FFB02E"/>
-          <rect x="908" y="452" width="94" height="34" rx="3" fill="#FFB02E" fill-opacity="0.14" stroke="#FFB02E" stroke-opacity="0.8"/>
-          <text x="955" y="474" font-size="12" font-weight="700" text-anchor="middle" fill="#FFB02E" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace">RTX</text>
+          <circle cx="996" cy="416" r="3.5" fill="#8B6CFF"/>
+          <rect x="908" y="452" width="94" height="34" rx="3" fill="#8B6CFF" fill-opacity="0.14" stroke="#8B6CFF" stroke-opacity="0.8"/>
+          <text x="955" y="474" font-size="12" font-weight="700" text-anchor="middle" fill="#8B6CFF" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace">RTX</text>
           <g stroke="#3A4250" stroke-width="2"><line x1="916" y1="504" x2="994" y2="504"/><line x1="916" y1="512" x2="994" y2="512"/><line x1="916" y1="520" x2="994" y2="520"/></g>
 
           <!-- cables -->
           <path d="M162,356 H392 V346" fill="none" stroke="#6E7682" stroke-width="2.4" stroke-dasharray="6 6" stroke-linecap="round" marker-end="url(#pm-m)"/>
           <path d="M162,370 H184 V525 H212" fill="none" stroke="#AEB4BE" stroke-width="3" stroke-linejoin="round" marker-start="url(#pm-n)" marker-end="url(#pm-n)"/>
           <path d="M318,525 H892" fill="none" stroke="#AEB4BE" stroke-width="3" marker-start="url(#pm-n)" marker-end="url(#pm-n)"/>
-          <path d="M904,469 H760 V346" fill="none" stroke="#FFB02E" stroke-width="3.4" stroke-linejoin="round" marker-end="url(#pm-a)"/>
+          <path d="M904,469 H760 V346" fill="none" stroke="#8B6CFF" stroke-width="3.4" stroke-linejoin="round" marker-end="url(#pm-a)"/>
 
           <g class="halo">
             <text class="s" x="277" y="350" font-size="12" text-anchor="middle">HDMI · play direct any time</text>
             <text class="s" x="196" y="452" font-size="12">Ethernet</text>
             <text class="s" x="600" y="516" font-size="12.5" text-anchor="middle">Ethernet or 5 GHz Wi-Fi · the Remote Play stream in, your button presses out</text>
-            <text x="750" y="424" font-size="12.5" font-weight="600" text-anchor="end" fill="#FFB02E" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif">DisplayPort · 60, 90 or 120 fps</text>
+            <text x="750" y="424" font-size="12.5" font-weight="600" text-anchor="end" fill="#8B6CFF" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif">DisplayPort · 60, 90 or 120 fps</text>
           </g>
 
           <!-- inside the PC -->
-          <rect x="10" y="604" width="1080" height="188" rx="16" fill="#12151B" stroke="#FFB02E" stroke-opacity="0.35"/>
+          <rect x="10" y="604" width="1080" height="188" rx="16" fill="#12151B" stroke="#8B6CFF" stroke-opacity="0.35"/>
 
           <rect x="38" y="640" width="140" height="96" rx="10" fill="#1D222B" stroke="#3A4250"/>
           <text class="t" x="52" y="666" font-size="14" font-weight="700">Network port</text>
@@ -123,8 +123,8 @@
 
           <line x1="368" y1="688" x2="390" y2="688" stroke="#AEB4BE" stroke-width="1.6" marker-end="url(#pm-s)"/>
 
-          <rect x="394" y="616" width="498" height="136" rx="12" fill="#FFB02E" fill-opacity="0.06" stroke="#FFB02E" stroke-opacity="0.7"/>
-          <text x="408" y="633" font-size="11" font-weight="600" fill="#FFB02E" letter-spacing="0.08em" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace">GRAPHICS CARD · SMOOVPLAY</text>
+          <rect x="394" y="616" width="498" height="136" rx="12" fill="#8B6CFF" fill-opacity="0.06" stroke="#8B6CFF" stroke-opacity="0.7"/>
+          <text x="408" y="633" font-size="11" font-weight="600" fill="#8B6CFF" letter-spacing="0.08em" font-family="ui-monospace, 'SF Mono', 'Cascadia Mono', Consolas, Menlo, monospace">GRAPHICS CARD · KEEL</text>
 
           <rect x="406" y="642" width="150" height="96" rx="10" fill="#1D222B" stroke="#3A4250"/>
           <text class="t" x="420" y="668" font-size="14" font-weight="700">Video decoder</text>
@@ -134,8 +134,8 @@
 
           <line x1="557" y1="690" x2="566" y2="690" stroke="#AEB4BE" stroke-width="1.6" marker-end="url(#pm-s)"/>
 
-          <rect x="568" y="642" width="150" height="96" rx="10" fill="#2A2216" stroke="#FFB02E"/>
-          <text x="582" y="668" font-size="14" font-weight="700" fill="#FFB02E" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif">AI cores</text>
+          <rect x="568" y="642" width="150" height="96" rx="10" fill="#1A1430" stroke="#8B6CFF"/>
+          <text x="582" y="668" font-size="14" font-weight="700" fill="#8B6CFF" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif">AI cores</text>
           <text class="s" x="582" y="689" font-size="12">draw 1 to 3 in-between</text>
           <text class="s" x="582" y="705" font-size="12">frames, ~9 ms each</text>
           <text class="m" x="582" y="726" font-size="10.5">RIFE · TENSORRT</text>
@@ -148,7 +148,7 @@
           <text class="s" x="744" y="705" font-size="12">your screen, 0.1 ms</text>
           <text class="m" x="744" y="726" font-size="10.5">AMD FSR 1</text>
 
-          <line x1="894" y1="688" x2="916" y2="688" stroke="#FFB02E" stroke-width="2" marker-end="url(#pm-a)"/>
+          <line x1="894" y1="688" x2="916" y2="688" stroke="#8B6CFF" stroke-width="2" marker-end="url(#pm-a)"/>
 
           <rect x="920" y="640" width="140" height="96" rx="10" fill="#1D222B" stroke="#3A4250"/>
           <text class="t" x="934" y="666" font-size="14" font-weight="700">Display out</text>

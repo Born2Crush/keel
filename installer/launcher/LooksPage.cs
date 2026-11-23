@@ -238,7 +238,7 @@ namespace Keel
                 if (e.Id == lookPicked) picked = item;
                 list.Children.Add(item);
             };
-            list.Children.Add(ListHeading("SMOOVPLAY'S LOOKS", 0));
+            list.Children.Add(ListHeading("KEEL'S LOOKS", 0));
             lookEntries.Where(x => x.Builtin).ToList().ForEach(add);
             list.Children.Add(ListHeading("YOURS", 14));
             mine.ForEach(add);

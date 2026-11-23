@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 560" width="1280" height="560">
+<title>Keel: what it does</title>
+<rect width="1280" height="560" rx="28" fill="#140E22"/>
+<text x="48" y="58" fill="#C4B5FD" font-family="ui-monospace, Consolas, monospace" font-size="14" letter-spacing="2">WHAT IT DOES</text>
+<g transform="translate(1040 28)">
+  <rect width="36" height="36" rx="8" fill="#8B6CFF"/>
+  <text x="18" y="25" text-anchor="middle" fill="#FFFFFF" font-family="Georgia, serif" font-size="18" font-weight="700">K</text>
+  <text x="48" y="25" fill="#F5F3FF" font-family="Georgia, 'Times New Roman', serif" font-size="22" font-weight="700">Keel</text>
+</g>
+<g font-family="'Segoe UI', Helvetica, Arial, sans-serif">
+  <rect x="40" y="88" width="380" height="300" rx="18" fill="#1C1630" stroke="#3B2F66"/>
+  <g fill="none" stroke="#8B6CFF" stroke-width="3">
+    <rect x="78" y="150" width="70" height="48" rx="10"/>
+    <circle cx="96" cy="174" r="6"/><circle cx="114" cy="168" r="4"/><circle cx="128" cy="180" r="4"/>
+    <rect x="196" y="140" width="64" height="70" rx="10"/>
+    <path d="M214 168h28M214 182h20"/>
+    <rect x="308" y="146" width="78" height="58" rx="8"/>
+  </g>
+  <path d="M156 174h32M268 174h32" stroke="#8B6CFF" stroke-width="3" marker-end="url(#a)"/>
+  <text x="113" y="230" text-anchor="middle" fill="#F5F3FF" font-size="16" font-weight="650">Your console</text>
+  <text x="113" y="250" text-anchor="middle" fill="#A39BB8" font-size="13">30 fps</text>
+  <text x="228" y="230" text-anchor="middle" fill="#C4B5FD" font-size="16" font-weight="700">Your PC</text>
+  <text x="228" y="250" text-anchor="middle" fill="#C4B5FD" font-size="13">+ Keel</text>
+  <text x="347" y="230" text-anchor="middle" fill="#F5F3FF" font-size="16" font-weight="650">Your screen</text>
+  <text x="347" y="250" text-anchor="middle" fill="#A39BB8" font-size="13">60 · 90 · 120 fps</text>
+  <text x="230" y="430" text-anchor="middle" fill="#F5F3FF" font-size="20" font-weight="700">1  Your console, on your PC</text>
+  <text x="230" y="458" text-anchor="middle" fill="#A39BB8" font-size="14">The stream stays on the console. Keel runs on the PC.</text>
+
+  <rect x="450" y="88" width="380" height="300" rx="18" fill="#1C1630" stroke="#3B2F66"/>
+  <rect x="500" y="150" width="200" height="36" rx="8" fill="#2A2144"/>
+  <text x="600" y="174" text-anchor="middle" fill="#F5F3FF" font-size="14" font-weight="700">Real frame</text>
+  <rect x="530" y="198" width="200" height="36" rx="8" fill="#8B6CFF"/>
+  <text x="630" y="222" text-anchor="middle" fill="#1A1033" font-size="14" font-weight="700">AI frame · Keel</text>
+  <rect x="500" y="246" width="200" height="36" rx="8" fill="#2A2144"/>
+  <text x="600" y="270" text-anchor="middle" fill="#F5F3FF" font-size="14" font-weight="700">Real frame</text>
+  <text x="640" y="430" text-anchor="middle" fill="#F5F3FF" font-size="20" font-weight="700">2  New frames in between</text>
+  <text x="640" y="458" text-anchor="middle" fill="#A39BB8" font-size="14">Drawn live from the real frames on both sides.</text>
+
+  <rect x="860" y="88" width="380" height="300" rx="18" fill="#1C1630" stroke="#3B2F66"/>
+  <rect x="900" y="130" width="90" height="54" rx="6" fill="#2A2144" stroke="#8B6CFF"/>
+  <text x="945" y="162" text-anchor="middle" fill="#C4B5FD" font-size="12" font-weight="700">1080p</text>
+  <path d="M1000 157 H1088" stroke="#8B6CFF" stroke-width="3"/>
+  <rect x="1096" y="118" width="110" height="78" rx="8" fill="#8B6CFF"/>
+  <text x="1151" y="154" text-anchor="middle" fill="#1A1033" font-size="13" font-weight="700">Your screen</text>
+  <text x="1151" y="172" text-anchor="middle" fill="#1A1033" font-size="11">DLSS · 4K</text>
+  <text x="1050" y="430" text-anchor="middle" fill="#F5F3FF" font-size="20" font-weight="700">3  Smooth and sharp</text>
+  <text x="1050" y="458" text-anchor="middle" fill="#A39BB8" font-size="14">1080p in. 60, 90 or 120 fps out.</text>
+</g>
+<defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#8B6CFF"/></marker></defs>
+</svg>
