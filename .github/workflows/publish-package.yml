@@ -1,4 +1,4 @@
-name: Publish package
+name: Publish installer
 
 on:
   workflow_dispatch:
@@ -7,11 +7,10 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
+  setup:
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -19,34 +18,21 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Build the Windows package
-        run: |
-          sed -i 's/VERSION = "0.3.12"/VERSION = "0.3.13"/' installer/build.py
-          python installer/make_package.py
+      - name: Install the icon tools
+        run: python -m pip install opencv-python-headless numpy
 
-      - name: Publish the release
+      - name: Build Keel-Setup.exe
+        run: python installer/build.py --app-setup --version 0.3.14
+
+      - name: Publish the installer
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.13
-          name: Keel 0.3.13 for Windows
+          tag_name: v0.3.14
+          name: Keel 0.3.14
           make_latest: true
+          files: installer/dist/Keel-Setup.exe
           body: |
-            Unzip Keel-0.3.13-windows.zip and run Install-Keel.bat.
-            Keel starts the chiaki-ng already installed by SmoovPlay, with the frame tap on.
-            Python, PyTorch, and TensorRT download on install if they are not there yet (about 5 GB the first time).
-          files: |
-            installer/dist/Keel-0.3.13-windows.zip
-            installer/dist/Keel-0.3.13-windows.zip.sha256
-
-      - name: Install ORAS
-        run: |
-          curl -sSL -o oras.tgz https://github.com/oras-project/oras/releases/download/v1.2.3/oras_1.2.3_linux_amd64.tar.gz
-          tar -xzf oras.tgz
-          sudo mv oras /usr/local/bin/oras
-
-      - name: Publish the package
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
-          oras push "ghcr.io/born2crush/keel:0.3.13" \
-            installer/dist/Keel-0.3.13-windows.zip:application/zip \
-            installer/dist/Keel-0.3.13-windows.zip.sha256:text/plain
+            Double-click Keel-Setup.exe.
+            It installs Keel as an app: a window, a Start menu shortcut, and an entry in Windows Settings under Apps.
+            Play starts chiaki-ng from the copy already on this PC and turns the frame tap on. There is no terminal.
+            Uninstall is in the Keel window on the Help page, and in Settings, Apps.
