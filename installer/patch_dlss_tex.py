@@ -20,13 +20,14 @@ METHODS = '''
         class Pitch(c.Structure):
             _fields_ = [("devPtr", c.c_uint64), ("format", c.c_int), ("numChannels", c.c_uint), ("width", c.c_size_t), ("height", c.c_size_t), ("pitchInBytes", c.c_size_t)]
         class Res(c.Union):
-            _fields_ = [("pitch2D", Pitch)]
+            _fields_ = [("pitch2D", Pitch), ("reserved", c.c_int * 32)]
         class Desc(c.Structure):
             _fields_ = [("resType", c.c_int), ("res", Res), ("flags", c.c_uint)]
         class TexDesc(c.Structure):
             _fields_ = [("addressMode", c.c_int * 3), ("filterMode", c.c_int), ("flags", c.c_uint), ("maxAnisotropy", c.c_uint), ("mipmapFilterMode", c.c_int), ("mipmapLevelBias", c.c_float), ("minMipmapLevelClamp", c.c_float), ("maxMipmapLevelClamp", c.c_float), ("borderColor", c.c_float * 4), ("reserved", c.c_int * 12)]
         desc = Desc()
         desc.resType = 3
+        desc.flags = 0
         desc.res.pitch2D.devPtr = int(tensor.data_ptr())
         desc.res.pitch2D.format = fmt
         desc.res.pitch2D.numChannels = channels
@@ -51,25 +52,42 @@ METHODS = '''
 
     def _pictures(self, rgb, h, w):
         import torch
-        if getattr(self, "_rgba", None) is None or self._rgba.shape[0] != h or self._rgba.shape[1] != w:
-            self._rgba = torch.empty((h, w, 4), dtype=torch.uint8, device="cuda")
-            self._out4 = torch.empty((2160, 3840, 4), dtype=torch.uint8, device="cuda")
-            self._zeros = torch.zeros((h, w, 2), dtype=torch.float32, device="cuda")
-            self._depth = torch.ones((h, w, 1), dtype=torch.float32, device="cuda")
+        missing = getattr(self, "_out_tex", None) is None or getattr(self, "_rgba", None) is None
+        if not missing and (self._rgba.shape[0] != h or self._rgba.shape[1] != w):
+            missing = True
+        if missing:
+            rgba = torch.empty((h, w, 4), dtype=torch.uint8, device="cuda")
+            out4 = torch.empty((2160, 3840, 4), dtype=torch.uint8, device="cuda")
+            zeros = torch.zeros((h, w, 2), dtype=torch.float32, device="cuda")
+            depth = torch.ones((h, w, 1), dtype=torch.float32, device="cuda")
             self._tex_alive = []
-            self._color_tex = self._texture(self._rgba, 4, 1, True)
-            self._out_tex = self._texture(self._out4, 4, 1, True)
-            self._motion_tex = self._texture(self._zeros, 2, 32, False)
-            self._depth_tex = self._texture(self._depth, 1, 32, False)
+            color = self._texture(rgba, 4, 1, True)
+            out_tex = self._texture(out4, 4, 1, True)
+            motion = self._texture(zeros, 2, 32, False)
+            depth_tex = self._texture(depth, 1, 32, False)
+            self._rgba, self._out4, self._zeros, self._depth = rgba, out4, zeros, depth
+            self._color_tex, self._out_tex, self._motion_tex, self._depth_tex = color, out_tex, motion, depth_tex
         self._rgba[..., :3] = rgb
         self._rgba[..., 3] = 255
 '''
 
+OLD_BUFFERS = '''        out = torch.empty((UHD_H, UHD_W, 3), dtype=torch.uint8, device="cuda")
+        if self._zeros is None or self._zeros.shape[0] != h * w * 2:
+            self._zeros = torch.zeros(h * w * 2, dtype=torch.float32, device="cuda")
+        if self._depth is None or self._depth.shape[0] != h * w:
+            self._depth = torch.ones(h * w, dtype=torch.float32, device="cuda")
+'''
+
+
 def patch(text: str) -> str:
     old = 'self._set_ptr(b"Color", c.c_void_p(rgb.data_ptr()))'
-    if old not in text and '_pictures(rgb, h, w)' not in text:
-        raise SystemExit('DLSS texture patch could not find the picture pointers')
-    text = text.replace(old, 'self._pictures(rgb, h, w)\n        self._set_ptr(b"Color", c.c_void_p(c.addressof(self._color_tex)))', 1)
+    if old not in text and "_pictures(rgb, h, w)" not in text:
+        raise SystemExit("DLSS texture patch could not find the picture pointers")
+    text = text.replace(
+        old,
+        'self._pictures(rgb, h, w)\n        self._set_ptr(b"Color", c.c_void_p(c.addressof(self._color_tex)))',
+        1,
+    )
     text = text.replace('self._set_ui(b"Color.Format", RGB8UI)', 'self._set_ui(b"Color.Format", 3)', 1)
     text = text.replace('self._set_ui(b"Color.SizeInBytes", w * h * 3)', 'self._set_ui(b"Color.SizeInBytes", w * h * 4)', 1)
     text = text.replace('self._set_ptr(b"Output", c.c_void_p(out.data_ptr()))', 'self._set_ptr(b"Output", c.c_void_p(c.addressof(self._out_tex)))', 1)
@@ -77,17 +95,21 @@ def patch(text: str) -> str:
     text = text.replace('self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 3)', 'self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 4)', 1)
     text = text.replace('self._set_ptr(b"MotionVectors", c.c_void_p(self._zeros.data_ptr()))', 'self._set_ptr(b"MotionVectors", c.c_void_p(c.addressof(self._motion_tex)))', 1)
     text = text.replace('self._set_ptr(b"Depth", c.c_void_p(self._depth.data_ptr()))', 'self._set_ptr(b"Depth", c.c_void_p(c.addressof(self._depth_tex)))', 1)
-    text = text.replace('        return out\n', '        return self._out4[..., :3].contiguous()\n', 1)
-    if 'def _pictures(self, rgb, h, w):' not in text:
-        text = text.replace('\n_session = None\n', METHODS + '\n_session = None\n', 1)
-    if 'cuTexObjectCreate' not in text:
-        raise SystemExit('DLSS texture patch did not apply')
+    text = text.replace("        return out\n", "        return self._out4[..., :3].contiguous()\n", 1)
+    if OLD_BUFFERS in text:
+        text = text.replace(OLD_BUFFERS, "", 1)
+    if "def _pictures(self, rgb, h, w):" not in text:
+        text = text.replace("\n_session = None\n", METHODS + "\n_session = None\n", 1)
+    if "c.c_int * 32" not in text or "cuTexObjectCreate" not in text:
+        raise SystemExit("DLSS texture patch did not apply")
     return text
 
-def main() -> None:
-    path = ROOT / 'framegen' / 'dlss.py'
-    path.write_text(patch(path.read_text(encoding='utf-8')), encoding='utf-8')
-    print('DLSS frame call uses CUDA textures')
 
-if __name__ == '__main__':
+def main() -> None:
+    path = ROOT / "framegen" / "dlss.py"
+    path.write_text(patch(path.read_text(encoding="utf-8")), encoding="utf-8")
+    print("DLSS frame call uses CUDA textures")
+
+
+if __name__ == "__main__":
     main()
