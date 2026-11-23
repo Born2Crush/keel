@@ -130,12 +130,12 @@ SPECS: tuple[Spec, ...] = (
               "tested with, fast enough for 90 and 120 fps. NVIDIA VFG (Video Frame Generation) is NVIDIA's own, "
               "for RTX 40 and 50 series cards: Keel's Settings page downloads it from NVIDIA once you accept "
               "NVIDIA's licence."),
-    Spec("vfg_quality", "VFG quality", ("low", "medium", "high"), "medium",
+    Spec("vfg_quality", "VFG quality", ("low", "medium", "high"), "high",
          {"low": "Low", "medium": "Medium", "high": "High"}, live=False, group="Smoothness", applies=("model", ("vfg",)),
-         hints={"low": "The lightest on your graphics card.", "medium": "Balanced. The default.",
-                "high": "The most careful, and the heaviest."},
-         help="How much work NVIDIA VFG puts into each in-between frame. Higher takes more of your graphics "
-              "card's time, which can cost in-between frames at 90 and 120 fps. Only used with NVIDIA VFG."),
+         hints={"low": "The lightest on your graphics card.", "medium": "Balanced.",
+                "high": "The most careful. What Keel starts with. The heaviest."},
+         help="How much work NVIDIA VFG puts into each in-between frame. Keel starts on High. Lower takes less of "
+              "your graphics card's time, which can keep in-between frames at 90 and 120 fps. Only used with NVIDIA VFG."),
     # v2 (near edges only, interpolator._steady): on eight 60 fps gameplay clips (scripts/steady_hud_eval.py) it fixes
     # 96% of the visibly wobbling HUD pixels for 0.06 dB over the whole frame, at about 0.5 ms per real frame plus
     # 0.15 per AI frame. On three sections of PS5 GTA V it cost 0.1 to 1.2 dB over the whole frame. Off by default:
@@ -158,15 +158,15 @@ SPECS: tuple[Spec, ...] = (
               "at half, where PyTorch is faster. Only used with RIFE.",
          impact={"picture": "None: both draw the same frames.",
                  "speed": "TensorRT is about 12% faster at full motion detail, PyTorch at half."}),
-    Spec("motion", "Motion detail", ("auto", "full", "half"), "auto",
+    Spec("motion", "Motion detail", ("auto", "full", "half"), "full",
          {"auto": "Auto", "full": "Full", "half": "Half"}, live=False, group="Smoothness", applies=("model", ("4.22.lite",)),
-         hints={"auto": "Full; Half at 120 fps, a 1440p capture at 90, or where Full is too slow for this card; less for 4K. Recommended.",
-                "full": "Sharpest on fast motion. The slowest.",
+         hints={"auto": "Half at 120 fps, a 1440p capture at 90, or where Full is too slow for this card; less for 4K.",
+                "full": "Sharpest on fast motion. What Keel starts with. The slowest.",
                 "half": "About 40% faster. A little softer on fast detail."},
-         help="How finely RIFE tracks movement. Full follows small, fast details best, like railings or distant "
-              "cars; Half takes about 40% less time but softens them a little. Auto uses Half at 120 fps, for a "
-              "1440p capture at 90, or where Auto-detect timed Full too slow for your graphics card at the frame "
-              "rate you picked; a quarter for a 4K capture; and Full otherwise. Only used with RIFE.",
+         help="How finely RIFE tracks movement. Keel starts on Full, which follows small, fast details best, like "
+              "railings or distant cars. Half takes about 40% less time but softens them a little. Auto uses Half "
+              "at 120 fps, for a 1440p capture at 90, or where Auto-detect timed Full too slow for this card; a "
+              "quarter for a 4K capture. Only used with RIFE.",
          impact={"picture": "Half is a little softer on small, fast details.",
                  "speed": "Half takes about 40% less time per AI frame."}),
     # A test mode (framegen/sources.py TestMode), for any source that sends every frame (not App window: run.py).
@@ -277,10 +277,10 @@ SPECS: tuple[Spec, ...] = (
               "of the game to show. They crop or stretch the same 16:9 picture. Key: Z.",
          impact={"picture": "The same 16:9 picture, cropped or stretched: consoles send 16:9 only.",
                  "speed": "No real difference. Panorama adds one pass over the screen: about 0.02 ms."}),
-    Spec("vsync", "VSync", (False, True), False, ON_OFF, group="Display",
-         help="Off: the lowest delay, but fast camera turns can show a tear line across the picture. On: no "
-              "tearing, with a little more delay. With a G-Sync or FreeSync display, On gives you both: no tearing "
-              "and low delay.",
+    Spec("vsync", "VSync", (False, True), True, ON_OFF, group="Display",
+         help="On, which is how Keel starts: no tear line, with up to one refresh of delay (8 ms at 120 Hz, 17 at "
+              "60). Off is the lowest delay, but fast camera turns can show a tear. With a G-Sync or FreeSync "
+              "display, On gives you both: no tearing and low delay.",
          impact={"picture": "On: no tear lines.", "speed": "On can add up to one refresh of delay: 8 ms at 120 Hz, 17 at 60."}),
     # framegen/dxgi_present.py. Standard stays the default until Low delay has been measured on more PCs.
     Spec("present", "Window presentation", ("gl", "dxgi"), "gl", {"gl": "Standard", "dxgi": "Low delay (Experimental)"},

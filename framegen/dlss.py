@@ -142,7 +142,11 @@ class DlssScaler:
         self._src = (w, h)
 
     def upscale(self, bgr) -> "object":
-        """BGR uint8 CUDA tensor (or a CPU array) at the stream size -> 3840x2160 BGR on CUDA."""
+        """BGR uint8 CUDA tensor (or a CPU array) at the stream size -> 3840x2160 RGB on CUDA.
+
+        Row 0 is the top of the picture. The display's upload turns that into the
+        GL texture (RGBA, bottom row first) in one copy.
+        """
         import torch
         if not torch.is_tensor(bgr):
             bgr = torch.from_numpy(bgr)
@@ -174,7 +178,9 @@ class DlssScaler:
         rc = self.lib.NVSDK_NGX_CUDA_EvaluateFeature_C(self.handle, p, None)
         if rc != SUCCESS:
             raise RuntimeError(f"DLSS evaluate failed (NGX 0x{rc:08x})")
-        return out.flip(-1).contiguous()
+        # RGB, row 0 at the top. The display copies this into the GL texture and
+        # turns it upright there, so it is not flipped into BGR and back.
+        return out
 
 
 _session: tuple | None = None

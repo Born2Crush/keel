@@ -136,9 +136,12 @@ class WinChiaki:
     EXE = "chiaki.exe"
 
     def ensure_running(self) -> None:
+        from .stream_quality import apply_chiaki_settings
         from .winutil import windows_of
         if windows_of(self.EXE):
+            print("[keel] chiaki-ng is already open, so this stream keeps the video settings it loaded")
             return
+        print(apply_chiaki_settings())
         exe = find_chiaki()
         if exe is None:
             raise SessionError(

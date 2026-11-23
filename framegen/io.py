@@ -1405,10 +1405,9 @@ class GLWindowSink:
             scaler, why = session()
             if scaler is not None:
                 try:
-                    # Tensor row 0 is the top of the picture. The 4K image is read upright, so the
-                    # bottom row has to land at GL y = 0.
-                    out = scaler.upscale(frame if on_gpu else _host(frame)).flip(0)
-                    self._upload_bgr(tex, pw, ph, out.contiguous())
+                    # RGB, row 0 at the top. upload_rgb turns it upright in the texture copy.
+                    out = scaler.upscale(frame if on_gpu else _host(frame))
+                    self._upload_rgb(tex, pw, ph, out)
                     return True
                 except (OSError, RuntimeError, AttributeError) as e:
                     why = str(e)[:200]
@@ -1417,12 +1416,12 @@ class GLWindowSink:
             print(f"[display] 4K output needs NVIDIA DLSS: {why}")
         return False
 
-    def _upload_bgr(self, tex: int, w: int, h: int, bgr) -> None:
+    def _upload_rgb(self, tex: int, w: int, h: int, rgb) -> None:
         from .glcuda import CudaGLTexture
         key = (int(tex), w, h)
         if self._dlss_gl is None or self._dlss_gl[0] != key:
             self._dlss_gl = (key, CudaGLTexture(int(tex), w, h, hdr=False))
-        self._dlss_gl[1].upload(bgr)
+        self._dlss_gl[1].upload_rgb(rgb)
 
     def _uhd_fbo(self, w: int, h: int) -> int:
         """The 4K image Output size draws into (RGBA8, or half floats with HDR output)."""

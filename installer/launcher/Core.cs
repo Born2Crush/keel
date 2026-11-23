@@ -686,6 +686,38 @@ namespace Keel
             return Process.GetProcessesByName("chiaki").Where(x => ours == null || x.Id != ours.Id).ToArray();
         }
 
+        /// <summary>1080p, 60 fps, H.265, 100 Mbps, the profile in framegen/stream_quality.py. Written before
+        /// chiaki-ng starts, into the settings hive it will load (the current profile, or the default).</summary>
+        public static string ApplyVideoProfile()
+        {
+            const int bitrate = 100000;
+            try
+            {
+                string profile = null;
+                using (var def = Registry.CurrentUser.OpenSubKey(@"Software\Chiaki\Chiaki\settings"))
+                    profile = def?.GetValue("current_profile") as string;
+                if (!string.IsNullOrEmpty(profile) && (profile.IndexOf('\\') >= 0 || profile.IndexOf('/') >= 0))
+                    profile = null;
+                string app = string.IsNullOrEmpty(profile) ? "Chiaki" : "Chiaki-" + profile.Trim();
+                using (var key = Registry.CurrentUser.CreateSubKey(@"Software\Chiaki\" + app + @"\settings"))
+                {
+                    key.SetValue("resolution_local_ps5", "1080p");
+                    key.SetValue("resolution_remote_ps5", "1080p");
+                    key.SetValue("fps_local_ps5", 60, RegistryValueKind.DWord);
+                    key.SetValue("fps_remote_ps5", 60, RegistryValueKind.DWord);
+                    key.SetValue("bitrate_local_ps5", bitrate, RegistryValueKind.DWord);
+                    key.SetValue("bitrate_remote_ps5", bitrate, RegistryValueKind.DWord);
+                    key.SetValue("codec_local_ps5", "h265");
+                    key.SetValue("codec_remote_ps5", "h265");
+                }
+            }
+            catch (Exception e)
+            {
+                return "[keel] couldn't set chiaki-ng's video profile (" + e.Message + ")";
+            }
+            return "[keel] chiaki-ng video: 1080p 60 fps H.265 100 Mbps";
+        }
+
         public static bool Start(Paths p, Action<string> log)
         {
             if (string.IsNullOrEmpty(p.Chiaki) || !File.Exists(p.Chiaki))
@@ -699,6 +731,7 @@ namespace Keel
                 WorkingDirectory = p.Dev ? p.App : Path.GetDirectoryName(p.Chiaki),
             };
             psi.EnvironmentVariables["CHIAKI_FRAMETAP"] = "1";
+            log(ApplyVideoProfile());
             string renderer = Renderer(psi.EnvironmentVariables["CHIAKI_FRAMETAP_RENDERER"]);
             if (renderer != null) psi.EnvironmentVariables["CHIAKI_FRAMETAP_RENDERER"] = renderer;
             var pr = Process.Start(psi);

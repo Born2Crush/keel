@@ -62,8 +62,21 @@ class CudaGLTexture:
             raise RuntimeError(f"CUDA-GL interop: {what} failed (cudaError {err})")
 
     def upload(self, bgr: torch.Tensor) -> None:
-        stream = ctypes.c_void_p(torch.cuda.current_stream().cuda_stream)
+        """BGR, already oriented for this texture (row 0 is GL's bottom when the blit does not flip)."""
         self.rgba[..., :3].copy_(bgr.flip(-1))
+        self._send()
+
+    def upload_rgb(self, rgb: torch.Tensor) -> None:
+        """RGB, row 0 at the top of the picture. One copy, stored bottom-first.
+
+        A blit that does not flip Y reads GL y=0 as the bottom, so the picture's
+        bottom row is written into storage row 0.
+        """
+        self.rgba.flip(0)[..., :3].copy_(rgb)
+        self._send()
+
+    def _send(self) -> None:
+        stream = ctypes.c_void_p(torch.cuda.current_stream().cuda_stream)
         res = ctypes.byref(self.res)
         self._check(self.rt.cudaGraphicsMapResources(1, res, stream), "map")
         try:

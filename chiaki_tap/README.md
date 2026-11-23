@@ -63,9 +63,11 @@ line, so find where that line went in the new streamsession.cpp and update its a
 2. **Start chiaki-ng:** run `run_chiaki_frametap.bat` in the build folder. The first time, register the
    PS5: sign in to PSN in chiaki-ng (or paste your account ID), then enter the 8-digit code from
    PS5 Settings → System → Remote Play → Link Device.
-3. **chiaki-ng settings:** resolution 1080p, FPS **60** (the pipeline expects the PS5's 60 Hz output with
+3. **chiaki-ng settings:** Keel writes these before it starts chiaki-ng: resolution **1080p** (the highest
+   Remote Play size chiaki-ng can request), FPS **60** (the pipeline expects the PS5's 60 Hz output with
    repeats), codec H.265 (H.265 HDR only with Keel's HDR setting on: `--hdr sdr` or `--hdr hdr10`, see
-   [`framegen/hdr.py`](../framegen/hdr.py)), bitrate as high as your network allows.
+   [`framegen/hdr.py`](../framegen/hdr.py)), bitrate **100 Mbps** (the top of chiaki-ng's slider; a 0 bitrate
+   would fall back to the 15 Mbps preset). A chiaki-ng that is already open keeps the profile it loaded.
 4. **Start the pipeline**, ideally before connecting in chiaki-ng:
    ```powershell
    .venv\Scripts\python run.py --chiaki --display --chiaki-log out\session_GAME.csv
