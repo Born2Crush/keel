@@ -51,6 +51,8 @@ METHODS = '''
         return made
 
     def _output_surface(self, width, height):
+        if not self._cuda_now():
+            raise RuntimeError("DLSS ctx")
         c = self._ctypes
         nvcuda = getattr(self, "_nvcuda", None)
         if nvcuda is None:
@@ -100,6 +102,8 @@ METHODS = '''
         return surf
 
     def _read_output(self):
+        if not self._cuda_now():
+            raise RuntimeError("DLSS ctx")
         c = self._ctypes
         nvcuda = self._nvcuda
         class Copy(c.Structure):
