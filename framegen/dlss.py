@@ -124,9 +124,9 @@ class DlssScaler:
         folder.mkdir(parents=True, exist_ok=True)
         info = self._feature_info(feature)
         feature_info = None if info is None else ctypes.cast(ctypes.byref(info), ctypes.c_void_p)
-        rc = self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), feature_info, API_VERSION)
+        rc = self._call("init", lambda: self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), feature_info, API_VERSION))
         if ngx_failed(rc) and feature_info is not None:
-            rc = self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), None, API_VERSION)
+            rc = self._call("init", lambda: self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), None, API_VERSION))
         if ngx_failed(rc):
             raise RuntimeError("DLSS init " + ngx_why(rc))
         self._bag = {}
@@ -176,6 +176,12 @@ class DlssScaler:
         self._eval = self._sym("NVSDK_NGX_CUDA_EvaluateFeature_C", "NVSDK_NGX_CUDA_EvaluateFeature")
         self._eval.argtypes = [void, void, void]
         self._eval.restype = u32
+
+    def _call(self, where, fn):
+        try:
+            return fn()
+        except OSError as exc:
+            raise RuntimeError("DLSS %s %s" % (where, exc)) from exc
 
     def _remember(self, name, value):
         if not name:
@@ -325,7 +331,7 @@ class DlssScaler:
 
     def _open_feature(self, feature):
         self._reserve_scratch(feature)
-        rc = self.lib.NVSDK_NGX_CUDA_CreateFeature(feature, self.params, self._ctypes.byref(self.handle))
+        rc = self._call("create", lambda: self.lib.NVSDK_NGX_CUDA_CreateFeature(feature, self.params, self._ctypes.byref(self.handle)))
         return ngx_why(rc) if ngx_failed(rc) else None
 
     def _reserve_scratch(self, feature):
@@ -338,7 +344,7 @@ class DlssScaler:
         size_of.argtypes = [c.c_int, c.c_void_p, c.POINTER(c.c_size_t)]
         size_of.restype = c.c_uint
         need = c.c_size_t(0)
-        rc = size_of(feature, self.params, c.byref(need))
+        rc = self._call("scratch", lambda: size_of(feature, self.params, c.byref(need)))
         if ngx_failed(rc) or not need.value:
             return
         import torch
@@ -379,7 +385,7 @@ class DlssScaler:
             self._set_f(b"DLSS.Pre.Exposure", 1.0)
             self._set_f(b"DLSS.Exposure.Scale", 1.0)
             self._set_i(b"Reset", 1)
-        rc = self._eval(self.handle, self.params, None)
+        rc = self._call("eval", lambda: self._eval(self.handle, self.params, None))
         if ngx_failed(rc):
             raise RuntimeError("DLSS evaluate " + ngx_why(rc))
         return out
