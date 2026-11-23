@@ -2,6 +2,8 @@ name: Publish installer
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   contents: write
@@ -22,6 +24,9 @@ jobs:
 
       - name: Install the icon tools
         run: python -m pip install opencv-python-headless numpy
+
+      - name: Use RTX Video Super Resolution instead of DLSS
+        run: python installer/use_vsr.py
 
       - name: Join a stream that is already running
         run: python installer/patch_stream_join.py
