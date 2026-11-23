@@ -35,9 +35,11 @@ ENGINE_CUSTOM = 0
 PROJECT_ID = "7e1c4a90-2b6d-4f18-9c35-8a0d6e2b4f71"
 
 
-def uses_dlss(output_size: str, src_w: int, src_h: int) -> bool:
-    """Output size 4K upscales a stream smaller than 4K with DLSS, not with FSR."""
-    return output_size == "2160p" and (src_w < UHD_W or src_h < UHD_H)
+def uses_dlss(output_size: str, src_w: int, src_h: int, scaler: str | None = None) -> bool:
+    """4K output, or the NVIDIA DLSS upscaler, draws a stream smaller than 4K with DLSS."""
+    if src_w >= UHD_W and src_h >= UHD_H:
+        return False
+    return output_size == "2160p" or scaler == "dlss"
 
 
 def project_id() -> str:
