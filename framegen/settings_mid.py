@@ -1,0 +1,26 @@
+from .settings_early import *
+
+SPECS_M: tuple[Spec, ...] = (
+    Spec("even_out", "Even out 40-60 fps", (True, False), True, ON_OFF, group="Smoothness", applies=("interp", (True,)),
+         help="For games that run between about 40 and 60 fps. Keel spaces the frames evenly. Experimental."),
+    Spec("game_fps", "Game frame rate", ("auto", "30"), "auto", {"auto": "Auto", "30": "30 fps"}, group="Smoothness", applies=("interp", (True,)),
+         help="Auto reads the game's frame rate. Pick 30 fps when the game is locked at 30."),
+    Spec("even_dips", "Dip smoothing", (False, True), False, ON_OFF, group="Smoothness", applies=("interp", (True,)), experimental=True,
+         help="Spaces frames when a 30 fps game dips below 30. Experimental."),
+    Spec("model", "Interpolation model", ("4.22.lite", "vfg"), "4.22.lite", {"4.22.lite": "RIFE 4.22 lite", "vfg": "NVIDIA VFG"}, live=False, group="Smoothness", quick=True,
+         help="RIFE 4.22 lite is the model Keel is tested with. NVIDIA VFG is NVIDIA's own, for RTX 40 and 50 series."),
+    Spec("vfg_quality", "VFG quality", ("low", "medium", "high"), "high", {"low": "Low", "medium": "Medium", "high": "High"}, live=False, group="Smoothness", applies=("model", ("vfg",)),
+         help="How much work NVIDIA VFG puts into each in-between frame. Keel starts on High."),
+    Spec("steady_hud", "Steady HUD", (False, True), False, ON_OFF, group="Smoothness", applies=("model", ("4.22.lite", "vfg")),
+         help="Keeps HUD elements as the game drew them."),
+    Spec("engine", "AI engine", ("auto", "trt", "torch"), "trt", {"auto": "Auto", "trt": "TensorRT", "torch": "PyTorch"}, live=False, group="Smoothness", applies=("model", ("4.22.lite",)),
+         help="Keel starts on TensorRT. Both engines draw the same frames."),
+    Spec("motion", "Motion detail", ("auto", "full", "half"), "full", {"auto": "Auto", "full": "Full", "half": "Half"}, live=False, group="Smoothness", applies=("model", ("4.22.lite",)),
+         help="Keel starts on Full. Half is a little softer and about 40 percent faster."),
+    Spec("simulate_30", "Simulate a 30 fps game", (False, True), False, ON_OFF, saved=False, group="Smoothness",
+         help="Drops every other frame of a 60 fps game, for testing. This session only."),
+    Spec("fsr_sharpness", "FSR sharpening", (0.0, 0.25, 0.5, 1.0, 2.0), 0.5, {0.0: "Max", 0.25: "High", 0.5: "Medium", 1.0: "Low", 2.0: "Minimal"}, group="Picture", applies=("scaler", ("fsr",)),
+         help="How strongly FSR 1 sharpens. Only used with AMD FSR 1."),
+    Spec("vsr_quality", "RTX VSR quality", (1, 2, 3, 4), 2, {1: "Low", 2: "Medium", 3: "High", 4: "Ultra"}, group="Picture", applies=("scaler", ("vsr",)), experimental=True,
+         help="How hard RTX VSR works. Only used with RTX VSR."),
+)
