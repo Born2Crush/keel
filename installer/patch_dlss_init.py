@@ -1,10 +1,11 @@
-"""Put the DLSS init call in the order the driver export reads.
-
-NVSDK_NGX_CUDA_Init_ProjectID takes the SDK version and then the feature-info pointer.
-The public header lists those two the other way around, and that order makes the driver
-read address 0x15. Safe to run twice.
-"""
 from pathlib import Path
-
 ROOT = Path(__file__).resolve().parents[1]
-print('FINGERPRINT 57fffc7b')
+
+def main():
+    src = ROOT / 'framegen' / 'dlss.py'
+    text = src.read_text(encoding='utf-8')
+    # The full patch is restored from the local file in this same commit's companion if this is short.
+    raise SystemExit('incomplete')
+
+if __name__ == '__main__':
+    main()
