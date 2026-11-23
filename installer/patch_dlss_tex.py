@@ -163,6 +163,23 @@ METHODS = '''
         self._rgba[..., :3] = rgb.half() * (1.0 / 255.0)
         self._rgba[..., 3] = 1
         self._to_array(self._color_array, self._rgba)
+        self._clear_output()
+
+    def _clear_output(self):
+        import torch
+        z = getattr(self, "_out_zero", None)
+        if z is None:
+            z = torch.zeros((2160, 3840, 4), dtype=torch.uint8, device="cuda")
+            self._out_zero = z
+        self._to_array(self._out_array, z)
+
+    def _bind_exposure(self):
+        import torch
+        if getattr(self, "_exposure_tex", None) is None:
+            one = torch.ones((1, 1, 4), dtype=torch.float16, device="cuda")
+            self._exposure_array, self._exposure_tex = self._array_tex(1, 1, 4, 3, 0)
+            self._to_array(self._exposure_array, one)
+        self._set_ptr(b"ExposureTexture", self._ctypes.c_void_p(self._ctypes.addressof(self._exposure_tex)))
 '''
 
 OLD_BUFFERS = '''        out = torch.empty((UHD_H, UHD_W, 3), dtype=torch.uint8, device="cuda")
@@ -191,6 +208,15 @@ def patch(text: str) -> str:
     text = text.replace('self._set_ui(b"Output.Format", RGB8UI)', 'self._set_ui(b"Output.Format", 4)', 1)
     text = text.replace('self._set_ui(b"Output.Format", 3)', 'self._set_ui(b"Output.Format", 4)', 1)
     text = text.replace('self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 3)', 'self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 4)', 1)
+    text = text.replace(
+        'self._set_i(b"DLSS.Feature.Create.Flags", FLAG_AUTO_EXPOSURE)',
+        'self._set_i(b"DLSS.Feature.Create.Flags", 0)',
+        1,
+    )
+    exposure = 'self._set_f(b"DLSS.Pre.Exposure", 1.0)'
+    hooked = "self._bind_exposure()\n            " + exposure
+    if exposure in text and hooked not in text:
+        text = text.replace(exposure, hooked, 1)
     text = text.replace('self._set_ptr(b"MotionVectors", c.c_void_p(self._zeros.data_ptr()))', 'self._set_ptr(b"MotionVectors", c.c_void_p(c.addressof(self._motion_tex)))', 1)
     text = text.replace('self._set_ptr(b"Depth", c.c_void_p(self._depth.data_ptr()))', 'self._set_ptr(b"Depth", c.c_void_p(c.addressof(self._depth_tex)))', 1)
     text = text.replace(
@@ -202,7 +228,7 @@ def patch(text: str) -> str:
         text = text.replace(OLD_BUFFERS, "", 1)
     if "def _pictures(self, rgb, h, w):" not in text:
         text = text.replace("\n_session = None\n", METHODS + "\n_session = None\n", 1)
-    if "cudaCreateTextureObject" not in text or "cudaCreateSurfaceObject" not in text or 'b"Color.Format", 5' not in text:
+    if "cudaCreateTextureObject" not in text or "def _bind_exposure" not in text or 'b"Color.Format", 5' not in text or 'b"DLSS.Feature.Create.Flags", 0' not in text:
         raise SystemExit("DLSS texture patch did not apply")
     return text
 
