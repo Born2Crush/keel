@@ -65,8 +65,13 @@ METHODS = '''
         rt = self._runtime()
         class Channel(c.Structure):
             _fields_ = [("x", c.c_int), ("y", c.c_int), ("z", c.c_int), ("w", c.c_int), ("f", c.c_int)]
-        bits = 8 if kind == 1 else 32
-        ch = Channel(*([bits if i < channels else 0 for i in range(4)] + [kind]))
+        if kind == 1:
+            bits, fmt = 8, 1
+        elif kind == 3:
+            bits, fmt = 16, 2
+        else:
+            bits, fmt = 32, 2
+        ch = Channel(*([bits if i < channels else 0 for i in range(4)] + [fmt]))
         rt.cudaMallocArray.argtypes = [c.POINTER(c.c_void_p), c.POINTER(Channel), c.c_size_t, c.c_size_t, c.c_uint]
         rt.cudaMallocArray.restype = c.c_int
         arr = c.c_void_p()
@@ -79,8 +84,6 @@ METHODS = '''
         texdesc = (c.c_ubyte * 256)()
         for i in range(3):
             c.c_int.from_buffer(texdesc, 4 * i).value = 1
-        if kind == 1:
-            c.c_int.from_buffer(texdesc, 16).value = 1
         rt.cudaCreateTextureObject.argtypes = [c.POINTER(c.c_ulonglong), c.c_void_p, c.c_void_p, c.c_void_p]
         rt.cudaCreateTextureObject.restype = c.c_int
         made = c.c_ulonglong(0)
@@ -119,6 +122,8 @@ METHODS = '''
         return arr, surf
 
     def _to_array(self, array, tensor):
+        import torch
+        torch.cuda.current_stream().synchronize()
         c = self._ctypes
         rt = self._cudart
         row = int(tensor.shape[1]) * int(tensor.shape[2]) * int(tensor.element_size())
@@ -143,20 +148,20 @@ METHODS = '''
         if not missing and (self._rgba.shape[0] != h or self._rgba.shape[1] != w):
             missing = True
         if missing:
-            rgba = torch.empty((h, w, 4), dtype=torch.uint8, device="cuda")
+            rgba = torch.empty((h, w, 4), dtype=torch.float16, device="cuda")
             out4 = torch.empty((2160, 3840, 4), dtype=torch.uint8, device="cuda")
             zeros = torch.zeros((h, w, 2), dtype=torch.float32, device="cuda")
             depth = torch.ones((h, w, 1), dtype=torch.float32, device="cuda")
             self._tex_alive = []
             self._rgba, self._out4, self._zeros, self._depth = rgba, out4, zeros, depth
-            self._color_array, self._color_tex = self._array_tex(w, h, 4, 1, 0)
+            self._color_array, self._color_tex = self._array_tex(w, h, 4, 3, 0)
             self._out_array, self._out_tex = self._array_surf(3840, 2160)
             self._motion_array, self._motion_tex = self._array_tex(w, h, 2, 2, 0)
             self._depth_array, self._depth_tex = self._array_tex(w, h, 1, 2, 0)
             self._to_array(self._motion_array, self._zeros)
             self._to_array(self._depth_array, self._depth)
-        self._rgba[..., :3] = rgb
-        self._rgba[..., 3] = 255
+        self._rgba[..., :3] = rgb.half() * (1.0 / 255.0)
+        self._rgba[..., 3] = 1
         self._to_array(self._color_array, self._rgba)
 '''
 
@@ -177,9 +182,11 @@ def patch(text: str) -> str:
         'self._pictures(rgb, h, w)\n        self._set_ptr(b"Color", c.c_void_p(c.addressof(self._color_tex)))',
         1,
     )
-    text = text.replace('self._set_ui(b"Color.Format", RGB8UI)', 'self._set_ui(b"Color.Format", 4)', 1)
-    text = text.replace('self._set_ui(b"Color.Format", 3)', 'self._set_ui(b"Color.Format", 4)', 1)
-    text = text.replace('self._set_ui(b"Color.SizeInBytes", w * h * 3)', 'self._set_ui(b"Color.SizeInBytes", w * h * 4)', 1)
+    text = text.replace('self._set_ui(b"Color.Format", RGB8UI)', 'self._set_ui(b"Color.Format", 5)', 1)
+    text = text.replace('self._set_ui(b"Color.Format", 4)', 'self._set_ui(b"Color.Format", 5)', 1)
+    text = text.replace('self._set_ui(b"Color.Format", 3)', 'self._set_ui(b"Color.Format", 5)', 1)
+    text = text.replace('self._set_ui(b"Color.SizeInBytes", w * h * 3)', 'self._set_ui(b"Color.SizeInBytes", w * h * 8)', 1)
+    text = text.replace('self._set_ui(b"Color.SizeInBytes", w * h * 4)', 'self._set_ui(b"Color.SizeInBytes", w * h * 8)', 1)
     text = text.replace('self._set_ptr(b"Output", c.c_void_p(out.data_ptr()))', 'self._set_ptr(b"Output", c.c_void_p(c.addressof(self._out_tex)))', 1)
     text = text.replace('self._set_ui(b"Output.Format", RGB8UI)', 'self._set_ui(b"Output.Format", 4)', 1)
     text = text.replace('self._set_ui(b"Output.Format", 3)', 'self._set_ui(b"Output.Format", 4)', 1)
@@ -195,7 +202,7 @@ def patch(text: str) -> str:
         text = text.replace(OLD_BUFFERS, "", 1)
     if "def _pictures(self, rgb, h, w):" not in text:
         text = text.replace("\n_session = None\n", METHODS + "\n_session = None\n", 1)
-    if "cudaCreateTextureObject" not in text or "cudaCreateSurfaceObject" not in text or 'b"Color.Format", 4' not in text:
+    if "cudaCreateTextureObject" not in text or "cudaCreateSurfaceObject" not in text or 'b"Color.Format", 5' not in text:
         raise SystemExit("DLSS texture patch did not apply")
     return text
 
