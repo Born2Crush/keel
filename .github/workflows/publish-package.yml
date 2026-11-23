@@ -2,8 +2,6 @@ name: Publish installer
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: write
@@ -35,17 +33,17 @@ jobs:
         run: python installer/patch_stream_join.py
 
       - name: Build Keel-Setup.exe
-        run: python installer/build.py --app-setup --version 0.3.56
+        run: python installer/build.py --app-setup --version 0.3.57
 
       - name: Publish the installer
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.56
-          name: Keel 0.3.56
+          tag_name: v0.3.57
+          name: Keel 0.3.57
           make_latest: true
           files: installer/dist/Keel-Setup.exe
           body: |
             Double-click Keel-Setup.exe.
             It installs Keel as an app: a window, a Start menu shortcut, and an entry in Windows Settings under Apps.
-            The window uses the purple Keel wordmark. 4K output uses RTX Video Super Resolution. Keel asks chiaki-ng for 200 Mbps the next time it starts the stream. The new-frame check no longer waits behind the frame already on its way to the screen. Check for updates installs this over the current copy. Your settings stay.
+            The window uses the purple Keel wordmark. 4K output uses RTX Video Super Resolution. Decoding and frame generation reuse their picture buffers instead of allocating a new one every frame. Check for updates installs this over the current copy. Your settings stay. 200 Mbps still applies the next time Keel starts the stream.
             Uninstall is in the Keel window on the Help page, and in Settings, Apps.
