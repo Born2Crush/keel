@@ -177,10 +177,6 @@ def main() -> None:
     print("200 Mbps, and the frame check overlaps the draw")
 
 
-if __name__ == "__main__":
-    main()
-
-
 def patch_color(text: str) -> str:
     """Reuse the NV12 conversion's float planes. The returned image is still its own tensor."""
     if "cuda_frame_to_bgr._box" in text:
@@ -316,3 +312,7 @@ def patch_vfg(text: str) -> str:
     if close not in text:
         raise SystemExit("speed patch could not find VFG close")
     return text.replace(close, methods + close, 1)
+
+
+if __name__ == "__main__":
+    main()
