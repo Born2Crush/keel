@@ -2,11 +2,12 @@
 
 chiaki-ng's preset, used whenever the saved bitrate is 0, is 15 Mbps. Its remote
 profile starts at 720p. Both throw away picture the tap can carry. Remote Play's
-highest size and rate in chiaki-ng are 1080p and 60 fps. The bitrate slider stops
-at 100 Mbps, stored as kbps. The frame tap holds one compressed frame of
-SLOT_SIZE - SLOT_HEADER bytes. At 60 fps a 100 Mbps average frame is far smaller
-than that slot, so the slider's top is the request. A higher number is not
-something chiaki-ng will send, and it was not measured here.
+highest size and rate in chiaki-ng are 1080p and 60 fps. The settings slider
+stops at 100 Mbps, but the number chiaki-ng sends is the saved one, with no cap
+in its settings. Keel writes 200 Mbps (kbps). The frame tap holds one compressed
+frame of SLOT_SIZE - SLOT_HEADER bytes. At 60 fps a 200 Mbps average frame is
+about a fifth of that slot, so a keyframe several times the average still fits.
+What the console actually sends was not measured here.
 
 H.265 is chiaki-ng's PS5 codec. The HDR codec is not requested: Keel's HDR
 setting stays off until it is turned on.
@@ -20,8 +21,9 @@ from .chiaki_tap import SLOT_HEADER, SLOT_SIZE
 
 WIDTH, HEIGHT, FPS = 1920, 1080, 60
 CODEC = "h265"
-# chiaki-ng's bitrate slider: 2 to 100, saved as kbps (SettingsDialog.qml).
-BITRATE_KBPS = 100_000
+# Saved as kbps. chiaki-ng's slider stops at 100; GetBitrate* returns the saved
+# number and the launch spec sends it (streamconnection.c, bw_kbps_sent).
+BITRATE_KBPS = 200_000
 # HKCU\Software\Chiaki\Chiaki, or Chiaki-<profile> when a profile is current.
 REG_ORG = r"Software\Chiaki"
 
