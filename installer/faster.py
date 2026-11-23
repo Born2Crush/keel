@@ -163,6 +163,40 @@ def _overlap(text: str) -> str:
     return text.replace(old_load, new_load, 1)
 
 
+def patch_sharp(text: str) -> str:
+    """Fast motion shows the real frame. A per-pixel mix of the blend flashed and cost a frame."""
+    if "sharp_motion" in text:
+        return text
+    old = "        cuts = CutDetector(self.cut_threshold)\n"
+    new = old + (
+        "        # Fast motion shows the real frame. A blend there smears and, mixed per pixel, flashes.\n"
+        "        # 8 levels of average block change starts it; it stays until a new frame is under 4.\n"
+        "        sharp_motion = False\n"
+    )
+    if old not in text:
+        raise SystemExit("speed patch could not find the cut detector")
+    text = text.replace(old, new, 1)
+    old = (
+        "                # A frame the source flags as damaged (e.g. Remote Play packet loss) is held like a cut, so its\n"
+        "                # corruption isn't blended into the generated frame. `|` so the cut detector still sees every frame.\n"
+        "                is_cut = is_new and (cuts.update(diff.mean_diff, diff.cut) | tick.damaged)\n"
+    )
+    new = (
+        "                # A frame the source flags as damaged (e.g. Remote Play packet loss) is held like a cut, so its\n"
+        "                # corruption isn't blended into the generated frame. `|` so the cut detector still sees every frame.\n"
+        "                # Fast motion is held the same way: the game's own frame, not a warped blend.\n"
+        "                if is_new:\n"
+        "                    if sharp_motion:\n"
+        "                        sharp_motion = diff.mean_diff >= 4.0\n"
+        "                    else:\n"
+        "                        sharp_motion = diff.mean_diff >= 8.0\n"
+        "                is_cut = is_new and (cuts.update(diff.mean_diff, diff.cut) | tick.damaged | sharp_motion)\n"
+    )
+    if old not in text:
+        raise SystemExit("speed patch could not find the cut decision")
+    return text.replace(old, new, 1)
+
+
 def patch_cadence(text: str) -> str:
     """Keep the float copy of each frame, so the new-frame check does not allocate one every tick."""
     if "def _float_nchw(" in text:
@@ -208,7 +242,7 @@ def main() -> None:
     for path, fns in (
         (root / "installer" / "launcher" / "PlayLaunch.cs", (patch_rate, patch_cap)),
         (root / "installer" / "launcher" / "Ui.cs", (patch_rate,)),
-        (root / "framegen" / "pipeline.py", (_overlap,)),
+        (root / "framegen" / "pipeline.py", (_overlap, patch_sharp)),
         (root / "framegen" / "cadence.py", (patch_cadence,)),
         (root / "framegen" / "chiaki_tap.py", (patch_color,)),
         (root / "framegen" / "vfg.py", (patch_vfg,)),
@@ -408,7 +442,7 @@ def real_mix(diff: float, low: float = REAL_LOW, high: float = REAL_HIGH) -> flo
         raise SystemExit("speed patch could not find the VFG slot")
     text = text.replace(old, new, 1)
     old = "        if self.steady > 0:  # Steady HUD: the real pixels where the HUD is\n"
-    new = "        self._prefer_real(newest_slot, t)\n        if self.steady > 0:  # Steady HUD: the real pixels where the HUD is\n"
+    new = "        if self.steady > 0:  # Steady HUD: the real pixels where the HUD is\n"
     if old not in text:
         raise SystemExit("speed patch could not find the VFG blend")
     text = text.replace(old, new, 1)
