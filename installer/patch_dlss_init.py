@@ -9,6 +9,130 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+_OLD_FIND = '''def find_dll():
+    env = os.environ.get("KEEL_DLSS_DLL")
+    if env and Path(env).is_file():
+        return Path(env)
+    ngx = find_ngx()
+    ngx_dir = ngx.parent if ngx is not None else None
+    system_root = Path(os.environ.get("SystemRoot", r"C:\\Windows")) / "System32"
+    found = []
+    if ngx_dir is not None:
+        found.append(ngx_dir / "nvngx_dlss.dll")
+    store = system_root / "DriverStore" / "FileRepository"
+    if store.is_dir():
+        found += list(store.glob("*/nvngx_dlss.dll"))
+        if not any(p.is_file() for p in found):
+            found += list(store.glob("*/*/nvngx_dlss.dll"))
+    found.append(system_root / "nvngx_dlss.dll")
+    for key in ("ProgramFiles", "ProgramW6432", "ProgramData"):
+        value = os.environ.get(key)
+        if not value:
+            continue
+        root = Path(value)
+        for tail in (r"NVIDIA Corporation\\NVIDIA NGX\\nvngx_dlss.dll", r"NVIDIA Corporation\\NVIDIA App\\nvngx_dlss.dll", r"NVIDIA\\NGX\\models\\nvngx_dlss.dll"):
+            found.append(root / tail)
+    files = [p for p in found if p.is_file()]
+    if not files:
+        return None
+    files.sort(key=lambda p: (dll_rank(p, ngx_dir), -p.stat().st_mtime))
+    return files[0]
+'''
+
+_NEW_FIND = '''def _is_pe(path):
+    try:
+        with path.open("rb") as handle:
+            return handle.read(2) == b"MZ"
+    except OSError:
+        return False
+
+def _model_version(path):
+    parts = path.parts
+    if "versions" not in parts:
+        return 0
+    index = parts.index("versions") + 1
+    if index < len(parts) and parts[index].isdigit():
+        return int(parts[index])
+    return 0
+
+def pick_model(blobs):
+    real = [path for path in blobs if path.is_file() and _is_pe(path)]
+    if not real:
+        return None
+    return max(real, key=lambda path: (_model_version(path), path.stat().st_mtime))
+
+def stage_dll(src, dest_dir):
+    if src.suffix.lower() == ".dll":
+        return src
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "nvngx_dlss.dll"
+    if not dest.is_file() or dest.stat().st_size != src.stat().st_size:
+        shutil.copyfile(src, dest)
+    return dest
+
+def _model_bins():
+    root = Path(os.environ.get("ProgramData", r"C:\\ProgramData")) / "NVIDIA" / "NGX" / "models" / "dlss" / "versions"
+    if not root.is_dir():
+        return []
+    return [path for path in root.glob("*/files/*.bin") if path.is_file()]
+
+def find_dll():
+    env = os.environ.get("KEEL_DLSS_DLL")
+    if env and Path(env).is_file():
+        return Path(env)
+    ngx = find_ngx()
+    ngx_dir = ngx.parent if ngx is not None else None
+    system_root = Path(os.environ.get("SystemRoot", r"C:\\Windows")) / "System32"
+    found = []
+    if ngx_dir is not None:
+        found.append(ngx_dir / "nvngx_dlss.dll")
+    store = system_root / "DriverStore" / "FileRepository"
+    if store.is_dir():
+        found += list(store.glob("*/nvngx_dlss.dll"))
+        found += list(store.glob("*/*/nvngx_dlss.dll"))
+    found.append(system_root / "nvngx_dlss.dll")
+    models = Path(os.environ.get("ProgramData", r"C:\\ProgramData")) / "NVIDIA" / "NGX" / "models"
+    if models.is_dir():
+        found += list(models.rglob("nvngx_dlss.dll"))
+    for key in ("ProgramFiles", "ProgramW6432", "ProgramData"):
+        value = os.environ.get(key)
+        if not value:
+            continue
+        root = Path(value)
+        for tail in (r"NVIDIA Corporation\\NVIDIA NGX\\nvngx_dlss.dll", r"NVIDIA Corporation\\NVIDIA App\\nvngx_dlss.dll", r"NVIDIA\\NGX\\models\\nvngx_dlss.dll"):
+            found.append(root / tail)
+    files = [p for p in found if p.is_file()]
+    files.sort(key=lambda p: (dll_rank(p, ngx_dir), -p.stat().st_mtime))
+    if files and dll_rank(files[0], ngx_dir) <= 2:
+        return files[0]
+    model = pick_model(_model_bins())
+    if model is not None:
+        return stage_dll(model, Path(tempfile.gettempdir()) / "keel-ngx")
+    return files[0] if files else None
+'''
+
+
+def _patch_model(text: str) -> str:
+    """Current drivers store nvngx_dlss.dll as a .bin under ProgramData\\NVIDIA\\NGX\\models."""
+    if "def pick_model(" in text:
+        return text
+    if "import shutil\n" not in text:
+        text = text.replace("import os\n", "import os\nimport shutil\n", 1)
+    if _OLD_FIND not in text:
+        raise SystemExit("DLSS init patch could not find the DLL search")
+    text = text.replace(_OLD_FIND, _NEW_FIND, 1)
+    needle = "                os.add_dll_directory(str(feature.parent))\n"
+    insert = needle + (
+        "        if sys.platform == \"win32\" and feature is not None:\n"
+        "            kernel = ctypes.WinDLL(\"kernel32\", use_last_error=True)\n"
+        "            kernel.SetDllDirectoryW.argtypes = [ctypes.c_wchar_p]\n"
+        "            kernel.SetDllDirectoryW(str(feature.parent))\n"
+    )
+    if "SetDllDirectoryW" not in text and needle in text:
+        text = text.replace(needle, insert, 1)
+    return text
+
+
 def patch(text: str) -> str:
     text = text.replace(
         'self._sym("NVSDK_NGX_CUDA_Init_with_ProjectID", "NVSDK_NGX_CUDA_Init_ProjectID")',
@@ -59,10 +183,13 @@ def patch(text: str) -> str:
             "            self._cuda_ctx = held\n\n"
         )
         text = text.replace("    def _call(self, where, fn):", hold + "    def _call(self, where, fn):", 1)
+    text = _patch_model(text)
     if "API_VERSION, feature_info" not in text or "i32, void]" not in text:
         raise SystemExit("DLSS init patch did not put the SDK version before the feature pointer")
     if "def _hold_cuda_context" not in text:
         raise SystemExit("DLSS init patch could not add the CUDA context hold")
+    if "def pick_model(" not in text or "def _model_bins(" not in text:
+        raise SystemExit("DLSS init patch did not look in the driver model folder")
     return text
 
 
