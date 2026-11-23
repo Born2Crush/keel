@@ -176,11 +176,11 @@ def patch_sharp(text: str) -> str:
     put(
         "        cuts = CutDetector(self.cut_threshold)\n",
         "        cuts = CutDetector(self.cut_threshold)\n"
-        "        # Fast motion repeats the picture already upscaled. A blend there smears, and running the\n"
-        "        # upscaler on every slot dropped the frame rate and flashed. 8 levels of average block\n"
-        "        # change starts it; it stays until a new frame is under 4. Slow motion still fills in.\n"
-        "        sharp_motion = False\n"
-        "        last_shown = None  # the real frame last drawn, which a fast-motion slot shows again\n",
+        "        # A blended frame is the smear: the menu stays sharp and the picture behind it turns to\n"
+        "        # color fog. Every in-between slot redraws the game's own frame. The upscaler still runs\n"
+        "        # once, on that frame.\n"
+        "        sharp_motion = True\n"
+        "        last_shown = None  # the real frame last drawn, which an in-between slot shows again\n",
         "speed patch could not find the cut detector",
     )
     put(
@@ -233,13 +233,8 @@ def patch_sharp(text: str) -> str:
         "                # corruption isn't blended into the generated frame. `|` so the cut detector still sees every frame.\n"
         "                is_cut = is_new and (cuts.update(diff.mean_diff, diff.cut) | tick.damaged)\n",
         "                # corruption isn't blended into the generated frame. `|` so the cut detector still sees every frame.\n"
-        "                # Fast motion is not a cut. A cut drops the in-between slots, and that is the frame-rate drop.\n"
-        "                # Those slots stay, and they redraw the picture already on screen.\n"
-        "                if is_new:\n"
-        "                    if sharp_motion:\n"
-        "                        sharp_motion = diff.mean_diff >= 4.0\n"
-        "                    else:\n"
-        "                        sharp_motion = diff.mean_diff >= 8.0\n"
+        "                # The blend stays off the screen. A cut still drops a damaged frame out of the\n"
+        "                # interpolator, and the slots themselves stay so the frame rate does not fall.\n"
         "                is_cut = is_new and (cuts.update(diff.mean_diff, diff.cut) | tick.damaged)\n",
         "speed patch could not find the cut decision",
     )
@@ -289,6 +284,29 @@ def patch_sharp(text: str) -> str:
         "                    if not generated_out:\n"
         "                        last_shown = out\n",
         "speed patch could not find the present",
+    )
+    put(
+        "                if is_new and not timed:\n"
+        "                    slot = 1 - slot\n"
+        "                    it.prepare(slot)  # (in_u8 holds this tick's frame)\n",
+        "                if is_new and not timed and not sharp_motion:\n"
+        "                    slot = 1 - slot\n"
+        "                    it.prepare(slot)  # (in_u8 holds this tick's frame)\n",
+        "speed patch could not find the frame prepare",
+    )
+    put(
+        "                        pl = timeline.place(phi)\n"
+        "                        gen = pl.b is not None\n"
+        "                        if pl.b is None:\n"
+        "                            frame = pl.a.frame\n"
+        "                        else:\n"
+        "                            slot = self._timed_pair(pl.a, pl.b, slot, in_slot)\n"
+        "                            frame = self._generated(it.interpolate(slot, pl.t), gpu_out)\n",
+        "                        pl = timeline.place(phi)\n"
+        "                        # The real frame at this moment. A blend here is the same smear.\n"
+        "                        gen = False\n"
+        "                        frame = pl.a.frame\n",
+        "speed patch could not find the timed blend",
     )
     return text
 
