@@ -51,75 +51,47 @@ METHODS = '''
         return made
 
     def _output_surface(self, width, height):
-        if not self._cuda_now():
-            raise RuntimeError("DLSS ctx")
+        import torch
+        from .glcuda import _cudart
+        torch.cuda.current_device()
         c = self._ctypes
-        nvcuda = getattr(self, "_nvcuda", None)
-        if nvcuda is None:
-            nvcuda = c.CDLL("nvcuda.dll")
-            self._nvcuda = nvcuda
-            nvcuda.cuInit.argtypes = [c.c_uint]
-            nvcuda.cuInit.restype = c.c_int
-            nvcuda.cuInit(0)
-        class ArrayDesc(c.Structure):
-            _fields_ = [("Width", c.c_size_t), ("Height", c.c_size_t), ("Depth", c.c_size_t), ("Format", c.c_int), ("NumChannels", c.c_uint), ("Flags", c.c_uint)]
-        ad = ArrayDesc()
-        ad.Width = width
-        ad.Height = height
-        ad.Depth = 0
-        ad.Format = 1
-        ad.NumChannels = 4
-        ad.Flags = 2
+        rt = getattr(self, "_cudart", None)
+        if rt is None:
+            rt = _cudart()
+            self._cudart = rt
+        class Channel(c.Structure):
+            _fields_ = [("x", c.c_int), ("y", c.c_int), ("z", c.c_int), ("w", c.c_int), ("f", c.c_int)]
+        rt.cudaMallocArray.argtypes = [c.POINTER(c.c_void_p), c.POINTER(Channel), c.c_size_t, c.c_size_t, c.c_uint]
+        rt.cudaMallocArray.restype = c.c_int
+        rgba = Channel(8, 8, 8, 8, 1)
         arr = c.c_void_p()
-        make = nvcuda.cuArray3DCreate
-        make.argtypes = [c.POINTER(c.c_void_p), c.POINTER(ArrayDesc)]
-        make.restype = c.c_int
-        rc = make(c.byref(arr), c.byref(ad))
+        rc = rt.cudaMallocArray(c.byref(arr), c.byref(rgba), width, height, 2)
         if rc != 0 or not arr.value:
-            raise RuntimeError("DLSS array %s" % rc)
-        class Arr(c.Structure):
-            _fields_ = [("hArray", c.c_void_p)]
-        class Res(c.Union):
-            _fields_ = [("array", Arr), ("reserved", c.c_int * 32)]
-        class Desc(c.Structure):
-            _fields_ = [("resType", c.c_int), ("res", Res), ("flags", c.c_uint)]
-        desc = Desc()
-        desc.resType = 0
-        desc.flags = 0
-        desc.res.array.hArray = arr
+            raise RuntimeError("DLSS rt %s" % rc)
+        buf = (c.c_ubyte * 256)()
+        c.c_int.from_buffer(buf, 0).value = 0
+        c.c_void_p.from_buffer(buf, 8).value = arr.value
+        rt.cudaCreateSurfaceObject.argtypes = [c.POINTER(c.c_ulonglong), c.c_void_p]
+        rt.cudaCreateSurfaceObject.restype = c.c_int
         surf = c.c_ulonglong(0)
-        create = nvcuda.cuSurfObjectCreate
-        create.argtypes = [c.POINTER(c.c_ulonglong), c.POINTER(Desc)]
-        create.restype = c.c_int
-        rc = create(c.byref(surf), c.byref(desc))
+        rc = rt.cudaCreateSurfaceObject(c.byref(surf), buf)
         if rc != 0 or not surf.value:
             raise RuntimeError("DLSS surf %s" % rc)
         if not hasattr(self, "_tex_alive"):
             self._tex_alive = []
         self._tex_alive.append(arr)
         self._tex_alive.append(surf)
+        self._tex_alive.append(buf)
         self._out_array = arr
+        self._out_res = buf
         return surf
 
     def _read_output(self):
-        if not self._cuda_now():
-            raise RuntimeError("DLSS ctx")
         c = self._ctypes
-        nvcuda = self._nvcuda
-        class Copy(c.Structure):
-            _fields_ = [("srcXInBytes", c.c_size_t), ("srcY", c.c_size_t), ("srcMemoryType", c.c_int), ("_pad0", c.c_int), ("srcHost", c.c_void_p), ("srcDevice", c.c_void_p), ("srcArray", c.c_void_p), ("srcPitch", c.c_size_t), ("dstXInBytes", c.c_size_t), ("dstY", c.c_size_t), ("dstMemoryType", c.c_int), ("_pad1", c.c_int), ("dstHost", c.c_void_p), ("dstDevice", c.c_void_p), ("dstArray", c.c_void_p), ("dstPitch", c.c_size_t), ("WidthInBytes", c.c_size_t), ("Height", c.c_size_t)]
-        copy = Copy()
-        copy.srcMemoryType = 3
-        copy.srcArray = self._out_array
-        copy.dstMemoryType = 2
-        copy.dstDevice = int(self._out4.data_ptr())
-        copy.dstPitch = 3840 * 4
-        copy.WidthInBytes = 3840 * 4
-        copy.Height = 2160
-        move = nvcuda.cuMemcpy2D
-        move.argtypes = [c.POINTER(Copy)]
-        move.restype = c.c_int
-        rc = move(c.byref(copy))
+        rt = self._cudart
+        rt.cudaMemcpy2DFromArray.argtypes = [c.c_void_p, c.c_size_t, c.c_void_p, c.c_size_t, c.c_size_t, c.c_size_t, c.c_size_t, c.c_int]
+        rt.cudaMemcpy2DFromArray.restype = c.c_int
+        rc = rt.cudaMemcpy2DFromArray(c.c_void_p(int(self._out4.data_ptr())), 3840 * 4, self._out_array, 0, 0, 3840 * 4, 2160, 3)
         if rc != 0:
             raise RuntimeError("DLSS copy %s" % rc)
 
@@ -179,7 +151,7 @@ def patch(text: str) -> str:
         text = text.replace(OLD_BUFFERS, "", 1)
     if "def _pictures(self, rgb, h, w):" not in text:
         text = text.replace("\n_session = None\n", METHODS + "\n_session = None\n", 1)
-    if "cuSurfObjectCreate" not in text or "cuArray3DCreate" not in text or 'b"Color.Format", 4' not in text:
+    if "cudaMallocArray" not in text or "cudaCreateSurfaceObject" not in text or 'b"Color.Format", 4' not in text:
         raise SystemExit("DLSS texture patch did not apply")
     return text
 
