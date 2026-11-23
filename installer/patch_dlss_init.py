@@ -193,8 +193,8 @@ def patch(text: str) -> str:
         raise SystemExit("DLSS init patch could not add the CUDA context hold")
     if "def pick_model(" not in text or "def _model_bins(" not in text:
         raise SystemExit("DLSS init patch did not look in the driver model folder")
-    if "_adopt_driver_parameters" not in text or "_cuda_now" not in text or "_progress_cb" not in text:
-        raise SystemExit("DLSS init patch did not give evaluate the driver's parameter object")
+    if "_adopt_driver_parameters" not in text or "_bind_cuda_context" not in text or 'b"Input1"' not in text:
+        raise SystemExit("DLSS init patch did not pass the CUDA context to the frame call")
     return text
 
 
@@ -232,12 +232,17 @@ def _patch_eval(text: str) -> str:
     new_eval = (
         'if not self.handle.value:\n'
         '            raise RuntimeError("DLSS eval no handle")\n'
-        '        self._cuda_now()\n'
-        '        rc = self._call("eval", lambda: self._eval(self.handle, self._live(), self._progress_cb()))'
+        '        self._bind_cuda_context()\n'
+        '        rc = self._call("eval", lambda: self._eval(self.handle, self._live(), None))'
     )
     if old_eval not in text:
         raise SystemExit("DLSS init patch could not find evaluate")
     text = text.replace(old_eval, new_eval, 1)
+    text = text.replace(
+        "        self._reserve_scratch(feature)\n",
+        "        self._bind_cuda_context()\n        self._reserve_scratch(feature)\n",
+        1,
+    )
     old_sets = (
         "    def _set_ui(self, name, value):\n"
         "        self._remember(name, int(value))\n\n"
@@ -275,14 +280,38 @@ def _patch_eval(text: str) -> str:
     )
     helpers = '''
     def _cuda_now(self):
-        ctx = getattr(self, "_cuda_ctx", None)
-        nvcuda = getattr(self, "_nvcuda", None)
-        if ctx is None or nvcuda is None or not getattr(ctx, "value", None):
-            return
         c = self._ctypes
+        nvcuda = getattr(self, "_nvcuda", None)
+        if nvcuda is None:
+            try:
+                nvcuda = c.CDLL("nvcuda.dll")
+            except OSError:
+                return 0
+            self._nvcuda = nvcuda
+            nvcuda.cuInit.argtypes = [c.c_uint]
+            nvcuda.cuInit.restype = c.c_int
+            nvcuda.cuInit(0)
+        nvcuda.cuCtxGetCurrent.argtypes = [c.POINTER(c.c_void_p)]
+        nvcuda.cuCtxGetCurrent.restype = c.c_int
+        nvcuda.cuDevicePrimaryCtxRetain.argtypes = [c.POINTER(c.c_void_p), c.c_int]
+        nvcuda.cuDevicePrimaryCtxRetain.restype = c.c_int
         nvcuda.cuCtxSetCurrent.argtypes = [c.c_void_p]
         nvcuda.cuCtxSetCurrent.restype = c.c_int
-        nvcuda.cuCtxSetCurrent(ctx)
+        current = c.c_void_p()
+        if nvcuda.cuCtxGetCurrent(c.byref(current)) != 0 or not current.value:
+            held = c.c_void_p()
+            if nvcuda.cuDevicePrimaryCtxRetain(c.byref(held), 0) != 0 or not held.value:
+                return 0
+            nvcuda.cuCtxSetCurrent(held)
+            current = held
+        self._cuda_ctx = c.c_void_p(current.value)
+        nvcuda.cuCtxSetCurrent(self._cuda_ctx)
+        return int(current.value)
+
+    def _bind_cuda_context(self):
+        ctx = self._cuda_now()
+        if ctx:
+            self._set_ptr(b"Input1", self._ctypes.c_void_p(ctx))
 
     def _progress_cb(self):
         made = getattr(self, "_progress", None)
@@ -341,7 +370,7 @@ def _patch_eval(text: str) -> str:
             table = c.cast(vtable, c.POINTER(c.c_void_p))
             c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, typ)(table[slot])(drv, name, value)
         except OSError:
-            self._driver_params = None
+            return
 
     def _live(self):
         drv = getattr(self, "_driver_params", None)
