@@ -19,6 +19,10 @@ ENGINE_CUSTOM = 0
 PRESET_K = 11
 PRESET_L = 12
 PRESET_M = 13
+SET_F = 1
+SET_UI = 3
+SET_I = 4
+SET_VOID = 7
 PROJECT_ID = "7e1c4a90-2b6d-4f18-9c35-8a0d6e2b4f71"
 
 def uses_dlss(output_size, src_w, src_h, scaler=None):
@@ -30,8 +34,7 @@ def ngx_failed(rc):
     return rc == 0 or (int(rc) & 0xFFF00000) == FAIL
 
 def ngx_why(rc):
-    name = {1: "not supported", 4: "feature missing", 5: "bad parameter", 6: "scratch buffer", 8: "bad format", 10: "missing input", 11: "did not start", 12: "driver out of date", 17: "denied"}.get(int(rc) & 0xFFFFF, "0x%08x" % int(rc))
-    return name
+    return {1: "not supported", 4: "feature missing", 5: "bad parameter", 6: "scratch buffer", 8: "bad format", 10: "missing input", 11: "did not start", 12: "driver out of date", 17: "denied"}.get(int(rc) & 0xFFFFF, "0x%08x" % int(rc))
 
 def dll_rank(path, ngx_dir):
     if ngx_dir is not None and path.parent == ngx_dir:
@@ -177,44 +180,52 @@ class DlssScaler:
         self._init.restype = u32
         lib.NVSDK_NGX_CUDA_GetCapabilityParameters.argtypes = [c.POINTER(void)]
         lib.NVSDK_NGX_CUDA_GetCapabilityParameters.restype = u32
-        lib.NVSDK_NGX_Parameter_SetUI.argtypes = [void, c.c_char_p, u32]
-        lib.NVSDK_NGX_Parameter_SetUI.restype = u32
-        lib.NVSDK_NGX_Parameter_SetI.argtypes = [void, c.c_char_p, i32]
-        lib.NVSDK_NGX_Parameter_SetI.restype = u32
-        lib.NVSDK_NGX_Parameter_SetF.argtypes = [void, c.c_char_p, c.c_float]
-        lib.NVSDK_NGX_Parameter_SetF.restype = u32
-        lib.NVSDK_NGX_Parameter_SetVoidPointer.argtypes = [void, c.c_char_p, void]
-        lib.NVSDK_NGX_Parameter_SetVoidPointer.restype = u32
         lib.NVSDK_NGX_CUDA_CreateFeature.argtypes = [i32, void, c.POINTER(void)]
         lib.NVSDK_NGX_CUDA_CreateFeature.restype = u32
         self._eval = self._sym("NVSDK_NGX_CUDA_EvaluateFeature_C", "NVSDK_NGX_CUDA_EvaluateFeature")
         self._eval.argtypes = [void, void, void]
         self._eval.restype = u32
 
+    def _set(self, slot, name, value, typ):
+        c = self._ctypes
+        table = c.cast(c.cast(self.params, c.POINTER(c.c_void_p))[0], c.POINTER(c.c_void_p))
+        c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, typ)(table[slot])(self.params, name, value)
+
+    def _set_ui(self, name, value):
+        self._set(SET_UI, name, int(value), self._ctypes.c_uint)
+
+    def _set_i(self, name, value):
+        self._set(SET_I, name, int(value), self._ctypes.c_int)
+
+    def _set_f(self, name, value):
+        self._set(SET_F, name, float(value), self._ctypes.c_float)
+
+    def _set_ptr(self, name, value):
+        self._set(SET_VOID, name, value, self._ctypes.c_void_p)
+
     def _feature(self, w, h):
         if self._src == (w, h):
             return
-        p = self.params
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Width", w)
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Height", h)
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"OutWidth", UHD_W)
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"OutHeight", UHD_H)
-        self.lib.NVSDK_NGX_Parameter_SetI(p, b"PerfQualityValue", PERFORMANCE)
-        self.lib.NVSDK_NGX_Parameter_SetI(p, b"RTXValue", 0)
-        self.lib.NVSDK_NGX_Parameter_SetI(p, b"DLSS.Feature.Create.Flags", FLAG_AUTO_EXPOSURE)
-        self.lib.NVSDK_NGX_Parameter_SetI(p, b"DLSS.Hint.Render.Preset.Performance", PRESET_M)
-        self.lib.NVSDK_NGX_Parameter_SetI(p, b"DLSS.Hint.Render.Preset.Balanced", PRESET_K)
-        self.lib.NVSDK_NGX_Parameter_SetI(p, b"DLSS.Hint.Render.Preset.Quality", PRESET_K)
-        self.lib.NVSDK_NGX_Parameter_SetI(p, b"DLSS.Hint.Render.Preset.UltraPerformance", PRESET_L)
-        self.lib.NVSDK_NGX_Parameter_SetI(p, b"DLSS.Hint.Render.Preset.DLAA", PRESET_K)
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"DLSS.Render.Subrect.Dimensions.Width", w)
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"DLSS.Render.Subrect.Dimensions.Height", h)
-        self.lib.NVSDK_NGX_Parameter_SetI(p, b"DLSS.Enable.Output.Subrects", 0)
+        self._set_ui(b"Width", w)
+        self._set_ui(b"Height", h)
+        self._set_ui(b"OutWidth", UHD_W)
+        self._set_ui(b"OutHeight", UHD_H)
+        self._set_i(b"PerfQualityValue", PERFORMANCE)
+        self._set_i(b"RTXValue", 0)
+        self._set_i(b"DLSS.Feature.Create.Flags", FLAG_AUTO_EXPOSURE)
+        self._set_i(b"DLSS.Hint.Render.Preset.Performance", PRESET_M)
+        self._set_i(b"DLSS.Hint.Render.Preset.Balanced", PRESET_K)
+        self._set_i(b"DLSS.Hint.Render.Preset.Quality", PRESET_K)
+        self._set_i(b"DLSS.Hint.Render.Preset.UltraPerformance", PRESET_L)
+        self._set_i(b"DLSS.Hint.Render.Preset.DLAA", PRESET_K)
+        self._set_ui(b"DLSS.Render.Subrect.Dimensions.Width", w)
+        self._set_ui(b"DLSS.Render.Subrect.Dimensions.Height", h)
+        self._set_i(b"DLSS.Enable.Output.Subrects", 0)
         why = self._open_feature(FEATURE_SUPER_SAMPLING)
         if why is None:
             self.kind = "dlss"
         else:
-            self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Scale", 2)
+            self._set_ui(b"Scale", 2)
             image = self._open_feature(FEATURE_IMAGE_SR)
             if image is not None:
                 where = self._feature_dll.name if self._feature_dll else "no nvngx_dlss.dll"
@@ -243,8 +254,8 @@ class DlssScaler:
         import torch
         if self._scratch is None or self._scratch.numel() < need.value:
             self._scratch = torch.empty(need.value, dtype=torch.uint8, device="cuda")
-        lib.NVSDK_NGX_Parameter_SetVoidPointer(self.params, b"Scratch", c.c_void_p(self._scratch.data_ptr()))
-        lib.NVSDK_NGX_Parameter_SetUI(self.params, b"Scratch.SizeInBytes", int(need.value))
+        self._set_ptr(b"Scratch", c.c_void_p(self._scratch.data_ptr()))
+        self._set_ui(b"Scratch.SizeInBytes", int(need.value))
 
     def upscale(self, bgr):
         import torch
@@ -261,25 +272,24 @@ class DlssScaler:
             self._zeros = torch.zeros(h * w * 2, dtype=torch.float32, device="cuda")
         if self._depth is None or self._depth.shape[0] != h * w:
             self._depth = torch.ones(h * w, dtype=torch.float32, device="cuda")
-        p = self.params
         c = self._ctypes
-        self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"Color", c.c_void_p(rgb.data_ptr()))
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Color.Format", RGB8UI)
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Color.SizeInBytes", w * h * 3)
-        self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"Output", c.c_void_p(out.data_ptr()))
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Output.Format", RGB8UI)
-        self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Output.SizeInBytes", UHD_W * UHD_H * 3)
+        self._set_ptr(b"Color", c.c_void_p(rgb.data_ptr()))
+        self._set_ui(b"Color.Format", RGB8UI)
+        self._set_ui(b"Color.SizeInBytes", w * h * 3)
+        self._set_ptr(b"Output", c.c_void_p(out.data_ptr()))
+        self._set_ui(b"Output.Format", RGB8UI)
+        self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 3)
         if self.kind == "dlss":
-            self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"MotionVectors", c.c_void_p(self._zeros.data_ptr()))
-            self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"Depth", c.c_void_p(self._depth.data_ptr()))
-            self.lib.NVSDK_NGX_Parameter_SetF(p, b"Jitter.Offset.X", 0.0)
-            self.lib.NVSDK_NGX_Parameter_SetF(p, b"Jitter.Offset.Y", 0.0)
-            self.lib.NVSDK_NGX_Parameter_SetF(p, b"MV.Scale.X", 1.0)
-            self.lib.NVSDK_NGX_Parameter_SetF(p, b"MV.Scale.Y", 1.0)
-            self.lib.NVSDK_NGX_Parameter_SetF(p, b"DLSS.Pre.Exposure", 1.0)
-            self.lib.NVSDK_NGX_Parameter_SetF(p, b"DLSS.Exposure.Scale", 1.0)
-            self.lib.NVSDK_NGX_Parameter_SetI(p, b"Reset", 1)
-        rc = self._eval(self.handle, p, None)
+            self._set_ptr(b"MotionVectors", c.c_void_p(self._zeros.data_ptr()))
+            self._set_ptr(b"Depth", c.c_void_p(self._depth.data_ptr()))
+            self._set_f(b"Jitter.Offset.X", 0.0)
+            self._set_f(b"Jitter.Offset.Y", 0.0)
+            self._set_f(b"MV.Scale.X", 1.0)
+            self._set_f(b"MV.Scale.Y", 1.0)
+            self._set_f(b"DLSS.Pre.Exposure", 1.0)
+            self._set_f(b"DLSS.Exposure.Scale", 1.0)
+            self._set_i(b"Reset", 1)
+        rc = self._eval(self.handle, self.params, None)
         if ngx_failed(rc):
             raise RuntimeError("DLSS evaluate " + ngx_why(rc))
         return out
