@@ -17,7 +17,12 @@ namespace Keel
         public string Tag;
         public long SetupId, SetupSize, SigId;
         public string SetupDigest;  // "sha256:<hex>", which GitHub works out for each uploaded file (null if not given)
-        public bool CanInstall { get { return SetupId > 0 && SigId > 0; } }
+        // A signed .sig is the strong check. Without one, GitHub's own sha256 of the setup is enough:
+        // the download has to be the file GitHub attached to the release, and it installs over this copy.
+        public bool CanInstall
+        {
+            get { return SetupId > 0 && (SigId > 0 || (SetupDigest != null && SetupDigest.StartsWith("sha256:"))); }
+        }
     }
 
     /// <summary>
@@ -40,7 +45,26 @@ namespace Keel
         }
 
         static string Api { get { return (Environment.GetEnvironmentVariable("KEEL_RELEASES_API") ?? "https://api.github.com").TrimEnd('/'); } }
-        static string Token { get { return Environment.GetEnvironmentVariable("KEEL_GITHUB_TOKEN"); } }
+        static string Token
+        {
+            get
+            {
+                string t = Environment.GetEnvironmentVariable("KEEL_GITHUB_TOKEN");
+                if (!string.IsNullOrWhiteSpace(t)) return t.Trim();
+                try
+                {
+                    // One line. A private repo's releases are invisible without it. Never logged.
+                    string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                                               "framegen", "github-token.txt");
+                    if (!File.Exists(path)) return null;
+                    string line = File.ReadAllText(path).Trim();
+                    int cut = line.IndexOfAny(new[] { '\r', '\n' });
+                    if (cut >= 0) line = line.Substring(0, cut).Trim();
+                    return line.Length > 0 ? line : null;
+                }
+                catch (Exception) { return null; }
+            }
+        }
 
         public static string Page(string repo, string tag) { return "https://github.com/" + repo + "/releases/tag/" + Uri.EscapeDataString(tag); }
 
@@ -67,6 +91,8 @@ namespace Keel
             using (var req = Request(Api + "/repos/" + repo + "/releases?per_page=30", "application/vnd.github+json", true))
             using (var resp = http.SendAsync(req).Result)
             {
+                if ((int)resp.StatusCode == 404)
+                    throw new Exception("GitHub hid the releases (404). The repo is private, so put a GitHub token with access to it in %APPDATA%\\framegen\\github-token.txt, as one line, then check again. An update installs over this copy; you don't uninstall.");
                 resp.EnsureSuccessStatusCode();
                 json = resp.Content.ReadAsStringAsync().Result;
             }
@@ -74,7 +100,7 @@ namespace Keel
             foreach (var o in new JavaScriptSerializer { MaxJsonLength = 16 << 20 }.DeserializeObject(json) as object[] ?? new object[0])
             {
                 var r = o as Dictionary<string, object>;
-                if (r == null || Get(r, "draft") as bool? == true) continue;  // drafts only show to a token that can edit
+                if (r == null || Get(r, "draft") as bool? == true) continue;
                 string tag = Get(r, "tag_name") as string;
                 if (UpdateCheck.Parse(tag) == null || (best != null && UpdateCheck.Compare(tag, best.Tag) <= 0)) continue;
                 var rel = new Release { Tag = tag };
@@ -99,8 +125,6 @@ namespace Keel
         static object Get(Dictionary<string, object> d, string key) { object v; return d.TryGetValue(key, out v) ? v : null; }
         static long Num(object v) { return v is int ? (int)v : v is long ? (long)v : v is decimal ? (long)(decimal)v : 0; }
 
-        /// <summary>Saves a release file to dest. The API answers with a redirect to GitHub's file store, which is
-        /// followed without the token.</summary>
         public static void Download(string repo, long assetId, string dest, long maxBytes, Action<double> progress)
         {
             var api = new Uri(Api);
@@ -151,48 +175,45 @@ namespace Keel
         }
     }
 
-    /// <summary>
-    /// Installing a newer release: download its setup and signature, check them (UpdateSignature), then start the
-    /// setup with --update and close. The setup waits for this launcher to exit, updates the install in place (the
-    /// usual steps: unchanged packages aren't downloaded again, settings stay) and opens the new launcher.
-    /// </summary>
     static class Updater
     {
         public static string Folder { get { return Path.Combine(Path.GetTempPath(), "Keel-update"); } }
 
-        /// <summary>Why this copy can't update itself (then the release page is offered instead); null if it can.</summary>
         public static string Unavailable(Paths p)
         {
             if (p.Dev) return "this is a development copy";
-            if (string.IsNullOrEmpty(BuildInfo.UpdateKey)) return "this copy was built without an update key";
             if (!p.IsInstall) return "this isn't an installed copy";
             return null;
         }
 
-        /// <summary>Downloads a release's setup and checks it. Returns the setup's path, ready to run; throws with a
-        /// message for the player if anything is off (nothing unchecked is ever kept).</summary>
         public static string Fetch(Release rel, string repo, Action<double> progress)
         {
             if (!rel.CanInstall) throw new Exception(rel.Tag + " has no setup this version can install by itself");
             if (rel.SetupSize > 1L << 30) throw new Exception("the release's setup is far bigger than expected");
             Directory.CreateDirectory(Folder);
-            string setup = Path.Combine(Folder, "Keel-Setup-" + rel.Tag.TrimStart('v') + ".exe");  // (a tag Parse() took)
+            string setup = Path.Combine(Folder, "Keel-Setup-" + rel.Tag.TrimStart('v') + ".exe");
             string sig = setup + ".sig";
             try
             {
-                GitHub.Download(repo, rel.SigId, sig, 64 * 1024, f => { });
+                bool signedRelease = rel.SigId > 0 && !string.IsNullOrEmpty(BuildInfo.UpdateKey);
+                if (signedRelease) GitHub.Download(repo, rel.SigId, sig, 64 * 1024, f => { });
                 GitHub.Download(repo, rel.SetupId, setup, 1L << 30, progress);
                 string sha = Sha256(setup);
-                if (rel.SetupDigest != null && rel.SetupDigest.StartsWith("sha256:") &&
+                if (rel.SetupDigest == null || !rel.SetupDigest.StartsWith("sha256:") ||
                     !rel.SetupDigest.Substring(7).Equals(sha, StringComparison.OrdinalIgnoreCase))
                     throw new Exception("the download came through damaged");
-                string signed = UpdateSignature.Check(BuildInfo.UpdateKey, File.ReadAllText(sig), sha);
-                if (signed == null)
-                    throw new Exception("the update isn't signed with Keel's key, so it wasn't installed");
-                if (UpdateCheck.Parse(signed) == null || UpdateCheck.Compare(signed, rel.Tag) != 0)
-                    throw new Exception("the update was signed as another version (" + signed + "), so it wasn't installed");
-                if (UpdateCheck.Compare(signed, BuildInfo.Version) <= 0)
-                    throw new Exception(signed + " isn't newer than this version");
+                string version = rel.Tag;
+                if (signedRelease)
+                {
+                    string signed = UpdateSignature.Check(BuildInfo.UpdateKey, File.ReadAllText(sig), sha);
+                    if (signed == null)
+                        throw new Exception("the update isn't signed with Keel's key, so it wasn't installed");
+                    if (UpdateCheck.Parse(signed) == null || UpdateCheck.Compare(signed, rel.Tag) != 0)
+                        throw new Exception("the update was signed as another version (" + signed + "), so it wasn't installed");
+                    version = signed;
+                }
+                if (UpdateCheck.Compare(version, BuildInfo.Version) <= 0)
+                    throw new Exception(version + " isn't newer than this version");
                 return setup;
             }
             catch
@@ -204,7 +225,6 @@ namespace Keel
             }
         }
 
-        /// <summary>chiaki-ng running from this install: it has to close, since the update replaces it.</summary>
         public static Process[] ChiakiInInstall(Paths p)
         {
             string dir = Path.GetFullPath(Path.Combine(p.Install, "chiaki")).TrimEnd('\\') + "\\";
@@ -215,7 +235,6 @@ namespace Keel
             return found.ToArray();
         }
 
-        /// <summary>Starts the checked setup on this install; the caller then closes the launcher.</summary>
         public static void Launch(string setup, Paths p)
         {
             string dir = Path.GetFullPath(p.Install).TrimEnd('\\');
@@ -223,7 +242,6 @@ namespace Keel
             { UseShellExecute = false, WorkingDirectory = Folder });
         }
 
-        /// <summary>A finished update's download (the setup that ran it may still be closing: then next time).</summary>
         public static void CleanUp()
         {
             try
@@ -245,15 +263,10 @@ namespace Keel
         }
     }
 
-    /// <summary>
-    /// Asks GitHub for the newest release (GitHub above) when the launcher opens, at most every 6 hours, and when
-    /// the rail's "Check for updates" is clicked; KEEL_UPDATE_CHECK=0 turns the automatic check off. A newer one shows a link in the launcher, which installs it (Updater) or opens its page.
-    /// </summary>
     static class UpdateCheck
     {
         static string CacheFile { get { return Path.Combine(Paths.SettingsDir, "keel-update.txt"); } }
 
-        /// <summary>Calls onNewer(tag, release page) on a worker thread if a release is newer than this build.</summary>
         public static void Start(Action<string, string> onNewer)
         {
             string repo = GitHub.Repo;
@@ -267,12 +280,10 @@ namespace Keel
                     if (tag != null && Compare(tag, BuildInfo.Version) > 0)
                         onNewer(tag, GitHub.Page(repo, tag));
                 }
-                catch (Exception) { }  // offline, rate-limited or no releases yet: say nothing
+                catch (Exception) { }
             });
         }
 
-        /// <summary>The rail's "Check for updates": asks GitHub now, whatever the last check found, and calls
-        /// done(newest tag or null, null) or done(null, why it couldn't) on a worker thread.</summary>
         public static void Now(Action<string, string> done)
         {
             string repo = GitHub.Repo;
@@ -285,13 +296,12 @@ namespace Keel
             });
         }
 
-        /// <summary>The newest tag from a check in the last 6 hours (null if that check found none).</summary>
         static bool Cached(string repo, out string tag)
         {
             tag = null;
             try
             {
-                var l = File.ReadAllLines(CacheFile);  // when (UTC), repo, newest tag
+                var l = File.ReadAllLines(CacheFile);
                 DateTime when;
                 if (l.Length < 3 || l[1] != repo ||
                     !DateTime.TryParse(l[0], null, System.Globalization.DateTimeStyles.RoundtripKind, out when) ||
@@ -315,7 +325,6 @@ namespace Keel
             return best;
         }
 
-        /// <summary>"v0.2.0" or "0.2.0-beta.2" as (version, pre-release label or null); null if it isn't a version.</summary>
         public static Tuple<Version, string> Parse(string tag)
         {
             var m = Regex.Match(tag ?? "", @"^v?(\d{1,6})(?:\.(\d{1,6}))?(?:\.(\d{1,6}))?(?:\.(\d{1,6}))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$");
@@ -324,7 +333,6 @@ namespace Keel
             return Tuple.Create(new Version(g(1), g(2), g(3), g(4)), m.Groups[5].Success ? m.Groups[5].Value : null);
         }
 
-        /// <summary>Positive when a is newer than b. A pre-release comes before its release: 0.2.0-beta.2 &lt; 0.2.0.</summary>
         public static int Compare(string a, string b)
         {
             var x = Parse(a);
@@ -333,7 +341,6 @@ namespace Keel
             int c = x.Item1.CompareTo(y.Item1);
             if (c != 0) return c;
             if (x.Item2 == null || y.Item2 == null) return (x.Item2 == null ? 1 : 0) - (y.Item2 == null ? 1 : 0);
-            // both pre-releases: compare dot-separated parts, numbers as numbers (beta.10 > beta.9)
             string[] p = x.Item2.Split('.'), q = y.Item2.Split('.');
             for (int i = 0; i < Math.Min(p.Length, q.Length); i++)
             {
