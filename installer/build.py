@@ -97,8 +97,8 @@ def write_buildinfo(sha: str, update_key: str) -> Path:
 
 # ---------------------------------------------------------------------------------------------------- icon
 def icon_rgba(size: int) -> np.ndarray:
-    """The app icon at one size, BGRA: the plain SP up to 32 px, the full logo (a controller in the S, a play button
-    in the P) from 40 px. Each size is a PNG in installer/icon, rendered from docs/brand/smoovplay-icon*.svg."""
+    """The app icon at one size, BGRA: a purple K up to 32 px, the full KEEL word from 40 px.
+    Each size is a PNG in installer/icon, drawn from the Keel mark."""
     img = cv2.imread(str(HERE / "icon" / f"smoovplay-{size}.png"), cv2.IMREAD_UNCHANGED)
     if img is None or img.shape != (size, size, 4):
         sys.exit(f"[build] installer/icon/smoovplay-{size}.png is missing or not {size}x{size} RGBA")
