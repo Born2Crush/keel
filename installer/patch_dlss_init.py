@@ -184,12 +184,125 @@ def patch(text: str) -> str:
         )
         text = text.replace("    def _call(self, where, fn):", hold + "    def _call(self, where, fn):", 1)
     text = _patch_model(text)
-    if "API_VERSION, feature_info" not in text or "i32, void]" not in text:
+    text = _patch_eval(text)
+    if "API_VERSION, feature_info" not in text and "GENERIC_APP" not in text:
+        raise SystemExit("DLSS init patch lost the init call")
+    if "i32, void]" not in text and "GENERIC_APP" not in text:
         raise SystemExit("DLSS init patch did not put the SDK version before the feature pointer")
     if "def _hold_cuda_context" not in text:
         raise SystemExit("DLSS init patch could not add the CUDA context hold")
     if "def pick_model(" not in text or "def _model_bins(" not in text:
         raise SystemExit("DLSS init patch did not look in the driver model folder")
+    if "GENERIC_APP" not in text or "_cuda_now" not in text or "_progress_cb" not in text:
+        raise SystemExit("DLSS init patch did not load the registered model before evaluate")
+    return text
+
+
+def _patch_eval(text: str) -> str:
+    """The model file is registered to application id 0xE658700. A custom project id evaluates a null network."""
+    if "GENERIC_APP" in text and "_cuda_now" in text:
+        return text
+    text = text.replace(
+        'self._sym("NVSDK_NGX_CUDA_EvaluateFeature_C", "NVSDK_NGX_CUDA_EvaluateFeature")',
+        'self._sym("NVSDK_NGX_CUDA_EvaluateFeature", "NVSDK_NGX_CUDA_EvaluateFeature_C")',
+    )
+    old_init = (
+        'rc = self._call("init", lambda: self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), API_VERSION, feature_info))\n'
+        '        if ngx_failed(rc) and feature_info is not None:\n'
+        '            rc = self._call("init", lambda: self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), API_VERSION, None))'
+    )
+    new_init = 'rc = self._start_runtime(project, str(folder), feature_info)'
+    if old_init not in text:
+        raise SystemExit("DLSS init patch could not find the init call")
+    text = text.replace(old_init, new_init, 1)
+    old_ctx = (
+        "        if nvcuda.cuCtxGetCurrent(c.byref(current)) != 0 or current.value:\n"
+        "            return\n"
+    )
+    new_ctx = (
+        "        self._nvcuda = nvcuda\n"
+        "        if nvcuda.cuCtxGetCurrent(c.byref(current)) == 0 and current.value:\n"
+        "            self._cuda_ctx = c.c_void_p(current.value)\n"
+        "            return\n"
+    )
+    if old_ctx not in text:
+        raise SystemExit("DLSS init patch could not find the CUDA context check")
+    text = text.replace(old_ctx, new_ctx, 1)
+    old_eval = 'rc = self._call("eval", lambda: self._eval(self.handle, self.params, None))'
+    new_eval = (
+        'if not self.handle.value:\n'
+        '            raise RuntimeError("DLSS eval no handle")\n'
+        '        self._cuda_now()\n'
+        '        rc = self._call("eval", lambda: self._eval(self.handle, self.params, self._progress_cb()))'
+    )
+    if old_eval not in text:
+        raise SystemExit("DLSS init patch could not find evaluate")
+    text = text.replace(old_eval, new_eval, 1)
+    old_need = "        if ngx_failed(rc) or not need.value:\n            return\n"
+    new_need = (
+        "        if ngx_failed(rc) or not need.value:\n"
+        "            need = c.c_size_t(32 * 1024 * 1024)\n"
+    )
+    if old_need not in text:
+        raise SystemExit("DLSS init patch could not find the scratch size check")
+    text = text.replace(old_need, new_need, 1)
+    helpers = '''
+    def _cuda_now(self):
+        ctx = getattr(self, "_cuda_ctx", None)
+        nvcuda = getattr(self, "_nvcuda", None)
+        if ctx is None or nvcuda is None or not getattr(ctx, "value", None):
+            return
+        c = self._ctypes
+        nvcuda.cuCtxSetCurrent.argtypes = [c.c_void_p]
+        nvcuda.cuCtxSetCurrent.restype = c.c_int
+        nvcuda.cuCtxSetCurrent(ctx)
+
+    def _progress_cb(self):
+        made = getattr(self, "_progress", None)
+        if made is not None:
+            return made
+        c = self._ctypes
+
+        def _keep(_amount, cancel):
+            if cancel:
+                cancel[0] = False
+
+        self._progress = c.CFUNCTYPE(None, c.c_float, c.POINTER(c.c_bool))(_keep)
+        return self._progress
+
+    def _start_runtime(self, project, folder, feature_info):
+        c = self._ctypes
+        GENERIC_APP = 0xE658700
+        tries = []
+        try:
+            plain = self.lib.NVSDK_NGX_CUDA_Init
+        except AttributeError:
+            plain = None
+        if plain is not None:
+            plain.argtypes = [c.c_ulonglong, c.c_wchar_p, c.c_void_p, c.c_int]
+            plain.restype = c.c_uint
+            tries.append(lambda: plain(GENERIC_APP, folder, feature_info, API_VERSION))
+            tries.append(lambda: plain(GENERIC_APP, folder, None, API_VERSION))
+        tries.append(lambda: self._init(project.encode(), ENGINE_CUSTOM, b"keel", folder, API_VERSION, feature_info))
+        if feature_info is not None:
+            tries.append(lambda: self._init(project.encode(), ENGINE_CUSTOM, b"keel", folder, API_VERSION, None))
+        last = 0
+        for attempt in tries:
+            try:
+                last = attempt()
+            except OSError:
+                continue
+            if not ngx_failed(last):
+                return last
+        return last
+
+'''
+    anchor = "    def _call(self, where, fn):"
+    if anchor not in text:
+        raise SystemExit("DLSS init patch could not find the call wrapper")
+    text = text.replace(anchor, helpers + anchor, 1)
+    if "0xE658700" not in text:
+        text = "GENERIC_APP = 0xE658700\n" + text
     return text
 
 
