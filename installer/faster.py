@@ -732,7 +732,7 @@ def patch_window(text: str) -> str:
         GL.glBlitFramebuffer(0, 0, self.w, self.h, x0, y0 + dh, x0 + dw, y0, GL.GL_COLOR_BUFFER_BIT,
                              GL.GL_LINEAR)
         if self.overlay and isinstance(text, MiniText):
-            self._draw_stats(_with_scaler(text, "stream"), ux, uy, uw, uh)
+            self._draw_stats(text, ux, uy, uw, uh)
         elif self.overlay and text:
             first, nl, rest = text.partition("\\n")
             self._draw_stats(f"{first}  stream{nl}{rest}", ux, uy, uw, uh)
