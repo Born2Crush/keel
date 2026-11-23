@@ -169,6 +169,135 @@ def patch_run(text: str) -> str:
     return text
 
 
+def patch_vsr(text: str) -> str:
+    """The live-stream models. The stored-video models soften the picture while the camera moves."""
+    if "STREAMING = " in text:
+        return text
+    old = "CLEAN = 15  # VfxVsr: quality + CLEAN = NVIDIA's high-bitrate models (16-19), for sources without compression\n"
+    new = old + (
+        "# Live video (Remote Play). NVIDIA's stored-video models (1-4) smear detail while the camera moves.\n"
+        "# STREAMING_MEDIUM is 21, STREAMING_ULTRA is 23. Low/Medium share medium; High/Ultra share ultra.\n"
+        "STREAMING = {1: 21, 2: 21, 3: 23, 4: 23}\n"
+    )
+    if old not in text:
+        raise SystemExit("VSR patch could not find the quality models")
+    text = text.replace(old, new, 1)
+    old = '''    def level(quality: int, clean: bool) -> int:
+        """NVIDIA's QualityLevel for our 1-4 (Low to Ultra): the same numbers, or its high-bitrate models (16-19)
+        for a clean source."""
+        q = min(4, max(1, int(quality)))
+        return q + CLEAN if clean else q
+'''
+    new = '''    def level(quality: int, clean: bool) -> int:
+        """NVIDIA's QualityLevel for our 1-4 (Low to Ultra).
+
+        A clean source (a capture card) uses the high-bitrate models (16-19). A live stream uses the streaming
+        models, which keep edges while the camera moves. The stored-video models (1-4) soften that motion.
+        """
+        q = min(4, max(1, int(quality)))
+        return q + CLEAN if clean else STREAMING[q]
+'''
+    if old not in text:
+        raise SystemExit("VSR patch could not find the quality level")
+    return text.replace(old, new, 1)
+
+
+def patch_pipeline(text: str) -> str:
+    """Tell the window which presents are in-between frames, so VSR is not run on a blend."""
+    if "generated_out" in text:
+        return text
+    old = '''            def present(frame, text: str):
+                # Frame pacer: each present is due one gap after the previous one was *due*, so sleep overshoot and
+                # present time don't accumulate; when late it goes straight away and the schedule restarts from now.
+                nonlocal next_due
+                if hz > 60:
+                    now = time.perf_counter()
+                    if next_due > now:
+                        time.sleep(next_due - now)
+                    next_due = max(next_due, now) + gap
+                cmd = sink.write(frame, text)
+'''
+    new = '''            def present(frame, text: str, generated: bool = False):
+                # Frame pacer: each present is due one gap after the previous one was *due*, so sleep overshoot and
+                # present time don't accumulate; when late it goes straight away and the schedule restarts from now.
+                nonlocal next_due
+                if hz > 60:
+                    now = time.perf_counter()
+                    if next_due > now:
+                        time.sleep(next_due - now)
+                    next_due = max(next_due, now) + gap
+                mark = getattr(sink, "set_generated", None)
+                if mark is not None:
+                    mark(generated)
+                cmd = sink.write(frame, text)
+'''
+    if old not in text:
+        raise SystemExit("VSR patch could not find present")
+    text = text.replace(old, new, 1)
+    text = text.replace(
+        "            to_score = None\n            early_cmd = None  # 90/120 Hz: the first of this tick's two frames, already shown\n",
+        "            to_score = None\n            generated_out = False  # the frame `out` is an in-between, not the game's own\n            early_cmd = None  # 90/120 Hz: the first of this tick's two frames, already shown\n",
+        1,
+    )
+    text = text.replace(
+        "early_cmd = present(self._generated(it.interpolate(slot, t), gpu_out), ov_text)",
+        "early_cmd = present(self._generated(it.interpolate(slot, t), gpu_out), ov_text, True)",
+        1,
+    )
+    old = '''                    for k, phi in enumerate(phases):
+                        pl = timeline.place(phi)
+                        if pl.b is None:
+                            frame = pl.a.frame
+                        else:
+                            slot = self._timed_pair(pl.a, pl.b, slot, in_slot)
+                            frame = self._generated(it.interpolate(slot, pl.t), gpu_out)
+                        st.uneven_waits += pl.waiting
+                        if k < len(phases) - 1:
+                            early_cmd = present(frame, ov_text) or early_cmd
+'''
+    new = '''                    for k, phi in enumerate(phases):
+                        pl = timeline.place(phi)
+                        gen = pl.b is not None
+                        if pl.b is None:
+                            frame = pl.a.frame
+                        else:
+                            slot = self._timed_pair(pl.a, pl.b, slot, in_slot)
+                            frame = self._generated(it.interpolate(slot, pl.t), gpu_out)
+                        st.uneven_waits += pl.waiting
+                        if k < len(phases) - 1:
+                            early_cmd = present(frame, ov_text, gen) or early_cmd
+'''
+    if old not in text:
+        raise SystemExit("VSR patch could not find the timed presents")
+    text = text.replace(old, new, 1)
+    text = text.replace(
+        '''                        else:
+                            out, reached = frame, pl.reached
+                            action = Action.INTERP if pl.b is not None else Action.CURRENT
+''',
+        '''                        else:
+                            out, reached = frame, pl.reached
+                            generated_out = gen
+                            action = Action.INTERP if pl.b is not None else Action.CURRENT
+''',
+        1,
+    )
+    text = text.replace(
+        '''                elif action is Action.INTERP:
+                    out = self._generated(it.interpolate(slot, mid_t), gpu_out)
+''',
+        '''                elif action is Action.INTERP:
+                    out = self._generated(it.interpolate(slot, mid_t), gpu_out)
+                    generated_out = True
+''',
+        1,
+    )
+    text = text.replace("cmd = present(out, ov_text) or early_cmd", "cmd = present(out, ov_text, generated_out) or early_cmd", 1)
+    if "generated_out" not in text:
+        raise SystemExit("VSR patch did not mark in-between frames")
+    return text
+
+
 def main() -> None:
     io = ROOT / "framegen" / "io.py"
     io.write_text(patch_io(io.read_text(encoding="utf-8")), encoding="utf-8")
@@ -178,6 +307,10 @@ def main() -> None:
     ui.write_text(patch_ui(ui.read_text(encoding="utf-8")), encoding="utf-8")
     run = ROOT / "run.py"
     run.write_text(patch_run(run.read_text(encoding="utf-8")), encoding="utf-8")
+    vsr = ROOT / "framegen" / "rtxvsr.py"
+    vsr.write_text(patch_vsr(vsr.read_text(encoding="utf-8")), encoding="utf-8")
+    pipe = ROOT / "framegen" / "pipeline.py"
+    pipe.write_text(patch_pipeline(pipe.read_text(encoding="utf-8")), encoding="utf-8")
     print("RTX Video Super Resolution is the upscaler")
 
 
