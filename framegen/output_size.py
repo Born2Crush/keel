@@ -1,7 +1,7 @@
 """Where the play window's upscaler draws.
 
 Remote Play arrives at 1080p. The window enlarges that to the window size with the chosen scaler
-(AMD FSR 1 by default). Output size "4K" is a different path: NVIDIA DLSS draws 3840x2160, then
+(RTX Video Super Resolution by default). Output size "4K" draws 3840x2160 with that scaler, then
 that image is fitted to the window. A stream that is already 4K is left alone.
 """
 
@@ -18,5 +18,5 @@ def picture_target(output_size: str, src_w: int, src_h: int, dw: int, dh: int) -
     """
     if output_size != "2160p" or src_w >= UHD_W or src_h >= UHD_H:
         return dw, dh, False
-    # Always 3840x2160, even on a 4K window, so DLSS has one output size. The fit after that is 1:1.
+    # Always 3840x2160, even on a 4K window, so the upscaler has one output size. The fit after that is 1:1.
     return UHD_W, UHD_H, True

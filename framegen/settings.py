@@ -10,24 +10,15 @@ SPECS: tuple[Spec, ...] = SPECS_A + SPECS_M + SPECS_B
 BY_KEY = {s.key: s for s in SPECS}
 
 
-def _bring_dlss(values: dict, path: Path) -> dict:
-    """Older builds saved AMD FSR 1 because NVIDIA DLSS was not a choice. Start those on DLSS once.
-
-    A later change back to FSR stays: the marker beside the settings file records that this already ran.
-    """
-    if values.get("scaler") != "fsr":
-        return values
-    marker = path.with_name(".keel-dlss")
-    if marker.is_file():
+def _leave_dlss(values: dict, path: Path) -> dict:
+    """DLSS is no longer in Keel. A saved NVIDIA DLSS choice becomes RTX Video Super Resolution."""
+    if values.get("scaler") != "dlss":
         return values
     values = dict(values)
-    values["scaler"] = "dlss"
-    if values.get("output_size", "window") == "window":
-        values["output_size"] = "2160p"
+    values["scaler"] = "vsr"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(values, indent=2), encoding="utf-8")
-        marker.write_text("1", encoding="utf-8")
     except OSError:
         pass
     return values
@@ -53,7 +44,7 @@ class Settings:
             values = {}
         if not isinstance(values, dict):
             values = {}
-        return cls(_bring_dlss(values, Path(path)), path)
+        return cls(_leave_dlss(values, Path(path)), path)
 
     def __getattr__(self, key: str) -> Any:
         try:

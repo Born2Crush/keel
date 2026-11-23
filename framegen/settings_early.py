@@ -74,26 +74,25 @@ SPECS_A: tuple[Spec, ...] = (
          help="How many frames you see each second. Keel starts at 120. That needs a display that runs at least "
               "that fast (G-Sync or FreeSync helps). 90 and 60 are there when the display is slower. Auto-detect, "
               "on Keel's Settings page, can still suggest a lower rate from its own timing."),
-    Spec("scaler", "Upscaler", ("dlss", "fsr", "vsr", "bilinear"), "dlss",
-         {"dlss": "NVIDIA DLSS", "fsr": "AMD FSR 1", "vsr": "NVIDIA RTX VSR", "bilinear": "Bilinear"},
+    Spec("scaler", "Upscaler", ("vsr", "fsr", "bilinear"), "vsr",
+         {"vsr": "NVIDIA RTX VSR", "fsr": "AMD FSR 1", "bilinear": "Bilinear"},
          group="Picture", quick=True,
          later="Support for other upscalers may come in a later version.",
-         hints={"dlss": "What Keel starts with. NVIDIA DLSS, Performance (2x): a 1080p stream is drawn at 4K.",
-                "fsr": "Sharp and almost free: about 0.1\u00a0ms a frame.",
-                "vsr": "NVIDIA's AI upscaler, Experimental. It comes with NVIDIA VFG's download (RTX 40 and 50 series); without it, DLSS is used. Heavier.",
+         hints={"vsr": "What Keel starts with. NVIDIA RTX Video Super Resolution. It comes with NVIDIA VFG's download (RTX 40 and 50 series).",
+                "fsr": "The fallback when RTX VSR isn't available. Sharp, and about 0.1\u00a0ms a frame.",
                 "bilinear": "Plain resizing, the softest. For comparison."},
-         help="NVIDIA DLSS is the 4K upscaler. A 1080p stream, usually PS5 Remote Play, is drawn at 3840x2160 "
-              "and then fitted to the window. It uses the DLSS library that comes with the NVIDIA driver. "
-              "AMD FSR 1 is the light fallback. Key: U.",
+         help="RTX Video Super Resolution is the upscaler. A 1080p stream, usually PS5 Remote Play, is drawn at "
+              "3840x2160 when Output size is 4K, then fitted to the window. It comes with NVIDIA VFG's download "
+              "from NVIDIA, on RTX 40 and 50 series cards. AMD FSR 1 is the fallback. Key: U.",
          impact={"picture": "Only matters on a display bigger than the stream, like 1440p or 4K.",
-                 "speed": "About 0.1 ms a frame for FSR 1. RTX VSR runs an AI model on every frame, which can cost in-between frames at 90 and 120 fps."}),
+                 "speed": "RTX VSR runs an AI model on every frame. AMD FSR 1 is about 0.1 ms a frame."}),
     Spec("output_size", "Output size", ("window", "2160p"), "2160p",
          {"window": "Window", "2160p": "4K"}, group="Picture", experimental=True,
          hints={"window": "Drawn at the window's size, with the upscaler above.",
-                "2160p": "What Keel starts with. NVIDIA DLSS, Performance (2x), 1080p to 3840x2160."},
-         help="For a 1080p stream, usually PS5 Remote Play. Keel starts at 4K: NVIDIA DLSS Super Resolution, "
-              "Performance mode, then fitted to the window. Frame generation stays at 1080p. Needs an NVIDIA RTX "
-              "card and NVIDIA's DLSS library, which comes with the driver. Experimental.",
+                "2160p": "What Keel starts with. RTX Video Super Resolution draws 1080p at 3840x2160, then fits the window."},
+         help="For a 1080p stream, usually PS5 Remote Play. Keel starts at 4K: RTX Video Super Resolution, "
+              "then fitted to the window. Frame generation stays at 1080p. Needs an NVIDIA RTX 40 or 50 series "
+              "card and NVIDIA VFG's download, which brings RTX VSR. Experimental.",
          impact={"picture": "Sharper on a 4K screen. No extra detail on a 1080p screen.",
-                 "speed": "About 2.1 ms a frame on an RTX 4080. An RTX 3060 can take about 11 ms, which can drop frames at 90 and 120 fps."}),
+                 "speed": "RTX VSR runs on the GPU for every frame. Frame generation stays at the stream size."}),
 )
