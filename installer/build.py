@@ -256,6 +256,52 @@ def zip_dir(src: Path, out: Path) -> None:
         f"zipped {out.stat().st_size / 1e6:.0f} MB")
 
 
+# The window used to be the old gold mark. These are the Keel purple (docs/brand/keel-icon.svg).
+# Six-digit form so a translucent #55FFB02E becomes #55C4B5FD too. #1A1206 is the ink on the old gold buttons.
+_GOLD = (
+    ("FFBD24", "C4B5FD"),
+    ("FC930B", "8B6CFF"),
+    ("FC5F03", "5B3FD6"),
+    ("FFCB5C", "C4B5FD"),
+    ("FF8A1F", "5B3FD6"),
+    ("FF9F2E", "8B6CFF"),
+    ("FFB02E", "C4B5FD"),
+    ("#1A1206", "#FFFFFF"),
+)
+_KEEL_MARK = """                  <!-- the logo (docs/brand/keel-icon.svg): the Keel wordmark -->
+                  <Rectangle Width="1024" Height="1024" RadiusX="228" RadiusY="228">
+                    <Rectangle.Fill><LinearGradientBrush StartPoint="0,0" EndPoint="1,1"><GradientStop Offset="0" Color="#C4B5FD"/><GradientStop Offset="0.45" Color="#8B6CFF"/><GradientStop Offset="1" Color="#5B3FD6"/></LinearGradientBrush></Rectangle.Fill>
+                  </Rectangle>
+                  <Path Fill="#FFFFFF" Data="M108 402H154V602H108Z M154 488L276 402H322L200 502L322 602H276L154 516Z M366 402H522V444H412V480H494V522H412V560H522V602H366Z M566 402H722V444H612V480H694V522H612V560H722V602H566Z M766 402H812V560H916V602H766Z"/>"""
+
+
+def rebrand_text(text: str) -> str:
+    """Swap the old gold mark for the purple Keel wordmark. Safe to run twice."""
+    text = re.sub(
+        r"<!-- the logo \(docs/brand/keel-icon\.svg\): the Keel wordmark -->.*?"
+        r"<Path Fill=\"#(?:FFB02E|C4B5FD)\" Data=\"M540\.5.*?\"/>\s*"
+        r"<Path Fill=\"#(?:1A1206|FFFFFF)\" Data=\"M540\.5.*?\"/>",
+        _KEEL_MARK,
+        text,
+        count=1,
+        flags=re.S,
+    )
+    for old, new in _GOLD:
+        text = text.replace(old, new)
+    return text
+
+
+def rebrand_launcher() -> None:
+    """The window source still carries the old gold in some checkouts. Rewrite it before compiling."""
+    for name in ("Ui.xaml", "Ui.cs", "SettingsPage.cs"):
+        path = HERE / "launcher" / name
+        text = path.read_text(encoding="utf-8")
+        branded = rebrand_text(text)
+        if branded != text:
+            path.write_text(branded, encoding="utf-8")
+            log(f"recolored {name} to the Keel purple")
+
+
 def main() -> int:
     global VERSION
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -272,6 +318,7 @@ def main() -> int:
     if not re.fullmatch(r"\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?", a.version):
         sys.exit(f"[build] {a.version} isn't a version like 0.2.0 or 0.2.0-beta.1")
     VERSION = a.version
+    rebrand_launcher()
 
     BUILD.mkdir(parents=True, exist_ok=True)
     DIST.mkdir(parents=True, exist_ok=True)
