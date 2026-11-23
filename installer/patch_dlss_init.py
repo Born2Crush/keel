@@ -1,106 +1,133 @@
-"""DLSS build patch. Safe to run twice.
-"""
+"""Init order, DLSS model file, then the caller adds textures. Safe to run twice."""
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parents[1]
 
+OLD_FIND = '''def find_dll():
+    env = os.environ.get("KEEL_DLSS_DLL")
+    if env and Path(env).is_file():
+        return Path(env)
+    ngx = find_ngx()
+    ngx_dir = ngx.parent if ngx is not None else None
+    system_root = Path(os.environ.get("SystemRoot", r"C:\\Windows")) / "System32"
+    found = []
+    if ngx_dir is not None:
+        found.append(ngx_dir / "nvngx_dlss.dll")
+    store = system_root / "DriverStore" / "FileRepository"
+    if store.is_dir():
+        found += list(store.glob("*/nvngx_dlss.dll"))
+        if not any(p.is_file() for p in found):
+            found += list(store.glob("*/*/nvngx_dlss.dll"))
+    found.append(system_root / "nvngx_dlss.dll")
+    for key in ("ProgramFiles", "ProgramW6432", "ProgramData"):
+        value = os.environ.get(key)
+        if not value:
+            continue
+        root = Path(value)
+        for tail in (r"NVIDIA Corporation\\NVIDIA NGX\\nvngx_dlss.dll", r"NVIDIA Corporation\\NVIDIA App\\nvngx_dlss.dll", r"NVIDIA\\NGX\\models\\nvngx_dlss.dll"):
+            found.append(root / tail)
+    files = [p for p in found if p.is_file()]
+    if not files:
+        return None
+    files.sort(key=lambda p: (dll_rank(p, ngx_dir), -p.stat().st_mtime))
+    return files[0]
+'''
+
+NEW_FIND = '''def _is_pe(path):
+    try:
+        with path.open("rb") as handle:
+            return handle.read(2) == b"MZ"
+    except OSError:
+        return False
+
+def pick_model(blobs):
+    real = [path for path in blobs if path.is_file() and _is_pe(path)]
+    if not real:
+        return None
+    def key(path):
+        parts = path.parts
+        version = 0
+        if "versions" in parts:
+            i = parts.index("versions") + 1
+            if i < len(parts) and parts[i].isdigit():
+                version = int(parts[i])
+        return (version, path.stat().st_mtime)
+    return max(real, key=key)
+
+def stage_dll(src):
+    if src.suffix.lower() == ".dll":
+        return src
+    dest_dir = Path(tempfile.gettempdir()) / "keel-ngx"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / "nvngx_dlss.dll"
+    if not dest.is_file() or dest.stat().st_size != src.stat().st_size:
+        shutil.copyfile(src, dest)
+    return dest
+
+def find_dll():
+    env = os.environ.get("KEEL_DLSS_DLL")
+    if env and Path(env).is_file():
+        return Path(env)
+    ngx = find_ngx()
+    ngx_dir = ngx.parent if ngx is not None else None
+    system_root = Path(os.environ.get("SystemRoot", r"C:\\Windows")) / "System32"
+    found = []
+    if ngx_dir is not None:
+        found.append(ngx_dir / "nvngx_dlss.dll")
+    store = system_root / "DriverStore" / "FileRepository"
+    if store.is_dir():
+        found += list(store.glob("*/nvngx_dlss.dll"))
+        found += list(store.glob("*/*/nvngx_dlss.dll"))
+    found.append(system_root / "nvngx_dlss.dll")
+    models = Path(os.environ.get("ProgramData", r"C:\\ProgramData")) / "NVIDIA" / "NGX" / "models"
+    if models.is_dir():
+        found += list(models.rglob("nvngx_dlss.dll"))
+    files = [p for p in found if p.is_file()]
+    files.sort(key=lambda p: (dll_rank(p, ngx_dir), -p.stat().st_mtime))
+    if files and dll_rank(files[0], ngx_dir) <= 2:
+        return files[0]
+    root = Path(os.environ.get("ProgramData", r"C:\\ProgramData")) / "NVIDIA" / "NGX" / "models" / "dlss" / "versions"
+    bins = list(root.glob("*/files/*.bin")) if root.is_dir() else []
+    model = pick_model(bins)
+    if model is not None:
+        return stage_dll(model)
+    return files[0] if files else None
+'''
+
+
 def patch(text: str) -> str:
-    needle = 'self._set_ptr(b"Color", c.c_void_p(rgb.data_ptr()))'
-    repl = 'self._pictures(rgb, h, w)\n        self._set_ptr(b"Color", c.c_void_p(c.addressof(self._color_tex)))'
-    if needle in text:
-        text = text.replace(needle, repl, 1)
-        text = text.replace('self._set_ui(b"Color.Format", RGB8UI)', 'self._set_ui(b"Color.Format", 3)', 1)
-        text = text.replace('self._set_ui(b"Color.SizeInBytes", w * h * 3)', 'self._set_ui(b"Color.SizeInBytes", w * h * 4)', 1)
-        text = text.replace('self._set_ptr(b"Output", c.c_void_p(out.data_ptr()))', 'self._set_ptr(b"Output", c.c_void_p(c.addressof(self._out_tex)))', 1)
-        text = text.replace('self._set_ui(b"Output.Format", RGB8UI)', 'self._set_ui(b"Output.Format", 3)', 1)
-        text = text.replace('self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 3)', 'self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 4)', 1)
-        text = text.replace('self._set_ptr(b"MotionVectors", c.c_void_p(self._zeros.data_ptr()))', 'self._set_ptr(b"MotionVectors", c.c_void_p(c.addressof(self._motion_tex)))', 1)
-        text = text.replace('self._set_ptr(b"Depth", c.c_void_p(self._depth.data_ptr()))', 'self._set_ptr(b"Depth", c.c_void_p(c.addressof(self._depth_tex)))', 1)
-        text = text.replace('        return out\n', '        return self._out4[..., :3].contiguous()\n', 1)
-    if 'def _pictures(self, rgb, h, w):' not in text:
-        text = text.replace('\n_session = None\n', METHODS + '\n_session = None\n', 1)
-    if 'cuTexObjectCreate' not in text:
-        raise SystemExit('DLSS texture patch did not apply')
+    text = text.replace(
+        'self._sym("NVSDK_NGX_CUDA_Init_with_ProjectID", "NVSDK_NGX_CUDA_Init_ProjectID")',
+        'self._sym("NVSDK_NGX_CUDA_Init_ProjectID", "NVSDK_NGX_CUDA_Init_with_ProjectID")',
+    )
+    text = text.replace(
+        "[c.c_char_p, i32, c.c_char_p, c.c_wchar_p, void, i32]",
+        "[c.c_char_p, i32, c.c_char_p, c.c_wchar_p, i32, void]",
+    )
+    text = text.replace(
+        "str(folder), feature_info, API_VERSION)",
+        "str(folder), API_VERSION, feature_info)",
+    )
+    text = text.replace(
+        "str(folder), None, API_VERSION)",
+        "str(folder), API_VERSION, None)",
+    )
+    if "import shutil\n" not in text:
+        text = text.replace("import os\n", "import os\nimport shutil\n", 1)
+    if "def pick_model(" not in text:
+        if OLD_FIND not in text:
+            raise SystemExit("DLSS patch could not find the DLL search")
+        text = text.replace(OLD_FIND, NEW_FIND, 1)
+    if "API_VERSION, feature_info" not in text or "def pick_model(" not in text:
+        raise SystemExit("DLSS patch did not apply the init and model fixes")
     return text
 
-METHODS = '''
-    def _texture(self, tensor, channels, fmt, read_as_integer):
-        c = self._ctypes
-        nvcuda = getattr(self, "_nvcuda", None)
-        if nvcuda is None:
-            try:
-                nvcuda = c.CDLL("nvcuda.dll")
-            except OSError:
-                raise RuntimeError("DLSS tex no cuda")
-            self._nvcuda = nvcuda
-            nvcuda.cuInit.argtypes = [c.c_uint]
-            nvcuda.cuInit.restype = c.c_int
-            nvcuda.cuInit(0)
-            nvcuda.cuCtxGetCurrent.argtypes = [c.POINTER(c.c_void_p)]
-            nvcuda.cuCtxGetCurrent.restype = c.c_int
-            nvcuda.cuDevicePrimaryCtxRetain.argtypes = [c.POINTER(c.c_void_p), c.c_int]
-            nvcuda.cuDevicePrimaryCtxRetain.restype = c.c_int
-            nvcuda.cuCtxSetCurrent.argtypes = [c.c_void_p]
-            nvcuda.cuCtxSetCurrent.restype = c.c_int
-            cur = c.c_void_p()
-            if nvcuda.cuCtxGetCurrent(c.byref(cur)) != 0 or not cur.value:
-                held = c.c_void_p()
-                if nvcuda.cuDevicePrimaryCtxRetain(c.byref(held), 0) == 0 and held.value:
-                    nvcuda.cuCtxSetCurrent(held)
-        class Pitch(c.Structure):
-            _fields_ = [("devPtr", c.c_uint64), ("format", c.c_int), ("numChannels", c.c_uint), ("width", c.c_size_t), ("height", c.c_size_t), ("pitchInBytes", c.c_size_t)]
-        class Res(c.Union):
-            _fields_ = [("pitch2D", Pitch)]
-        class Desc(c.Structure):
-            _fields_ = [("resType", c.c_int), ("res", Res), ("flags", c.c_uint)]
-        class TexDesc(c.Structure):
-            _fields_ = [("addressMode", c.c_int * 3), ("filterMode", c.c_int), ("flags", c.c_uint), ("maxAnisotropy", c.c_uint), ("mipmapFilterMode", c.c_int), ("mipmapLevelBias", c.c_float), ("minMipmapLevelClamp", c.c_float), ("maxMipmapLevelClamp", c.c_float), ("borderColor", c.c_float * 4), ("reserved", c.c_int * 12)]
-        desc = Desc()
-        desc.resType = 3
-        desc.res.pitch2D.devPtr = int(tensor.data_ptr())
-        desc.res.pitch2D.format = fmt
-        desc.res.pitch2D.numChannels = channels
-        desc.res.pitch2D.width = int(tensor.shape[1])
-        desc.res.pitch2D.height = int(tensor.shape[0])
-        desc.res.pitch2D.pitchInBytes = int(tensor.shape[1]) * channels * int(tensor.element_size())
-        tex = TexDesc()
-        tex.addressMode[0] = tex.addressMode[1] = tex.addressMode[2] = 1
-        tex.filterMode = 0
-        tex.flags = 1 if read_as_integer else 0
-        made = c.c_ulonglong(0)
-        create = nvcuda.cuTexObjectCreate
-        create.argtypes = [c.POINTER(c.c_ulonglong), c.POINTER(Desc), c.POINTER(TexDesc), c.c_void_p]
-        create.restype = c.c_int
-        rc = create(c.byref(made), c.byref(desc), c.byref(tex), None)
-        if rc != 0:
-            raise RuntimeError("DLSS tex %s" % rc)
-        if not hasattr(self, "_tex_alive"):
-            self._tex_alive = []
-        self._tex_alive.append(made)
-        return made
-
-    def _pictures(self, rgb, h, w):
-        import torch
-        if getattr(self, "_rgba", None) is None or self._rgba.shape[0] != h or self._rgba.shape[1] != w:
-            self._rgba = torch.empty((h, w, 4), dtype=torch.uint8, device="cuda")
-            self._out4 = torch.empty((2160, 3840, 4), dtype=torch.uint8, device="cuda")
-            self._zeros = torch.zeros((h, w, 2), dtype=torch.float32, device="cuda")
-            self._depth = torch.ones((h, w, 1), dtype=torch.float32, device="cuda")
-            self._tex_alive = []
-            self._color_tex = self._texture(self._rgba, 4, 1, True)
-            self._out_tex = self._texture(self._out4, 4, 1, True)
-            self._motion_tex = self._texture(self._zeros, 2, 32, False)
-            self._depth_tex = self._texture(self._depth, 1, 32, False)
-        self._rgba[..., :3] = rgb
-        self._rgba[..., 3] = 255
-
-'''
 
 def main() -> None:
     path = ROOT / "framegen" / "dlss.py"
-    # This patch only rewrites the picture pointers. It must run AFTER the previous
-    # patch_dlss_init.py, but that file was overwritten. Restore is required.
     path.write_text(patch(path.read_text(encoding="utf-8")), encoding="utf-8")
-    print("DLSS frame call uses CUDA textures")
+    print("DLSS init order and model file are in the build")
+
 
 if __name__ == "__main__":
     main()
