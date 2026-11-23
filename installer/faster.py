@@ -258,6 +258,7 @@ def patch_color(text: str) -> str:
     The float planes are kept and reused. The returned image is its own tensor: the next frame must not overwrite it.
     """
     import torch
+    import torch.nn.functional as F
     if fr.format.name != "cuda":  # the decoder fell back to software for this stream
         return torch.from_numpy(fr.to_ndarray(format="bgr24")).cuda()
     y = torch.from_dlpack(fr.planes[0].__dlpack__())   # H x W
@@ -270,20 +271,17 @@ def patch_color(text: str) -> str:
         box = {
             "hw": tuple(y.shape), "uv": tuple(uv.shape), "dev": y.device,
             "y": torch.empty(y.shape, dtype=torch.float32, device=y.device),
-            "c": torch.empty((2, uv.shape[0], uv.shape[1]), dtype=torch.float32, device=y.device),
-            "up": torch.empty((1, 2, y.shape[0], y.shape[1]), dtype=torch.float32, device=y.device),
+            "c": torch.empty(uv.shape, dtype=torch.float32, device=y.device),
             "ch": torch.empty(y.shape, dtype=torch.float32, device=y.device),
         }
         cuda_frame_to_bgr._box = box
     lum = box["y"]
     lum.copy_(y).sub_(yo).mul_(ys)
     chroma = box["c"]
-    chroma.copy_(uv.permute(2, 0, 1)).sub_(128.0)
-    up = box["up"]
-    # The same sample as F.interpolate(..., mode="bilinear", align_corners=False), written into the kept image.
-    torch.ops.aten.upsample_bilinear2d.out(chroma.unsqueeze(0), (y.shape[0], y.shape[1]), False, None, None, out=up)
-    up.mul_(cs)
-    u, v = up[0, 0], up[0, 1]
+    chroma.copy_(uv).sub_(128.0)
+    up = F.interpolate(chroma.permute(2, 0, 1).unsqueeze(0), size=y.shape, mode="bilinear",
+                       align_corners=False)[0].mul_(cs)
+    u, v = up[0], up[1]
     ch = box["ch"]
     out = torch.empty((*y.shape, 3), dtype=torch.uint8, device=y.device)
     ch.copy_(lum).add_(u, alpha=2 * (1 - kb))
@@ -301,9 +299,11 @@ def patch_color(text: str) -> str:
 
 
 def patch_vfg(text: str) -> str:
-    """Reuse the buffers VFG packs and unpacks, instead of allocating them every frame."""
-    if "def _pack_into(" in text:
+    """Reuse the buffers VFG packs and unpacks, and keep the real pixel where a blend would warp."""
+    if "def _prefer_real(" in text:
         return text
+    if "def _pack_into(" in text:
+        return _prefer_motion(text)
     pairs = (
         ('''        self.steady, self.hud, self.real = 0.0, None, None
         self._slot: int | None = None  # the newest prepared slot
@@ -367,7 +367,99 @@ def patch_vfg(text: str) -> str:
 '''
     if close not in text:
         raise SystemExit("speed patch could not find VFG close")
-    return text.replace(close, methods + close, 1)
+    return _prefer_motion(text.replace(close, methods + close, 1))
+
+
+def _prefer_motion(text: str) -> str:
+    """Where the two real frames disagree, the generated frame uses the nearer real pixel."""
+    if "def _prefer_real(" in text:
+        return text
+    old = 'NOT_SET_UP = "NVIDIA VFG isn\'t set up on this PC. Keel\'s Settings page downloads it from NVIDIA."\n'
+    new = old + '''# A generated pixel is kept while the two real frames agree, and replaced by the nearer real pixel once they
+# disagree. 12 is above Remote Play's noise; 28 is a change you can see. Fast motion then stays the game's own
+# picture instead of a warped blend.
+REAL_LOW = 12.0
+REAL_HIGH = 28.0
+
+
+def real_mix(diff: float, low: float = REAL_LOW, high: float = REAL_HIGH) -> float:
+    """How much of the real pixel to use at a colour difference of `diff` levels (0..255).
+
+    0 keeps the generated pixel. 1 uses the real one."""
+    if high <= low:
+        return 1.0 if diff >= high else 0.0
+    if diff <= low:
+        return 0.0
+    if diff >= high:
+        return 1.0
+    return (diff - low) / (high - low)
+'''
+    if old not in text:
+        raise SystemExit("speed patch could not find the VFG setup line")
+    text = text.replace(old, new, 1)
+    old = "        self._unf = None  # float copy of a generated frame, kept so unpacking does not allocate one\n"
+    new = old + "        self._real_bgr = [None, None]  # the two real frames, for putting their own pixels back where they disagree\n        self._mix = None\n"
+    if old not in text:
+        raise SystemExit("speed patch could not find the VFG scratch")
+    text = text.replace(old, new, 1)
+    old = "        self._slot = slot\n"
+    new = "        self._keep_real(slot)\n        self._slot = slot\n"
+    if old not in text:
+        raise SystemExit("speed patch could not find the VFG slot")
+    text = text.replace(old, new, 1)
+    old = "        if self.steady > 0:  # Steady HUD: the real pixels where the HUD is\n"
+    new = "        self._prefer_real(newest_slot, t)\n        if self.steady > 0:  # Steady HUD: the real pixels where the HUD is\n"
+    if old not in text:
+        raise SystemExit("speed patch could not find the VFG blend")
+    text = text.replace(old, new, 1)
+    close = "    def close(self) -> None:\n"
+    methods = '''    def _keep_real(self, slot: int) -> None:
+        """Remember this real frame. The generated frame puts these pixels back where the two frames disagree."""
+        cur = self._real_bgr[slot]
+        if cur is None or cur.shape != self.inp.shape or cur.device != self.inp.device or cur.dtype != self.inp.dtype:
+            cur = torch.empty_like(self.inp)
+            self._real_bgr[slot] = cur
+        cur.copy_(self.inp)
+
+    def _mix_ready(self, like: torch.Tensor) -> None:
+        if self._mix is not None and self._mix.shape == like.shape and self._mix.device == like.device:
+            return
+        self._mix = torch.empty(like.shape, dtype=torch.float32, device=like.device)
+        self._da = torch.empty_like(self._mix)
+        self._db = torch.empty_like(self._mix)
+        self._dd = torch.empty_like(self._mix)
+        self._w = torch.empty((*like.shape[:2], 1), dtype=torch.float32, device=like.device)
+
+    def _prefer_real(self, newest: int, t: float) -> None:
+        """Where the two real frames disagree, use the nearer real pixel instead of the generated one.
+
+        A fast camera makes the generated frame swim and double. The real pixel is the one chiaki-ng shows.
+        Where the frames still agree, the generated pixel stays, so slow motion does too.
+        """
+        frames = self._real_bgr
+        if frames[0] is None or frames[1] is None:
+            return
+        older, newer = frames[1 - newest], frames[newest]
+        self._mix_ready(older)
+        a, b, diff, mix, w = self._da, self._db, self._dd, self._mix, self._w
+        a.copy_(older)
+        b.copy_(newer)
+        diff.copy_(a).sub_(b).abs_()
+        torch.amax(diff, dim=-1, keepdim=True, out=w)
+        span = 255.0 if self.out_u8.dtype == torch.uint8 else 1.0
+        low, high = REAL_LOW / 255.0 * span, REAL_HIGH / 255.0 * span
+        w.sub_(low).div_(high - low).clamp_(0.0, 1.0)
+        near = b if t >= 0.5 else a
+        mix.copy_(self.out_u8)
+        diff.copy_(near).sub_(mix)
+        mix.addcmul_(diff, w)
+        self.out_u8.copy_(mix if self.out_u8.dtype != torch.uint8 else mix.round_())
+
+    def close(self) -> None:
+'''
+    if close not in text:
+        raise SystemExit("speed patch could not find VFG close for motion")
+    return text.replace(close, methods, 1)
 
 
 def patch_pack(text: str) -> str:
