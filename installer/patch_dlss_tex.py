@@ -50,6 +50,75 @@ METHODS = '''
         self._tex_alive.append(made)
         return made
 
+    def _output_surface(self, width, height):
+        c = self._ctypes
+        nvcuda = getattr(self, "_nvcuda", None)
+        if nvcuda is None:
+            nvcuda = c.CDLL("nvcuda.dll")
+            self._nvcuda = nvcuda
+            nvcuda.cuInit.argtypes = [c.c_uint]
+            nvcuda.cuInit.restype = c.c_int
+            nvcuda.cuInit(0)
+        class ArrayDesc(c.Structure):
+            _fields_ = [("Width", c.c_size_t), ("Height", c.c_size_t), ("Depth", c.c_size_t), ("Format", c.c_int), ("NumChannels", c.c_uint), ("Flags", c.c_uint)]
+        ad = ArrayDesc()
+        ad.Width = width
+        ad.Height = height
+        ad.Depth = 0
+        ad.Format = 1
+        ad.NumChannels = 4
+        ad.Flags = 2
+        arr = c.c_void_p()
+        make = nvcuda.cuArray3DCreate
+        make.argtypes = [c.POINTER(c.c_void_p), c.POINTER(ArrayDesc)]
+        make.restype = c.c_int
+        rc = make(c.byref(arr), c.byref(ad))
+        if rc != 0 or not arr.value:
+            raise RuntimeError("DLSS array %s" % rc)
+        class Arr(c.Structure):
+            _fields_ = [("hArray", c.c_void_p)]
+        class Res(c.Union):
+            _fields_ = [("array", Arr), ("reserved", c.c_int * 32)]
+        class Desc(c.Structure):
+            _fields_ = [("resType", c.c_int), ("res", Res), ("flags", c.c_uint)]
+        desc = Desc()
+        desc.resType = 0
+        desc.flags = 0
+        desc.res.array.hArray = arr
+        surf = c.c_ulonglong(0)
+        create = nvcuda.cuSurfObjectCreate
+        create.argtypes = [c.POINTER(c.c_ulonglong), c.POINTER(Desc)]
+        create.restype = c.c_int
+        rc = create(c.byref(surf), c.byref(desc))
+        if rc != 0 or not surf.value:
+            raise RuntimeError("DLSS surf %s" % rc)
+        if not hasattr(self, "_tex_alive"):
+            self._tex_alive = []
+        self._tex_alive.append(arr)
+        self._tex_alive.append(surf)
+        self._out_array = arr
+        return surf
+
+    def _read_output(self):
+        c = self._ctypes
+        nvcuda = self._nvcuda
+        class Copy(c.Structure):
+            _fields_ = [("srcXInBytes", c.c_size_t), ("srcY", c.c_size_t), ("srcMemoryType", c.c_int), ("_pad0", c.c_int), ("srcHost", c.c_void_p), ("srcDevice", c.c_void_p), ("srcArray", c.c_void_p), ("srcPitch", c.c_size_t), ("dstXInBytes", c.c_size_t), ("dstY", c.c_size_t), ("dstMemoryType", c.c_int), ("_pad1", c.c_int), ("dstHost", c.c_void_p), ("dstDevice", c.c_void_p), ("dstArray", c.c_void_p), ("dstPitch", c.c_size_t), ("WidthInBytes", c.c_size_t), ("Height", c.c_size_t)]
+        copy = Copy()
+        copy.srcMemoryType = 3
+        copy.srcArray = self._out_array
+        copy.dstMemoryType = 2
+        copy.dstDevice = int(self._out4.data_ptr())
+        copy.dstPitch = 3840 * 4
+        copy.WidthInBytes = 3840 * 4
+        copy.Height = 2160
+        move = nvcuda.cuMemcpy2D
+        move.argtypes = [c.POINTER(Copy)]
+        move.restype = c.c_int
+        rc = move(c.byref(copy))
+        if rc != 0:
+            raise RuntimeError("DLSS copy %s" % rc)
+
     def _pictures(self, rgb, h, w):
         import torch
         missing = getattr(self, "_out_tex", None) is None or getattr(self, "_rgba", None) is None
@@ -62,7 +131,7 @@ METHODS = '''
             depth = torch.ones((h, w, 1), dtype=torch.float32, device="cuda")
             self._tex_alive = []
             color = self._texture(rgba, 4, 1, True)
-            out_tex = self._texture(out4, 4, 1, True)
+            out_tex = self._output_surface(3840, 2160)
             motion = self._texture(zeros, 2, 32, False)
             depth_tex = self._texture(depth, 1, 32, False)
             self._rgba, self._out4, self._zeros, self._depth = rgba, out4, zeros, depth
@@ -97,12 +166,16 @@ def patch(text: str) -> str:
     text = text.replace('self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 3)', 'self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 4)', 1)
     text = text.replace('self._set_ptr(b"MotionVectors", c.c_void_p(self._zeros.data_ptr()))', 'self._set_ptr(b"MotionVectors", c.c_void_p(c.addressof(self._motion_tex)))', 1)
     text = text.replace('self._set_ptr(b"Depth", c.c_void_p(self._depth.data_ptr()))', 'self._set_ptr(b"Depth", c.c_void_p(c.addressof(self._depth_tex)))', 1)
-    text = text.replace("        return out\n", "        return self._out4[..., :3].contiguous()\n", 1)
+    text = text.replace(
+        "        return out\n",
+        "        self._read_output()\n        return self._out4[..., :3].contiguous()\n",
+        1,
+    )
     if OLD_BUFFERS in text:
         text = text.replace(OLD_BUFFERS, "", 1)
     if "def _pictures(self, rgb, h, w):" not in text:
         text = text.replace("\n_session = None\n", METHODS + "\n_session = None\n", 1)
-    if "c.c_int * 32" not in text or "cuTexObjectCreate" not in text:
+    if "cuSurfObjectCreate" not in text or "cuArray3DCreate" not in text or 'b"Color.Format", 4' not in text:
         raise SystemExit("DLSS texture patch did not apply")
     return text
 
