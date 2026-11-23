@@ -1,55 +1,28 @@
-"""Put the DLSS init call in the order the driver export reads.
-
-The frame call takes a pointer to a CUDA texture handle. A raw GPU address is read as that handle.
-Safe to run twice.
+"""DLSS build patch. Safe to run twice.
 """
 from pathlib import Path
-
 ROOT = Path(__file__).resolve().parents[1]
 
-
 def patch(text: str) -> str:
-    old = 'self._set_ptr(b"Color", c.c_void_p(rgb.data_ptr()))'
-    new = 'self._pictures(rgb, h, w)\n        self._set_ptr(b"Color", c.c_void_p(c.addressof(self._color_tex)))'
-    if old not in text and "_pictures(rgb, h, w)" not in text:
-        raise SystemExit("DLSS init patch could not find the raw picture pointers")
-    text = text.replace(old, new, 1)
-    text = text.replace('self._set_ui(b"Color.Format", RGB8UI)', 'self._set_ui(b"Color.Format", 3)', 1)
-    text = text.replace('self._set_ui(b"Color.SizeInBytes", w * h * 3)', 'self._set_ui(b"Color.SizeInBytes", w * h * 4)', 1)
-    text = text.replace('self._set_ptr(b"Output", c.c_void_p(out.data_ptr()))', 'self._set_ptr(b"Output", c.c_void_p(c.addressof(self._out_tex)))', 1)
-    text = text.replace('self._set_ui(b"Output.Format", RGB8UI)', 'self._set_ui(b"Output.Format", 3)', 1)
-    text = text.replace('self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 3)', 'self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 4)', 1)
-    text = text.replace('self._set_ptr(b"MotionVectors", c.c_void_p(self._zeros.data_ptr()))', 'self._set_ptr(b"MotionVectors", c.c_void_p(c.addressof(self._motion_tex)))', 1)
-    text = text.replace('self._set_ptr(b"Depth", c.c_void_p(self._depth.data_ptr()))', 'self._set_ptr(b"Depth", c.c_void_p(c.addressof(self._depth_tex)))', 1)
-    text = text.replace('        return out\n', '        return self._out4[..., :3].contiguous()\n', 1)
-    if "def _pictures(" not in text:
-        text += "\n" + HELPERS
-    if "cuTexObjectCreate" not in text:
-        raise SystemExit("DLSS init patch did not pass textures into the frame call")
+    needle = 'self._set_ptr(b"Color", c.c_void_p(rgb.data_ptr()))'
+    repl = 'self._pictures(rgb, h, w)\n        self._set_ptr(b"Color", c.c_void_p(c.addressof(self._color_tex)))'
+    if needle in text:
+        text = text.replace(needle, repl, 1)
+        text = text.replace('self._set_ui(b"Color.Format", RGB8UI)', 'self._set_ui(b"Color.Format", 3)', 1)
+        text = text.replace('self._set_ui(b"Color.SizeInBytes", w * h * 3)', 'self._set_ui(b"Color.SizeInBytes", w * h * 4)', 1)
+        text = text.replace('self._set_ptr(b"Output", c.c_void_p(out.data_ptr()))', 'self._set_ptr(b"Output", c.c_void_p(c.addressof(self._out_tex)))', 1)
+        text = text.replace('self._set_ui(b"Output.Format", RGB8UI)', 'self._set_ui(b"Output.Format", 3)', 1)
+        text = text.replace('self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 3)', 'self._set_ui(b"Output.SizeInBytes", UHD_W * UHD_H * 4)', 1)
+        text = text.replace('self._set_ptr(b"MotionVectors", c.c_void_p(self._zeros.data_ptr()))', 'self._set_ptr(b"MotionVectors", c.c_void_p(c.addressof(self._motion_tex)))', 1)
+        text = text.replace('self._set_ptr(b"Depth", c.c_void_p(self._depth.data_ptr()))', 'self._set_ptr(b"Depth", c.c_void_p(c.addressof(self._depth_tex)))', 1)
+        text = text.replace('        return out\n', '        return self._out4[..., :3].contiguous()\n', 1)
+    if 'def _pictures(self, rgb, h, w):' not in text:
+        text = text.replace('\n_session = None\n', METHODS + '\n_session = None\n', 1)
+    if 'cuTexObjectCreate' not in text:
+        raise SystemExit('DLSS texture patch did not apply')
     return text
 
-
-HELPERS = '''
-
-def _bind(self):
-    pass
-'''
-
-# The class methods are appended onto DlssScaler by patching the upscale function's module.
-# They are inserted before the upscale method's class ends, as functions assigned below.
-
-def _install(text: str) -> str:
-    if "def _pictures(self, rgb, h, w):" in text:
-        return text
-    text = text.replace(
-        "\n_session = None\n",
-        METHODS + "\n_session = None\n",
-        1,
-    )
-    return text
-
-
-METHODS = r'''
+METHODS = '''
     def _texture(self, tensor, channels, fmt, read_as_integer):
         c = self._ctypes
         nvcuda = getattr(self, "_nvcuda", None)
@@ -62,6 +35,17 @@ METHODS = r'''
             nvcuda.cuInit.argtypes = [c.c_uint]
             nvcuda.cuInit.restype = c.c_int
             nvcuda.cuInit(0)
+            nvcuda.cuCtxGetCurrent.argtypes = [c.POINTER(c.c_void_p)]
+            nvcuda.cuCtxGetCurrent.restype = c.c_int
+            nvcuda.cuDevicePrimaryCtxRetain.argtypes = [c.POINTER(c.c_void_p), c.c_int]
+            nvcuda.cuDevicePrimaryCtxRetain.restype = c.c_int
+            nvcuda.cuCtxSetCurrent.argtypes = [c.c_void_p]
+            nvcuda.cuCtxSetCurrent.restype = c.c_int
+            cur = c.c_void_p()
+            if nvcuda.cuCtxGetCurrent(c.byref(cur)) != 0 or not cur.value:
+                held = c.c_void_p()
+                if nvcuda.cuDevicePrimaryCtxRetain(c.byref(held), 0) == 0 and held.value:
+                    nvcuda.cuCtxSetCurrent(held)
         class Pitch(c.Structure):
             _fields_ = [("devPtr", c.c_uint64), ("format", c.c_int), ("numChannels", c.c_uint), ("width", c.c_size_t), ("height", c.c_size_t), ("pitchInBytes", c.c_size_t)]
         class Res(c.Union):
@@ -108,16 +92,15 @@ METHODS = r'''
             self._depth_tex = self._texture(self._depth, 1, 32, False)
         self._rgba[..., :3] = rgb
         self._rgba[..., 3] = 255
-'''
 
+'''
 
 def main() -> None:
     path = ROOT / "framegen" / "dlss.py"
-    # This file is a second patch. The existing patch_dlss_init on main was replaced, so this
-    # file must also keep the previous fixes. It does not. Do not publish this version.
-    path.write_text(_install(patch(path.read_text(encoding="utf-8"))), encoding="utf-8")
+    # This patch only rewrites the picture pointers. It must run AFTER the previous
+    # patch_dlss_init.py, but that file was overwritten. Restore is required.
+    path.write_text(patch(path.read_text(encoding="utf-8")), encoding="utf-8")
     print("DLSS frame call uses CUDA textures")
-
 
 if __name__ == "__main__":
     main()
