@@ -19,10 +19,10 @@ ENGINE_CUSTOM = 0
 PRESET_K = 11
 PRESET_L = 12
 PRESET_M = 13
-SET_F = 1
-SET_UI = 3
-SET_I = 4
-SET_VOID = 7
+SET_VOID = 0
+SET_I = 3
+SET_UI = 4
+SET_F = 6
 PROJECT_ID = "7e1c4a90-2b6d-4f18-9c35-8a0d6e2b4f71"
 
 def uses_dlss(output_size, src_w, src_h, scaler=None):
@@ -135,7 +135,7 @@ class DlssScaler:
             raise RuntimeError("DLSS init " + ngx_why(rc))
         params = ctypes.c_void_p()
         rc = self.lib.NVSDK_NGX_CUDA_GetCapabilityParameters(ctypes.byref(params))
-        if ngx_failed(rc) or not params:
+        if ngx_failed(rc) or not params.value:
             raise RuntimeError("DLSS parameters " + ngx_why(rc))
         self.params = params
         self.handle = ctypes.c_void_p()
