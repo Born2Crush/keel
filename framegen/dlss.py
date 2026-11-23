@@ -1,19 +1,3 @@
-"""NVIDIA DLSS Super Resolution for Keel's 4K output.
-
-Remote Play arrives at 1080p. Frame generation stays at that size. Output size 4K asks DLSS
-to draw 3840x2160. That scale is exactly 2x, which is DLSS Performance mode (preset M is
-NVIDIA's default for Performance). The stream has no engine motion vectors, so each frame is
-reset and upscaled on its own.
-
-The CUDA entry points live in the driver's NGX runtime (_nvngx.dll). nvngx_dlss.dll is the
-feature library that runtime loads; the driver installs both. Keel does not ship either
-and does not charge for them. A custom engine's project id only has to look like a GUID
-(NVIDIA's DLSS programming guide). KEEL_DLSS_PROJECT_ID overrides Keel's.
-
-NVIDIA's own SDK timing, Performance mode, 4K output, preset M: about 2.1 ms a frame on an
-RTX 4080, and about 11 ms on an RTX 3060. Not measured inside Keel.
-"""
-
 from __future__ import annotations
 
 import os
@@ -37,33 +21,19 @@ PRESET_L = 12
 PRESET_M = 13
 PROJECT_ID = "7e1c4a90-2b6d-4f18-9c35-8a0d6e2b4f71"
 
-
-def uses_dlss(output_size: str, src_w: int, src_h: int, scaler: str | None = None) -> bool:
+def uses_dlss(output_size, src_w, src_h, scaler=None):
     if src_w >= UHD_W and src_h >= UHD_H:
         return False
     return output_size == "2160p" or scaler == "dlss"
 
-
-def ngx_failed(rc: int) -> bool:
+def ngx_failed(rc):
     return rc == 0 or (int(rc) & 0xFFF00000) == FAIL
 
-
-def ngx_why(rc: int) -> str:
-    name = {
-        1: "not supported",
-        4: "feature missing",
-        5: "bad parameter",
-        6: "scratch buffer",
-        8: "bad format",
-        10: "missing input",
-        11: "did not start",
-        12: "driver out of date",
-        17: "denied",
-    }.get(int(rc) & 0xFFFFF, f"0x{int(rc):08x}")
+def ngx_why(rc):
+    name = {1: "not supported", 4: "feature missing", 5: "bad parameter", 6: "scratch buffer", 8: "bad format", 10: "missing input", 11: "did not start", 12: "driver out of date", 17: "denied"}.get(int(rc) & 0xFFFFF, "0x%08x" % int(rc))
     return name
 
-
-def dll_rank(path: Path, ngx_dir: Path | None) -> int:
+def dll_rank(path, ngx_dir):
     if ngx_dir is not None and path.parent == ngx_dir:
         return 0
     parts = [p.lower() for p in path.parts]
@@ -73,25 +43,21 @@ def dll_rank(path: Path, ngx_dir: Path | None) -> int:
         return 2
     return 3
 
-
-def project_id() -> str:
+def project_id():
     return os.environ.get("KEEL_DLSS_PROJECT_ID") or PROJECT_ID
 
-
-def _first_file(candidates) -> Path | None:
+def _first_file(candidates):
     for path in candidates:
         if path is not None and Path(path).is_file():
             return Path(path)
     return None
 
-
-def find_ngx() -> Path | None:
+def find_ngx():
     candidates = []
     if sys.platform == "win32":
         try:
             import winreg
-            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
-                                r"System\CurrentControlSet\Services\nvlddmkm\NGXCore") as key:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"System\CurrentControlSet\Services\nvlddmkm\NGXCore") as key:
                 folder, _ = winreg.QueryValueEx(key, "NGXPath")
             candidates += [Path(folder) / "_nvngx.dll", Path(folder) / "nvngx.dll"]
         except OSError:
@@ -100,15 +66,14 @@ def find_ngx() -> Path | None:
     candidates += [system / "_nvngx.dll", system / "nvngx.dll"]
     return _first_file(candidates)
 
-
-def find_dll() -> Path | None:
+def find_dll():
     env = os.environ.get("KEEL_DLSS_DLL")
     if env and Path(env).is_file():
         return Path(env)
     ngx = find_ngx()
     ngx_dir = ngx.parent if ngx is not None else None
     system_root = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
-    found: list[Path] = []
+    found = []
     if ngx_dir is not None:
         found.append(ngx_dir / "nvngx_dlss.dll")
     store = system_root / "DriverStore" / "FileRepository"
@@ -122,23 +87,15 @@ def find_dll() -> Path | None:
         if not value:
             continue
         root = Path(value)
-        for tail in (
-            r"NVIDIA Corporation\NVIDIA NGX\nvngx_dlss.dll",
-            r"NVIDIA Corporation\NVIDIA App\nvngx_dlss.dll",
-            r"NVIDIA\NGX\models\nvngx_dlss.dll",
-        ):
+        for tail in (r"NVIDIA Corporation\NVIDIA NGX\nvngx_dlss.dll", r"NVIDIA Corporation\NVIDIA App\nvngx_dlss.dll", r"NVIDIA\NGX\models\nvngx_dlss.dll"):
             found.append(root / tail)
-        base = root / "NVIDIA Corporation"
-        if base.is_dir():
-            found += list(base.rglob("nvngx_dlss.dll"))
     files = [p for p in found if p.is_file()]
     if not files:
         return None
     files.sort(key=lambda p: (dll_rank(p, ngx_dir), -p.stat().st_mtime))
     return files[0]
 
-
-def unavailable_reason() -> str | None:
+def unavailable_reason():
     if sys.platform != "win32":
         return "DLSS runs on Windows with an NVIDIA RTX card"
     if find_ngx() is None:
@@ -153,9 +110,8 @@ def unavailable_reason() -> str | None:
         return "DLSS needs an NVIDIA RTX card (Turing or newer)"
     return None
 
-
 class DlssScaler:
-    def __init__(self, ngx: Path, feature: Path | None, project: str) -> None:
+    def __init__(self, ngx, feature, project):
         import ctypes
         self._ctypes = ctypes
         self._kept = []
@@ -170,12 +126,14 @@ class DlssScaler:
         info = self._feature_info(feature)
         feature_info = None if info is None else ctypes.cast(ctypes.byref(info), ctypes.c_void_p)
         rc = self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), feature_info, API_VERSION)
+        if ngx_failed(rc) and feature_info is not None:
+            rc = self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), None, API_VERSION)
         if ngx_failed(rc):
-            raise RuntimeError(f"DLSS init {ngx_why(rc)}")
+            raise RuntimeError("DLSS init " + ngx_why(rc))
         params = ctypes.c_void_p()
         rc = self.lib.NVSDK_NGX_CUDA_GetCapabilityParameters(ctypes.byref(params))
         if ngx_failed(rc) or not params:
-            raise RuntimeError(f"DLSS parameters {ngx_why(rc)}")
+            raise RuntimeError("DLSS parameters " + ngx_why(rc))
         self.params = params
         self.handle = ctypes.c_void_p()
         self._src = (0, 0)
@@ -185,7 +143,7 @@ class DlssScaler:
         self._scratch = None
         self.kind = "dlss"
 
-    def _sym(self, *names: str):
+    def _sym(self, *names):
         for name in names:
             try:
                 return getattr(self.lib, name)
@@ -193,30 +151,25 @@ class DlssScaler:
                 continue
         raise AttributeError(names[0])
 
-    def _feature_info(self, feature: Path | None):
+    def _feature_info(self, feature):
         if feature is None:
             return None
         c = self._ctypes
         path = c.c_wchar_p(str(feature.parent))
         slots = (c.c_wchar_p * 1)(path)
-
         class PathList(c.Structure):
             _fields_ = [("Path", c.POINTER(c.c_wchar_p)), ("Length", c.c_uint)]
-
         class Logging(c.Structure):
-            _fields_ = [("LoggingCallback", c.c_void_p), ("MinimumLoggingLevel", c.c_int),
-                        ("DisableOtherLoggingSinks", c.c_bool)]
-
+            _fields_ = [("LoggingCallback", c.c_void_p), ("MinimumLoggingLevel", c.c_int), ("DisableOtherLoggingSinks", c.c_bool)]
         class Common(c.Structure):
             _fields_ = [("PathListInfo", PathList), ("InternalData", c.c_void_p), ("LoggingInfo", Logging)]
-
         info = Common()
         info.PathListInfo.Path = c.cast(slots, c.POINTER(c.c_wchar_p))
         info.PathListInfo.Length = 1
         self._kept += [path, slots, info]
         return info
 
-    def _bind(self) -> None:
+    def _bind(self):
         c, lib = self._ctypes, self.lib
         void, u32, i32 = c.c_void_p, c.c_uint, c.c_int
         self._init = self._sym("NVSDK_NGX_CUDA_Init_with_ProjectID", "NVSDK_NGX_CUDA_Init_ProjectID")
@@ -238,7 +191,7 @@ class DlssScaler:
         self._eval.argtypes = [void, void, void]
         self._eval.restype = u32
 
-    def _feature(self, w: int, h: int) -> None:
+    def _feature(self, w, h):
         if self._src == (w, h):
             return
         p = self.params
@@ -264,18 +217,17 @@ class DlssScaler:
             self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Scale", 2)
             image = self._open_feature(FEATURE_IMAGE_SR)
             if image is not None:
-                where = self._feature_dll.name if self._feature_dll else "nvngx_dlss.dll not found"
-                raise RuntimeError(f"DLSS {why}; image {image} ({where})")
+                where = self._feature_dll.name if self._feature_dll else "no nvngx_dlss.dll"
+                raise RuntimeError("DLSS %s %sx%s %s; image %s" % (why, w, h, where, image))
             self.kind = "image"
-            print("[display] NVIDIA image upscale at 2x; game DLSS refused:", why)
         self._src = (w, h)
 
-    def _open_feature(self, feature: int) -> str | None:
+    def _open_feature(self, feature):
         self._reserve_scratch(feature)
         rc = self.lib.NVSDK_NGX_CUDA_CreateFeature(feature, self.params, self._ctypes.byref(self.handle))
         return ngx_why(rc) if ngx_failed(rc) else None
 
-    def _reserve_scratch(self, feature: int) -> None:
+    def _reserve_scratch(self, feature):
         lib = self.lib
         try:
             size_of = lib.NVSDK_NGX_CUDA_GetScratchBufferSize
@@ -310,28 +262,29 @@ class DlssScaler:
         if self._depth is None or self._depth.shape[0] != h * w:
             self._depth = torch.ones(h * w, dtype=torch.float32, device="cuda")
         p = self.params
-        self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"Color", self._ctypes.c_void_p(rgb.data_ptr()))
+        c = self._ctypes
+        self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"Color", c.c_void_p(rgb.data_ptr()))
         self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Color.Format", RGB8UI)
         self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Color.SizeInBytes", w * h * 3)
-        self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"Output", self._ctypes.c_void_p(out.data_ptr()))
+        self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"Output", c.c_void_p(out.data_ptr()))
         self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Output.Format", RGB8UI)
         self.lib.NVSDK_NGX_Parameter_SetUI(p, b"Output.SizeInBytes", UHD_W * UHD_H * 3)
         if self.kind == "dlss":
-            self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"MotionVectors", self._ctypes.c_void_p(self._zeros.data_ptr()))
-            self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"Depth", self._ctypes.c_void_p(self._depth.data_ptr()))
+            self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"MotionVectors", c.c_void_p(self._zeros.data_ptr()))
+            self.lib.NVSDK_NGX_Parameter_SetVoidPointer(p, b"Depth", c.c_void_p(self._depth.data_ptr()))
             self.lib.NVSDK_NGX_Parameter_SetF(p, b"Jitter.Offset.X", 0.0)
             self.lib.NVSDK_NGX_Parameter_SetF(p, b"Jitter.Offset.Y", 0.0)
             self.lib.NVSDK_NGX_Parameter_SetF(p, b"MV.Scale.X", 1.0)
             self.lib.NVSDK_NGX_Parameter_SetF(p, b"MV.Scale.Y", 1.0)
+            self.lib.NVSDK_NGX_Parameter_SetF(p, b"DLSS.Pre.Exposure", 1.0)
+            self.lib.NVSDK_NGX_Parameter_SetF(p, b"DLSS.Exposure.Scale", 1.0)
             self.lib.NVSDK_NGX_Parameter_SetI(p, b"Reset", 1)
         rc = self._eval(self.handle, p, None)
         if ngx_failed(rc):
-            raise RuntimeError(f"DLSS evaluate {ngx_why(rc)}")
+            raise RuntimeError("DLSS evaluate " + ngx_why(rc))
         return out
 
-
 _session = None
-
 
 def session():
     global _session
@@ -344,6 +297,7 @@ def session():
     try:
         import torch
         torch.cuda.init()
+        torch.empty(1, device="cuda")
         scaler = DlssScaler(find_ngx(), find_dll(), project_id())
     except (AttributeError, OSError, RuntimeError) as e:
         _session = (None, str(e)[:200])
