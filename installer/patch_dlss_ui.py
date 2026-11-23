@@ -57,6 +57,32 @@ def patch_io(text: str) -> str:
         'mode = "dlss" if _want_dlss and upscale else self.mode',
         "the DLSS draw",
     )
+    text = _need(
+        text,
+        "if self.overlay and isinstance(text, MiniText):\n            self._draw_stats(text, ux, uy, uw, uh)",
+        "if self.overlay and isinstance(text, MiniText):\n"
+        "            self._draw_stats(_with_scaler(text, label), ux, uy, uw, uh)",
+        "the status line",
+    )
+    if "def _with_scaler(" not in text:
+        text = text.replace(
+            "    @classmethod\n    def make(cls, parts, health: str = \"\", second: str = \"\") -> \"MiniText\":\n"
+            "        t = cls(\"  \".join(x for x, _ in parts) + (f\"\\n{second}\" if second else \"\"))\n"
+            "        t.parts, t.health, t.second = tuple(parts), health, second\n"
+            "        return t\n",
+            "    @classmethod\n    def make(cls, parts, health: str = \"\", second: str = \"\") -> \"MiniText\":\n"
+            "        t = cls(\"  \".join(x for x, _ in parts) + (f\"\\n{second}\" if second else \"\"))\n"
+            "        t.parts, t.health, t.second = tuple(parts), health, second\n"
+            "        return t\n\n\n"
+            "def _with_scaler(text: MiniText, label: str) -> MiniText:\n"
+            "    \"\"\"The default status line names the upscaler.\"\"\"\n"
+            "    if not label or label == \"no upscale\":\n"
+            "        return text\n"
+            "    return MiniText.make(list(text.parts) + [(label, \"dim\")], text.health, text.second)\n",
+            1,
+        )
+        if "def _with_scaler(" not in text:
+            raise SystemExit("DLSS patch could not find the status-line helper")
     return text
 
 
