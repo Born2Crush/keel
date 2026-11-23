@@ -2,8 +2,6 @@ name: Publish installer
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: write
@@ -35,17 +33,17 @@ jobs:
         run: python installer/patch_stream_join.py
 
       - name: Build Keel-Setup.exe
-        run: python installer/build.py --app-setup --version 0.3.58
+        run: python installer/build.py --app-setup --version 0.3.59
 
       - name: Publish the installer
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.58
-          name: Keel 0.3.58
+          tag_name: v0.3.59
+          name: Keel 0.3.59
           make_latest: true
           files: installer/dist/Keel-Setup.exe
           body: |
             Double-click Keel-Setup.exe.
             It installs Keel as an app: a window, a Start menu shortcut, and an entry in Windows Settings under Apps.
-            The window uses the purple Keel wordmark. 4K output uses RTX Video Super Resolution. chiaki-ng's bitrate slider is raised from 100 to 200 when Keel starts it. Quit chiaki-ng and press Play so that rewrite can run. Your settings stay. The console may send less than 200 Mbps.
+            The window uses the purple Keel wordmark. 4K output uses RTX Video Super Resolution. Decoding and the upscaler reuse their scratch pictures instead of allocating a new one every frame. Your settings stay. If you have not quit chiaki-ng since 0.3.58, quit it and press Play so the 200 Mbps cap is written.
             Uninstall is in the Keel window on the Help page, and in Settings, Apps.
