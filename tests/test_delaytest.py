@@ -69,7 +69,7 @@ def test_times_each_press_from_sending_to_the_answer(monkeypatch):
     assert test.done and not test.error and test.pressed == dt.PRESSES and len(test.ms) == dt.PRESSES
     assert all(100 <= ms < 100 + 1000 / 60 + 1 for ms in test.ms)  # the first frame after the answer
     text = test.result(30.0)
-    assert "PS5 and Remote Play 1" in text and "SmoovPlay 30 ms" in text and "from button to" in text
+    assert "PS5 and Remote Play 1" in text and "Keel 30 ms" in text and "from button to" in text
     assert "press 6 of 6" in test.status()
 
 

@@ -5,7 +5,7 @@
 
 STATS_DIR is a checkout of the `stats` branch (empty the first time). When the total has changed (against the last
 line of history.csv), it rewrites downloads.json (the badge, in shields.io's endpoint format with nothing else in
-it) and adds a line to history.csv; otherwise it leaves both alone, so there's nothing to commit. Counts SmoovPlay-Setup.exe only: new installs and in-app updates, not people. Uses GITHUB_TOKEN if set."""
+it) and adds a line to history.csv; otherwise it leaves both alone, so there's nothing to commit. Counts Keel-Setup.exe only: new installs and in-app updates, not people. Uses GITHUB_TOKEN if set."""
 import csv
 import datetime as dt
 import json
@@ -14,7 +14,7 @@ import pathlib
 import sys
 import urllib.request
 
-SETUP = "SmoovPlay-Setup.exe"
+SETUP = "Keel-Setup.exe"
 REPO = os.environ.get("GITHUB_REPOSITORY", "smoovplay/smoovplay")
 BASELINE = pathlib.Path(__file__).resolve().parent.parent / "download-baseline.json"
 

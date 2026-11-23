@@ -1,14 +1,14 @@
 """Sends a video's decoded frames into the frame tap, as another app would (docs/frame-tap.md): a reference writer
-for decoded frames, and a stand-in for an app, to test SmoovPlay's frame-tap source without one.
+for decoded frames, and a stand-in for an app, to test Keel's frame-tap source without one.
 
     .venv\\Scripts\\python scripts\\frametap_send.py testdata\\clip_1080p60.mp4 --seconds 20
     .venv\\Scripts\\python run.py --source tap --display          # in another terminal, before or after
 
 Paced at 60 frames a second, as a 60 Hz output delivers them. --game-fps 30 (the default) shows each picture twice,
 as a 30 fps game does; --hints marks each frame new or a repeat (FLAG_NEW / FLAG_REPEAT), as a writer that knows
-would, and without it SmoovPlay compares the pictures. --variable sends a picture only when it changes
+would, and without it Keel compares the pictures. --variable sends a picture only when it changes
 (FEATURE_VARIABLE), as an app that draws when it likes does. --format bgra sends BGRA instead of NV12.
-Runs on the CPU only (PyAV decoding), so it leaves the graphics card to SmoovPlay.
+Runs on the CPU only (PyAV decoding), so it leaves the graphics card to Keel.
 """
 from __future__ import annotations
 

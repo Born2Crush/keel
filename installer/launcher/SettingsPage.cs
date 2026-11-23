@@ -31,7 +31,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
-namespace SmoovPlay
+namespace Keel
 {
     partial class Ui
     {
@@ -759,11 +759,11 @@ namespace SmoovPlay
             }
 
             T("SetStatus").Text =
-                settingSpecs == null ? (settingsError != null ? "Couldn't load the settings: " + Shorten(settingsError, 160) + ". Repair SmoovPlay, on the Help page, puts back anything missing."
-                                        : paths.RuntimeReady ? "Loading..." : "Finish setting up SmoovPlay first.")
+                settingSpecs == null ? (settingsError != null ? "Couldn't load the settings: " + Shorten(settingsError, 160) + ". Repair Keel, on the Help page, puts back anything missing."
+                                        : paths.RuntimeReady ? "Loading..." : "Finish setting up Keel first.")
                 : live && playState == PlayState.Building ? "Restarting the AI model. Other changes still reach the video."
                 : live ? "Changes reach the video straight away and are saved for next time. M in the video window opens the same settings."
-                : locked ? "SmoovPlay is starting. You can change settings again once the video is on screen."
+                : locked ? "Keel is starting. You can change settings again once the video is on screen."
                 : "Saved for every session. While you play, changes reach the video straight away.";
             Show(E("SetLive"), live);
             bool showRestart = live && restart.Length > 0 && !restartSent;
@@ -793,7 +793,7 @@ namespace SmoovPlay
             if (liveState != null && session != null && session.Running)
             {
                 // The state line that comes back confirms it, or puts the real value back if it couldn't be used.
-                if (!session.Send("set " + spec.Key + " " + Json.Serialize(value))) { Toast("SmoovPlay isn't running any more", true); RefreshSettings(); }
+                if (!session.Send("set " + spec.Key + " " + Json.Serialize(value))) { Toast("Keel isn't running any more", true); RefreshSettings(); }
                 return;
             }
             if (SessionRunning) { RefreshSettings(); return; }  // locked meanwhile
@@ -876,7 +876,7 @@ namespace SmoovPlay
             if (tb == null || installer != null) return;  // setup uses it for its progress
             string hex = st == PlayState.Playing ? "#3DDC8E" : st == PlayState.Error ? "#FF6464" : SessionRunning ? "#FFB02E" : null;
             tb.Overlay = hex != null ? Dot(hex) : null;
-            tb.Description = hex != null ? "SmoovPlay: " + title : "SmoovPlay";
+            tb.Description = hex != null ? "Keel: " + title : "Keel";
         }
     }
 }

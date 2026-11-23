@@ -1,8 +1,8 @@
-// A small writer of decoded frames for SmoovPlay's frame tap (docs/frame-tap.md), to start an app's own from.
-// MIT licence, like SmoovPlay. Windows only.
+// A small writer of decoded frames for Keel's frame tap (docs/frame-tap.md), to start an app's own from.
+// MIT licence, like Keel. Windows only.
 //
 // It sends a moving test picture as a 30 fps game on a 60 Hz output would: each picture twice, the second marked
-// as a repeat. Build and run (MSYS2 gcc or MSVC), then start SmoovPlay with `run.py --source tap --display`:
+// as a repeat. Build and run (MSYS2 gcc or MSVC), then start Keel with `run.py --source tap --display`:
 //
 //   gcc -O2 -Wall -o frame-tap-writer.exe docs/frame-tap-writer.c
 //   frame-tap-writer.exe [frames, default 600] [shared-memory name, default Local\smoovplay-tap]

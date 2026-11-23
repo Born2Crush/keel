@@ -1,4 +1,4 @@
-"""SmoovPlay's pipeline: real-time frame generation (a 30 fps game shown at 60, 90 or 120 fps) and upscaling, for
+"""Keel's pipeline: real-time frame generation (a 30 fps game shown at 60, 90 or 120 fps) and upscaling, for
 PS5 Remote Play, a capture card (Experimental) or a video file.
 
 Examples
@@ -126,7 +126,7 @@ def write_results(path: str, sessions: list, size: str, settings: Settings) -> b
         return False
     played = sum(len(st.busy_ms) for _, st in sessions) * TICK
     simulated = sum(st.simulated for _, st in sessions) * TICK
-    lines = [f"SmoovPlay test results, {time.strftime('%Y-%m-%d %H:%M')}",
+    lines = [f"Keel test results, {time.strftime('%Y-%m-%d %H:%M')}",
              f"Stream: {size}, played {_mmss(played)}"
              + (f", {_mmss(simulated)} of it as a simulated 30 fps game" if simulated else ""),
              f"Graphics card: {gpu_name()}",
@@ -173,7 +173,7 @@ def write_stream_check(src, results: str | None) -> None:
                          else "stream-check.txt")
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(f"SmoovPlay stream check, {time.strftime('%Y-%m-%d %H:%M')}\n" + "\n".join(lines) + "\n",
+        path.write_text(f"Keel stream check, {time.strftime('%Y-%m-%d %H:%M')}\n" + "\n".join(lines) + "\n",
                         encoding="utf-8")
         print(f"[results] stream check -> {path}")
     except OSError as e:
@@ -267,7 +267,7 @@ def main() -> int:
                     help="--source window: the app's window, as a preset (ps-remote-play, xbox, moonlight), exe:NAME, "
                          "hwnd:N or part of its title (framegen/window.py, Experimental)")
     ap.add_argument("--window-keys", metavar="KEYS", default=None,
-                    help="--source window: SmoovPlay's shortcuts while the app has the keys, as "
+                    help="--source window: Keel's shortcuts while the app has the keys, as "
                          '"menu=Ctrl+Alt+K;quit=Ctrl+Alt+End" (actions: menu, quit, fullscreen, stats, smooth; the '
                          'others keep their defaults, framegen/hotkeys.py)')
     ap.add_argument("--capture", metavar="NAME|N|FILE",
@@ -381,7 +381,7 @@ def main() -> int:
         from framegen import dml
         why = dml.unavailable_reason()
         if why:
-            print("SmoovPlay needs an NVIDIA RTX card (CUDA), or DirectML for AMD and Intel cards (Experimental), and "
+            print("Keel needs an NVIDIA RTX card (CUDA), or DirectML for AMD and Intel cards (Experimental), and "
                   f"neither works here: {why}. Update the graphics driver, then try again.", file=sys.stderr)
             return 1
         print(f"[run] no NVIDIA CUDA here: RIFE runs through DirectML (Experimental) on {dml.pick_adapter()['name']}")
@@ -481,7 +481,7 @@ def main() -> int:
     hdr_out, hdr_why, hdr_peak = None, "", None
     if kind == "chiaki" and settings.hdr != "off" and getattr(src, "hdr_stream", False):
         if dml_mode:
-            hdr_why = "SmoovPlay's HDR needs an NVIDIA card for now"
+            hdr_why = "Keel's HDR needs an NVIDIA card for now"
         else:
             hdr_out = "sdr8"
             if settings.hdr == "hdr10":
@@ -725,7 +725,7 @@ def main() -> int:
                 replay.clip = settings.replay_save
             elif key == "replay_layout":
                 replay.layout = settings.replay_layout
-            elif key == "look_clips":  # the look in the SmoovPlay video too, drawn by the window at the stream's size
+            elif key == "look_clips":  # the look in the Keel video too, drawn by the window at the stream's size
                 replay.look = window.baked if settings.look_clips and isinstance(window, GLWindowSink) else None
 
         settings.watch(replay_settings)

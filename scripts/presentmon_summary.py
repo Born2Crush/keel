@@ -1,4 +1,4 @@
-"""Summarises scripts/presentmon_check.ps1's PresentMon CSVs: how SmoovPlay's frames reached the screen.
+"""Summarises scripts/presentmon_check.ps1's PresentMon CSVs: how Keel's frames reached the screen.
 
     .venv\\Scripts\\python scripts\\presentmon_summary.py out\\presentmon
 

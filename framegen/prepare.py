@@ -1,7 +1,7 @@
 """One-time preparation after install: RIFE weights, the TensorRT engine for a 1080p stream, and (on a new install)
 settings picked for this PC by framegen.autodetect.
 
-    python -m framegen.prepare            # what the SmoovPlay installer runs
+    python -m framegen.prepare            # what the Keel installer runs
 
 Building an engine takes a minute or two, so doing it here means the first stream starts at once. Only full motion
 detail gets one: that's where the "Auto" engine uses TensorRT (trt.auto_engine). Without an NVIDIA card (AMD or
@@ -55,7 +55,7 @@ def prepare_dml(a: argparse.Namespace) -> int:
     why = dml.unavailable_reason()
     if why:
         print(f"[prepare] ERROR: no NVIDIA card PyTorch can use, and DirectML can't run here either ({why}). "
-              "Update the graphics driver, then repair SmoovPlay on the Help page", flush=True)
+              "Update the graphics driver, then repair Keel on the Help page", flush=True)
         return 2
     print(f"[prepare] {dml.pick_adapter()['name']}: no NVIDIA card, so RIFE runs through DirectML (Experimental)",
           flush=True)

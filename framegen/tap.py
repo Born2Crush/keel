@@ -1,4 +1,4 @@
-"""Frames another app hands SmoovPlay through the frame tap (docs/frame-tap.md), the same shared memory chiaki-ng
+"""Frames another app hands Keel through the frame tap (docs/frame-tap.md), the same shared memory chiaki-ng
 writes PS5 Remote Play's frames into.
 
 A writer sends either kind of frame:
@@ -67,7 +67,7 @@ def open_tap(name: str = DEFAULT_NAME, decoder: str = "cuda", wait_s: float = 60
         return "tap", src
     tap.close()
     if h.codec not in CODECS:
-        raise ValueError(f"the app sends frames in a format SmoovPlay doesn't know (codec {h.codec})")
+        raise ValueError(f"the app sends frames in a format Keel doesn't know (codec {h.codec})")
     from .chiaki_tap import ChiakiSource
     src = ChiakiSource(decoder, wait_s=wait_s, log_path=log_path, tap_name=name, test=test, app=True)
     src.info = replace(src.info, name="Frame tap", audio="The app plays its own sound",
@@ -147,7 +147,7 @@ class TapSource:
                 if h.session != self.session:  # the writer started over
                     if (h.codec, h.width, h.height) != (self.codec, self.w, self.h):
                         print(f"[tap] the frames changed to {CODEC_NAMES.get(h.codec, h.codec)} {h.width}x{h.height}; "
-                              "restart SmoovPlay", file=sys.stderr)
+                              "restart Keel", file=sys.stderr)
                         break
                     self.session, seq = h.session, None
                 if not self._go.is_set() or seq is None:  # the pipeline isn't ready: nothing read, no GPU work
@@ -211,7 +211,7 @@ class TapSource:
         if not h.live:
             return "The app stopped sending frames"
         if now - self._beat > 3:
-            return "SmoovPlay stopped reading frames. Press Q, then Play again"
+            return "Keel stopped reading frames. Press Q, then Play again"
         if now - self._ring_t > 1:
             return "The app isn't sending any frames. Is it still running?"
         return ""

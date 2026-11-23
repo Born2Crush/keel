@@ -1,4 +1,4 @@
-# What SmoovPlay's installer pip-installs into its own Python, from the official package indexes
+# What Keel's installer pip-installs into its own Python, from the official package indexes
 # (PyPI, PyTorch's CUDA 12.8 index for torch, NVIDIA's index for TensorRT). Pinned to the versions tested on the
 # dev machine. Install with:
 #   python -m pip install -r requirements-runtime.txt --extra-index-url https://download.pytorch.org/whl/cu128

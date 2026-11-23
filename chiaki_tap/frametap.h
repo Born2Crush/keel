@@ -1,6 +1,6 @@
 // Frame tap for chiaki-ng: copies every compressed video frame the PS5 sends into a shared-memory
-// ring, so another process (SmoovPlay's ChiakiSource) can decode and interpolate it. A second, smaller ring
-// carries the game's sound as it arrives (16-bit PCM, before chiaki-ng's own volume), for SmoovPlay's instant replay.
+// ring, so another process (Keel's ChiakiSource) can decode and interpolate it. A second, smaller ring
+// carries the game's sound as it arrives (16-bit PCM, before chiaki-ng's own volume), for Keel's instant replay.
 //
 // Enabled only when the environment variable CHIAKI_FRAMETAP=1 is set; otherwise every call is a no-op.
 // CHIAKI_FRAMETAP_NAME, if set, replaces the shared memory's name (tests run beside a real stream that way).
@@ -14,12 +14,12 @@
 //     40 u32 idr_request (reader sets 1, writer clears it and asks the PS5 for a keyframe)
 //     44 u32 session (bumped at every stream start)    48 u64 qpc_freq
 //     56 u64 reader_heartbeat_qpc (reader writes it; informational)
-//     64 u32 features (writer; bit 0: it presses buttons when asked, for SmoovPlay's delay test)
+//     64 u32 features (writer; bit 0: it presses buttons when asked, for Keel's delay test)
 //     68 u32 press_buttons (reader sets a ChiakiControllerButton mask; writer clears it and presses them)
 //     72 u32 press_hold_ms (reader, before press_buttons)   76 u32 press_count (writer: presses sent so far)
 //     80 u64 press_qpc (writer: when the latest press went to the PS5; written before press_count goes up)
-//     88 u32 audio_delay_ms (reader: hold chiaki-ng's sound back this long, to meet SmoovPlay's picture; ignored
-//        once the reader's heartbeat is over 2 s old, so sound comes back on time if SmoovPlay stops)
+//     88 u32 audio_delay_ms (reader: hold chiaki-ng's sound back this long, to meet Keel's picture; ignored
+//        once the reader's heartbeat is over 2 s old, so sound comes back on time if Keel stops)
 //   features bit 1: it honours audio_delay_ms; bit 2: it writes the sound ring below.
 //   slot i at 4096 + i * slot_size:
 //     0  u64 seq   8  u64 qpc_arrival   16 u32 size   20 i32 frames_lost   24 u32 recovered

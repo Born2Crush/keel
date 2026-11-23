@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/smoovplay-lockup-dark.svg">
-    <img src="docs/brand/smoovplay-lockup.svg" width="440" alt="SmoovPlay">
+    <img src="docs/brand/smoovplay-lockup.svg" width="440" alt="Keel">
   </picture>
 </h1>
 
@@ -9,6 +9,8 @@
   <b>Your console. Your GPU. Smoother gameplay.</b><br>
   Play 30 fps console games at 60, 90 or up to 120 fps on your PC, with real-time AI frame generation and upscaling on the video your console sends.
 </p>
+
+<p align="center">The original project is SmoovPlay, under the MIT license.</p>
 
 <p align="center">
   <a href="https://github.com/smoovplay/smoovplay/releases/latest"><b>⬇ Download for Windows</b></a>
@@ -22,24 +24,24 @@
 
 <p align="center">
   <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Status: early release" src="https://img.shields.io/badge/status-early%20release-FFB02E?style=flat-square"></a>
-  <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Downloads of SmoovPlay-Setup.exe, all releases" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsmoovplay%2Fsmoovplay%2Fstats%2Fdownloads.json&style=flat-square"></a>
+  <a href="https://github.com/smoovplay/smoovplay/releases"><img alt="Downloads of Keel-Setup.exe, all releases" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fsmoovplay%2Fsmoovplay%2Fstats%2Fdownloads.json&style=flat-square"></a>
   <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-3A4250?style=flat-square">
   <img alt="Graphics: NVIDIA RTX 30, 40 or 50 series; AMD and Intel as an Experimental option" src="https://img.shields.io/badge/GPU-NVIDIA%20RTX%2030%20%7C%2040%20%7C%2050%2C%20AMD%20%26%20Intel%20experimental-3A4250?style=flat-square">
   <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-3A4250?style=flat-square"></a>
 </p>
 
 <p align="center">
-  <a href="https://smoovplay.github.io/compare/"><img src="https://smoovplay.github.io/compare/media/poster60.jpg" width="880" alt="A 30 fps PS5 Remote Play stream left of a dividing line and SmoovPlay's output right of it. Opens the comparison page."></a><br>
+  <a href="https://smoovplay.github.io/compare/"><img src="https://smoovplay.github.io/compare/media/poster60.jpg" width="880" alt="A 30 fps PS5 Remote Play stream left of a dividing line and Keel's output right of it. Opens the comparison page."></a><br>
   <a href="https://smoovplay.github.io/compare/"><b>▶ See six clips at full frame rate</b></a>: split, side by side, or flip between the 30 fps stream
-  and SmoovPlay at 60 or 90 fps, played at their real frame rate. Most social sites play video at 60 fps or less.<br>
-  <sub>GTA VI gameplay © Rockstar Games (An Extended Look), run through SmoovPlay as a simulated Remote Play stream.</sub>
+  and Keel at 60 or 90 fps, played at their real frame rate. Most social sites play video at 60 fps or less.<br>
+  <sub>GTA VI gameplay © Rockstar Games (An Extended Look), run through Keel as a simulated Remote Play stream.</sub>
 </p>
 
 <p align="center">
-  <img src="docs/media/smoothness.svg" width="880" alt="Two dots cross the same track. The top one, labelled Your console, moves 30 times a second, like a 30 fps game; the bottom one moves 60, 90 or 120 times a second, as fast as your screen shows SmoovPlay.">
+  <img src="docs/media/smoothness.svg" width="880" alt="Two dots cross the same track. The top one, labelled Your console, moves 30 times a second, like a 30 fps game; the bottom one moves 60, 90 or 120 times a second, as fast as your screen shows Keel.">
 </p>
 
-SmoovPlay streams your console to your PC, where your graphics card draws new frames between the ones the game
+Keel streams your console to your PC, where your graphics card draws new frames between the ones the game
 sends, live. A 30 fps game plays at **60, 90 or up to 120 fps** to match your screen, sharpened to fit it.
 There's nothing to install on the console, and it's free and open source.
 
@@ -49,7 +51,7 @@ There's nothing to install on the console, and it's free and open source.
 ## What it does
 
 <p align="center">
-  <img src="docs/media/strip-overview.png" width="100%" alt="What it does, in three pictures: a diagram of your console sending 30 frames a second to your PC, where SmoovPlay runs, and your screen getting 60, 90 or 120; a stack of four frames, real, AI, AI, real; and the same picture small at 1080p, then sharpened and scaled up to your screen’s resolution.">
+  <img src="docs/media/strip-overview.png" width="100%" alt="What it does, in three pictures: a diagram of your console sending 30 frames a second to your PC, where Keel runs, and your screen getting 60, 90 or 120; a stack of four frames, real, AI, AI, real; and the same picture small at 1080p, then sharpened and scaled up to your screen’s resolution.">
 </p>
 
 - **Up to four times the frames.** RIFE, an open-source AI model, draws 1, 2 or 3 new frames between each pair the
@@ -80,17 +82,17 @@ There's nothing to install on the console, and it's free and open source.
 | **Xbox and other streaming apps**, by capturing the app's window | *Experimental.* Recognises the current Xbox app since 0.3.1, from a player's report; a real Xbox stream isn't confirmed yet. |
 | **AMD Radeon and Intel Arc**, through DirectML | *Experimental.* The same frames, about 1.7× more slowly. Not on a real card yet. |
 
-**How it's checked:** each release passes SmoovPlay's automated tests (340 for 0.3.2, with a stand-in PS5 stream,
+**How it's checked:** each release passes Keel's automated tests (340 for 0.3.2, with a stand-in PS5 stream,
 stand-in capture cards and stand-in HDR frames) and installs as an update over the previous version before it ships.
 Real-hardware results come from the developer's PC, contributors and player reports, and the table says which. The
 comparison clips are labelled simulated (a recording played as a stream) or live (captured from real play).
-Updates are signed: an installed copy checks SmoovPlay's signature before it runs one.
+Updates are signed: an installed copy checks Keel's signature before it runs one.
 
 ## Get it
 
 > [!NOTE]
 > **Early release:** expect rough edges, and please [report them](#help-test-it).
-> SmoovPlay offers new versions itself, and updates in one click (or click **Check for updates** in the launcher).
+> Keel offers new versions itself, and updates in one click (or click **Check for updates** in the launcher).
 
 | You need | |
 |---|---|
@@ -100,12 +102,12 @@ Updates are signed: an installed copy checks SmoovPlay's signature before it run
 | **Network** | Ethernet for the console and the PC, or 5 GHz or 6 GHz Wi-Fi (not needed with a capture card) |
 | **Screen** | Any: 60 Hz gets 60 fps, 90 Hz gets 90, 120 Hz or faster gets up to 120. G-Sync or FreeSync helps. |
 
-**1. Install.** Download `SmoovPlay-Setup.exe` from [Releases](https://github.com/smoovplay/smoovplay/releases/latest)
+**1. Install.** Download `Keel-Setup.exe` from [Releases](https://github.com/smoovplay/smoovplay/releases/latest)
 and run it. It isn't code-signed yet, so your browser and Windows warn you first:
 [here's how to get past it](#smartscreen). Setup takes 10 to 20 minutes and never asks for admin rights.
 
 <p align="center">
-  <img src="docs/media/strip-setup.png" width="100%" alt="Setup in three steps: SmoovPlay checks your graphics card, display and network and helps fix anything that's off; downloads about 5 GB and tunes itself to your graphics card; and is ready to play from the Start menu.">
+  <img src="docs/media/strip-setup.png" width="100%" alt="Setup in three steps: Keel checks your graphics card, display and network and helps fix anything that's off; downloads about 5 GB and tunes itself to your graphics card; and is ready to play from the Start menu.">
 </p>
 
 Setup ends by picking settings for your PC, from a short test of your graphics card and display. To check again,
@@ -123,7 +125,7 @@ in to PSN in chiaki-ng and register the console. About five minutes, once. For a
 <details>
 <summary><b>Windows says "Windows protected your PC"</b></summary>
 
-SmoovPlay isn't code-signed yet, and Windows' SmartScreen warns about new programs that have no download history.
+Keel isn't code-signed yet, and Windows' SmartScreen warns about new programs that have no download history.
 So the first time, you get past two warnings:
 
 1. **Your browser** may say the file isn't commonly downloaded. Choose to keep it. In Edge: **⋯** → **Keep** →
@@ -132,8 +134,8 @@ So the first time, you get past two warnings:
 
 Setup installs for your Windows user only, so it never asks for admin rights. To be sure you have the real file,
 download it only from this repo's [Releases](https://github.com/smoovplay/smoovplay/releases) page and compare its
-SHA-256 with the one listed there (`Get-FileHash .\SmoovPlay-Setup.exe` in PowerShell). Updates from inside the app
-must carry SmoovPlay's signature before they run.
+SHA-256 with the one listed there (`Get-FileHash .\Keel-Setup.exe` in PowerShell). Updates from inside the app
+must carry Keel's signature before they run.
 </details>
 
 ## Make it yours
@@ -161,14 +163,14 @@ must carry SmoovPlay's signature before they run.
 | **L** | Delay test (PS5 Remote Play) |
 | **Esc** or **Q** | Stop |
 
-Capturing an app's window? The app keeps the keyboard, so SmoovPlay's keys use Ctrl+Alt there: **Ctrl+Alt+M** menu,
+Capturing an app's window? The app keeps the keyboard, so Keel's keys use Ctrl+Alt there: **Ctrl+Alt+M** menu,
 **Ctrl+Alt+F** fullscreen, **Ctrl+Alt+Esc** stop. You can change them on the Play page.
 
 ## How it works
 
 With a PS5, the tested setup, the console and the PC talk over your home network, the way Sony's Remote Play app
 does. chiaki-ng receives the stream, plays the sound and sends your buttons back. A small patch to it, the frame tap
-in [`chiaki_tap/`](chiaki_tap/), also hands every video frame to SmoovPlay. SmoovPlay decodes it on the graphics card,
+in [`chiaki_tap/`](chiaki_tap/), also hands every video frame to Keel. Keel decodes it on the graphics card,
 skips repeated frames, draws the in-between ones with RIFE through TensorRT, scales the result with FSR 1 and shows
 it at your screen's refresh rate. With an Xbox app window or a capture card (Experimental), the frames come from the
 captured window or the card instead, and the rest is the same.
@@ -186,10 +188,10 @@ The timeline shows 90 fps. At 60 fps there's one AI frame between each pair of r
 ## Good to know
 
 - **Smoother, not faster.** The extra frames are generated: motion gets smoother, but the game still responds like
-  30 fps, and a little later than without SmoovPlay. Great for driving, exploring and story missions; not for
+  30 fps, and a little later than without Keel. Great for driving, exploring and story missions; not for
   competitive online play.
-- **About 36 ms of delay at 90 fps** (about 20 ms at 60 fps), on top of Remote Play's own. SmoovPlay times every
-  frame itself, from reaching SmoovPlay to being on screen: in live play of a 30 fps PS5 game over Ethernet, the
+- **About 36 ms of delay at 90 fps** (about 20 ms at 60 fps), on top of Remote Play's own. Keel times every
+  frame itself, from reaching Keel to being on screen: in live play of a 30 fps PS5 game over Ethernet, the
   median was 35.4 and 35.8 ms in two sessions. The 60 fps figure comes from a recorded clip. About
   22 ms of it is the wait every frame generator has: each real frame is held back while the in-between frames before
   it are shown. The console, the network and your screen add their own delay; press **L** in the video window for
@@ -203,13 +205,13 @@ The timeline shows 90 fps. At 60 fps there's one AI frame between each pair of r
   played a real PS5 HDR stream this way on an HDR monitor, and since 0.3.2 fullscreen keeps Windows' HDR on instead
   of switching the display to SDR. Instant replay clips are saved in SDR either way.
 - **A game locked at 30 fps looks uneven?** Set Settings → Smoothness → **Game frame rate** to **30 fps**. On Auto,
-  SmoovPlay works the rate out from the stream as it plays. Since 0.3.4 it goes by the picture and rarely misreads a
+  Keel works the rate out from the stream as it plays. Since 0.3.4 it goes by the picture and rarely misreads a
   30 fps game over a wired connection, but a still or dark scene can still fool it.
 - **Wired is smoothest.** On Wi-Fi, frames can arrive late and in bunches, which shows as hitches however fast your
   PC is. Plug the PS5 and the PC into the router if you can.
 - **Some wobble.** HUD text over fast motion, very fast camera turns and thin objects crossing each other can wobble
   a little. Press **I** to compare with frame generation off.
-- **Sound stays in step.** chiaki-ng holds the sound back by as long as the picture spends in SmoovPlay.
+- **Sound stays in step.** chiaki-ng holds the sound back by as long as the picture spends in Keel.
 - **60 fps games pass through unchanged:** there are no gaps to fill. Try one anyway with
   [test mode](#only-have-60-fps-games-use-test-mode).
 - **Games between 40 and 60 fps** stutter over a 60 Hz stream. **Even out 40-60 fps** (on by default, Experimental)
@@ -218,11 +220,11 @@ The timeline shows 90 fps. At 60 fps there's one AI frame between each pair of r
   Experimental) spaces their frames by when they arrived, so a dip looks like a brief slow-down. It's only on while
   the game dips, and adds about 17 to 50 ms of delay and more graphics card work then.
 - **One frame generator at a time.** Leave NVIDIA Smooth Motion, AMD Fluid Motion Frames and Lossless Scaling off
-  for SmoovPlay and chiaki-ng. Your other games aren't affected.
+  for Keel and chiaki-ng. Your other games aren't affected.
 
 ## Help test it
 
-SmoovPlay is new, so finding what breaks is the most useful help right now:
+Keel is new, so finding what breaks is the most useful help right now:
 
 - **Your graphics card:** which does it hold, 60, 90 or 120 fps?
 - **Other games:** anything with a 30 fps Quality or Fidelity mode, or one that runs between 40 and 60 fps.
@@ -236,7 +238,7 @@ diagnostics** copies your PC and settings details: paste them in with the game a
 
 ### Only have 60 fps games? Use test mode
 
-Press **Test with a 60 fps game** on the Play page. SmoovPlay leaves out every other frame, so the game arrives like
+Press **Test with a 60 fps game** on the Play page. Keel leaves out every other frame, so the game arrives like
 a 30 fps game, fills the gaps as usual, and scores each AI frame against the real frame it replaced. Play a few
 minutes with some fast motion, then press **Q**: a results card says whether your PC keeps up and how close the AI
 frames came to the real ones. **Copy results** puts the full report on the clipboard for your issue.
@@ -272,7 +274,7 @@ page after playing.
 <summary><b>Does it work with Xbox, Switch or a capture card?</b></summary>
 
 As Experimental options. For any console with HDMI, pick **Capture card** on the Play page. For Xbox, pick **App
-window**: SmoovPlay captures the window of the app you stream with (the Xbox app, Sony's PS Remote Play app,
+window**: Keel captures the window of the app you stream with (the Xbox app, Sony's PS Remote Play app,
 Moonlight or a cloud game in a browser) and shows the smooth picture over it. A player's AVerMedia Live Gamer 4K
 works; the Xbox app and other cards are waiting on reports, so please [send feedback](#help-test-it).
 
@@ -284,9 +286,9 @@ which is sharper on a screen that big, but every new frame is drawn at that size
 <details>
 <summary><b>How is this different from DLSS Frame Generation or Lossless Scaling?</b></summary>
 
-DLSS Frame Generation runs inside a PC game and uses its motion data; a video stream has none, so SmoovPlay uses
+DLSS Frame Generation runs inside a PC game and uses its motion data; a video stream has none, so Keel uses
 RIFE, which works out the motion from the frames themselves. Lossless Scaling is great and works on any window.
-SmoovPlay is free and open source, takes frames straight from chiaki-ng's decoder instead of capturing the screen,
+Keel is free and open source, takes frames straight from chiaki-ng's decoder instead of capturing the screen,
 and walks you through connecting your console.
 </details>
 
@@ -294,7 +296,7 @@ and walks you through connecting your console.
 <summary><b>What is NVIDIA VFG?</b></summary>
 
 An optional second AI model for RTX 40 and 50 series cards: NVIDIA's own Video Frame Generation. It isn't part of
-SmoovPlay. **Set up NVIDIA VFG** on the Settings page, or in Auto-detect's results on an RTX 40 or 50 series card,
+Keel. **Set up NVIDIA VFG** on the Settings page, or in Auto-detect's results on an RTX 40 or 50 series card,
 downloads it from NVIDIA, only once you accept NVIDIA's licence. The same download brings NVIDIA RTX Video Super
 Resolution, an AI upscaler (Settings → Picture → Upscaler). [More in the developer docs](docs/DEVELOPING.md#nvidia-vfg).
 </details>
@@ -302,7 +304,7 @@ Resolution, an AI upscaler (Settings → Picture → Upscaler). [More in the dev
 <details>
 <summary><b>What does setup download, and what does it cost?</b></summary>
 
-About 5 GB: Python, PyTorch and NVIDIA TensorRT, each from its official source. It costs nothing: SmoovPlay is free
+About 5 GB: Python, PyTorch and NVIDIA TensorRT, each from its official source. It costs nothing: Keel is free
 and open source under the MIT licence, and sends nothing about you.
 </details>
 
@@ -321,8 +323,8 @@ frames and AMD FSR 1 for scaling.
 | [`framegen/`](framegen/) | The pipeline: video sources, repeat and cut detection, RIFE (PyTorch and TensorRT), FSR 1 and RTX VSR, the OpenGL window and the settings menu |
 | [`run.py`](run.py) | Command-line entry point |
 | [`chiaki_tap/`](chiaki_tap/) | The patch that adds a frame tap to chiaki-ng |
-| [`docs/frame-tap.md`](docs/frame-tap.md) | How any app can send its frames to SmoovPlay through the same tap (Experimental) |
-| [`installer/`](installer/) | `SmoovPlay-Setup.exe` and the launcher, in C# and WPF |
+| [`docs/frame-tap.md`](docs/frame-tap.md) | How any app can send its frames to Keel through the same tap (Experimental) |
+| [`installer/`](installer/) | `Keel-Setup.exe` and the launcher, in C# and WPF |
 | [`native/rtxvsr/`](native/rtxvsr/) | Optional wrapper around NVIDIA's RTX Video SDK |
 | [`scripts/`](scripts/), [`tests/`](tests/) | Benchmarks, a fake chiaki-ng stream for testing without a PS5, and `pytest` tests |
 
@@ -353,9 +355,9 @@ The Looks page's sample pictures are screenshots from Grand Theft Auto VI and Gr
 Cyberpunk 2077 (© CD PROJEKT RED), Forza Horizon 5 (© Microsoft), Gran Turismo 7 (© Sony Interactive Entertainment)
 and skate. (© Electronic Arts), included only to show what a look does. The README's gameplay stills are from
 Rockstar Games' published Grand Theft Auto VI footage. They belong to their publishers and aren't covered by
-SmoovPlay's MIT licence.
+Keel's MIT licence.
 
-SmoovPlay's own code is MIT licensed ([LICENSE](LICENSE), with notes on bundled code in [NOTICE](NOTICE)); [installer/THIRD_PARTY_NOTICES.txt](installer/THIRD_PARTY_NOTICES.txt)
-lists everything it bundles or downloads. SmoovPlay is an independent project, not made, supported or endorsed by
+Keel's own code is MIT licensed ([LICENSE](LICENSE), with notes on bundled code in [NOTICE](NOTICE)); [installer/THIRD_PARTY_NOTICES.txt](installer/THIRD_PARTY_NOTICES.txt)
+lists everything it bundles or downloads. Keel is an independent project, not made, supported or endorsed by
 Sony Interactive Entertainment, NVIDIA or AMD. PlayStation and PS5 are trademarks of Sony Interactive Entertainment;
 NVIDIA and RTX are trademarks of NVIDIA Corporation; AMD and FidelityFX are trademarks of Advanced Micro Devices, Inc.

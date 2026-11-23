@@ -1,8 +1,8 @@
-// SmoovPlay launcher and installer: everything except the window (see Ui.cs, Ui.xaml) and the PC checks (Checks.cs).
+// Keel launcher and installer: everything except the window (see Ui.cs, Ui.xaml) and the PC checks (Checks.cs).
 //
-// SmoovPlay-Setup.exe is this program with the app files embedded as "payload.zip". It checks the PC, unpacks the
+// Keel-Setup.exe is this program with the app files embedded as "payload.zip". It checks the PC, unpacks the
 // app into a per-user folder (no admin rights), downloads Python, PyTorch and TensorRT from their official sources,
-// prepares the GPU once and adds shortcuts. SmoovPlay.exe (the same code without a payload) is the launcher: it
+// prepares the GPU once and adds shortcuts. Keel.exe (the same code without a payload) is the launcher: it
 // starts the pipeline before chiaki-ng so the stream's codec header is never missed, shows status, guides the PS5
 // setup, and copies diagnostics for bug reports. WPF on .NET Framework 4.8, which Windows 10 and 11 include.
 //
@@ -38,7 +38,7 @@ using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 using Microsoft.Win32;
 
-namespace SmoovPlay
+namespace Keel
 {
     static class Program
     {
@@ -70,15 +70,15 @@ namespace SmoovPlay
             return app.Run(ui.Window);
         }
 
-        public static string CrashLog { get { return Path.Combine(Path.GetTempPath(), "SmoovPlay-launcher-errors.log"); } }
+        public static string CrashLog { get { return Path.Combine(Path.GetTempPath(), "Keel-launcher-errors.log"); } }
 
         /// <summary>A launcher bug: keep the details in a log (diagnostics include it) and say so.</summary>
         static void Crash(Exception e)
         {
-            try { File.AppendAllText(CrashLog, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} SmoovPlay {BuildInfo.Version}\r\n{e}\r\n\r\n"); }
+            try { File.AppendAllText(CrashLog, $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} Keel {BuildInfo.Version}\r\n{e}\r\n\r\n"); }
             catch (Exception) { }
-            System.Windows.MessageBox.Show("Something went wrong in the SmoovPlay window:\n\n" + (e != null ? e.Message : "unknown error") +
-                                           "\n\nThe details are in " + CrashLog + ".", "SmoovPlay",
+            System.Windows.MessageBox.Show("Something went wrong in the Keel window:\n\n" + (e != null ? e.Message : "unknown error") +
+                                           "\n\nThe details are in " + CrashLog + ".", "Keel",
                                            System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
         }
 
@@ -181,7 +181,7 @@ namespace SmoovPlay
             var p = new Paths { Dev = true, Python = py };
             p.App = Environment.GetEnvironmentVariable("SMOOVPLAY_APP") ?? ExeDir;
             p.Install = p.App;
-            p.Runtime = Path.Combine(Path.GetTempPath(), "SmoovPlay-dev");
+            p.Runtime = Path.Combine(Path.GetTempPath(), "Keel-dev");
             p.Chiaki = Environment.GetEnvironmentVariable("SMOOVPLAY_CHIAKI") ?? "";
             p.ChiakiArgs = Environment.GetEnvironmentVariable("SMOOVPLAY_CHIAKI_ARGS") ?? "";
             p.RunArgs = Environment.GetEnvironmentVariable("SMOOVPLAY_RUN_ARGS") ?? "";
@@ -194,7 +194,7 @@ namespace SmoovPlay
         public static string ExeDir { get { return Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location); } }
         public static string DefaultInstall
         {
-            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "SmoovPlay"); }
+            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "Keel"); }
         }
         /// <summary>Where an earlier install is, from its Apps &amp; features entry (null if none).</summary>
         public static string ExistingInstall
@@ -239,7 +239,7 @@ namespace SmoovPlay
     class Installer
     {
         public static readonly string[] StepNames =
-            { "Unpack SmoovPlay", "Download Python", "Download PyTorch and TensorRT", "Optimise for your graphics card", "Finish up" };
+            { "Unpack Keel", "Download Python", "Download PyTorch and TensorRT", "Optimise for your graphics card", "Finish up" };
 
         readonly Paths p;
         readonly bool extract, register, prepare, desktopShortcut, fresh;
@@ -275,9 +275,9 @@ namespace SmoovPlay
 
         public void Run()
         {
-            Log($"SmoovPlay {BuildInfo.Version} setup, {DateTime.Now:yyyy-MM-dd HH:mm:ss}, into {p.Install}");
+            Log($"Keel {BuildInfo.Version} setup, {DateTime.Now:yyyy-MM-dd HH:mm:ss}, into {p.Install}");
             if (p.Install.Any(c => c > 127))  // (diagnostics hide the user's name, which can be where they are)
-                Log("Note: the install folder's path has letters outside English A-Z. If a step fails, a folder like C:\\SmoovPlay is worth a try.");
+                Log("Note: the install folder's path has letters outside English A-Z. If a step fails, a folder like C:\\Keel is worth a try.");
             Directory.CreateDirectory(p.Install);
             Directory.CreateDirectory(p.Runtime);
             if (File.Exists(p.Ready)) File.Delete(p.Ready);
@@ -301,7 +301,7 @@ namespace SmoovPlay
             StepStarted(4);
             if (register) Register();
             TryDelete(Path.Combine(p.Runtime, "downloads"));
-            File.WriteAllText(p.Ready, $"SmoovPlay {BuildInfo.Version} runtime ready {DateTime.Now:yyyy-MM-dd HH:mm}\r\n");
+            File.WriteAllText(p.Ready, $"Keel {BuildInfo.Version} runtime ready {DateTime.Now:yyyy-MM-dd HH:mm}\r\n");
             Log("== Done");
             StepStarted(5);
             Progress(1, "Done");
@@ -312,7 +312,7 @@ namespace SmoovPlay
 
         void ExtractPayload(double at, double w)
         {
-            Step("Unpacking SmoovPlay");
+            Step("Unpacking Keel");
             string root = Path.GetFullPath(p.Install).TrimEnd('\\') + "\\";
             int files = 0;
             using (var z = new ZipArchive(Payload.Open(), ZipArchiveMode.Read))
@@ -329,11 +329,11 @@ namespace SmoovPlay
                     try { e.ExtractToFile(dest, true); }
                     catch (IOException ex)
                     {
-                        throw new Exception($"Couldn't write {e.FullName} ({ex.Message}). Close SmoovPlay and chiaki-ng if they're running, then press Retry.");
+                        throw new Exception($"Couldn't write {e.FullName} ({ex.Message}). Close Keel and chiaki-ng if they're running, then press Retry.");
                     }
                     files++;
                     done += e.Length;
-                    Progress(at + w * done / total, "Unpacking SmoovPlay");
+                    Progress(at + w * done / total, "Unpacking Keel");
                 }
             }
             Log($"Unpacked {files} files");
@@ -458,15 +458,15 @@ namespace SmoovPlay
         void Register()
         {
             Step("Adding shortcuts");
-            string exe = Path.Combine(p.Install, "SmoovPlay.exe");
-            Shortcuts.Create(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "SmoovPlay.lnk"), exe, p.Install);
+            string exe = Path.Combine(p.Install, "Keel.exe");
+            Shortcuts.Create(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Keel.lnk"), exe, p.Install);
             if (desktopShortcut)
-                Shortcuts.Create(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "SmoovPlay.lnk"), exe, p.Install);
+                Shortcuts.Create(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Keel.lnk"), exe, p.Install);
             using (var k = Registry.CurrentUser.CreateSubKey(Uninstaller.Key))
             {
-                k.SetValue("DisplayName", "SmoovPlay");
+                k.SetValue("DisplayName", "Keel");
                 k.SetValue("DisplayVersion", BuildInfo.Version);
-                k.SetValue("Publisher", "the SmoovPlay authors");
+                k.SetValue("Publisher", "the Keel authors");
                 k.SetValue("InstallLocation", p.Install);
                 k.SetValue("DisplayIcon", exe);
                 k.SetValue("UninstallString", "\"" + exe + "\" --uninstall");
@@ -499,7 +499,7 @@ namespace SmoovPlay
             Log("Downloading " + url);
             using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(30) })
             {
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("SmoovPlay-installer/" + BuildInfo.Version);
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("Keel-installer/" + BuildInfo.Version);
                 using (var resp = http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).Result)
                 {
                     resp.EnsureSuccessStatusCode();
@@ -594,7 +594,7 @@ namespace SmoovPlay
             {
                 case 0xC0000005: return "Python crashed (0xC0000005, access violation): usually a camera, capture or virtual-camera driver";
                 case 0xC0000409: return "Python crashed (0xC0000409)";
-                case 0xC0000135: return "a file Python needs is missing (0xC0000135): Repair SmoovPlay on the Help page";
+                case 0xC0000135: return "a file Python needs is missing (0xC0000135): Repair Keel on the Help page";
                 case 0xC000013A: return "it was stopped (0xC000013A)";
             }
             return rc == TimedOut ? "it didn't finish in time" : rc < 0 ? $"exit code 0x{(uint)rc:X8}" : "exit code " + rc;
@@ -616,7 +616,7 @@ namespace SmoovPlay
             var st = sc.GetType();
             st.InvokeMember("TargetPath", BindingFlags.SetProperty, null, sc, new object[] { target });
             st.InvokeMember("WorkingDirectory", BindingFlags.SetProperty, null, sc, new object[] { workDir });
-            st.InvokeMember("Description", BindingFlags.SetProperty, null, sc, new object[] { "SmoovPlay: frame generation for 30 fps console games" });
+            st.InvokeMember("Description", BindingFlags.SetProperty, null, sc, new object[] { "Keel: frame generation for 30 fps console games" });
             st.InvokeMember("IconLocation", BindingFlags.SetProperty, null, sc, new object[] { target + ",0" });
             st.InvokeMember("Save", BindingFlags.InvokeMethod, null, sc, null);
         }
@@ -624,7 +624,7 @@ namespace SmoovPlay
 
     static class Uninstaller
     {
-        public const string Key = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\SmoovPlay";
+        public const string Key = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\Keel";
 
         /// <param name="confirmed">The launcher already asked (its Help page).</param>
         public static int Run(bool confirmed)
@@ -632,16 +632,16 @@ namespace SmoovPlay
             string dir = Paths.ExeDir;
             if (!Paths.ForInstall(dir).IsInstall)
             {
-                System.Windows.MessageBox.Show("This copy of SmoovPlay isn't an installed one, so there's nothing to remove.", "SmoovPlay");
+                System.Windows.MessageBox.Show("This copy of Keel isn't an installed one, so there's nothing to remove.", "Keel");
                 return 1;
             }
-            if (!confirmed && System.Windows.MessageBox.Show("Remove SmoovPlay from\n" + dir + "?\n\nYour settings are kept.", "Uninstall SmoovPlay",
+            if (!confirmed && System.Windows.MessageBox.Show("Remove Keel from\n" + dir + "?\n\nYour settings are kept.", "Uninstall Keel",
                                                System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question)
                 != System.Windows.MessageBoxResult.OK)
                 return 1;
             foreach (var lnk in new[] {
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "SmoovPlay.lnk"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "SmoovPlay.lnk") })
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Keel.lnk"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Keel.lnk") })
                 try { if (File.Exists(lnk)) File.Delete(lnk); } catch (Exception) { }
             try { Registry.CurrentUser.DeleteSubKeyTree(Key, false); } catch (Exception) { }
             // Only what setup created is removed, then the folder itself if that leaves it empty. This exe is inside
@@ -649,7 +649,7 @@ namespace SmoovPlay
             var cmd = new StringBuilder("/c ping 127.0.0.1 -n 3 > nul");
             foreach (var sub in new[] { "app", "runtime", "chiaki", "logs" })
                 cmd.Append($" & rmdir /s /q \"{Path.Combine(dir, sub)}\"");
-            foreach (var f in new[] { "SmoovPlay.exe", "install.log", "LICENSE.txt", "THIRD_PARTY_NOTICES.txt" })
+            foreach (var f in new[] { "Keel.exe", "install.log", "LICENSE.txt", "THIRD_PARTY_NOTICES.txt" })
                 cmd.Append($" & del /q \"{Path.Combine(dir, f)}\"");
             cmd.Append($" & rmdir \"{dir}\"");
             Process.Start(new ProcessStartInfo("cmd.exe", cmd.ToString())
@@ -709,14 +709,14 @@ namespace SmoovPlay
             }
             catch (Exception) { }
             log("[launcher] started chiaki-ng" + (renderer == "opengl"
-                ? " (drawing with OpenGL this time: chiaki-ng's Vulkan has crashed on AMD and Intel graphics; SmoovPlay shows the picture)"
+                ? " (drawing with OpenGL this time: chiaki-ng's Vulkan has crashed on AMD and Intel graphics; Keel shows the picture)"
                 : ""));
             return true;
         }
 
         /// <summary>What chiaki-ng draws its own window with (CHIAKI_FRAMETAP_RENDERER, our chiaki-ng's switch, for that
         /// session only): OpenGL without an NVIDIA card, where chiaki-ng's default, Vulkan (with Vulkan decoding), has
-        /// crashed (issue 19, a Radeon RX 9070 XT). SmoovPlay draws the stream itself, so chiaki-ng's window, hidden
+        /// crashed (issue 19, a Radeon RX 9070 XT). Keel draws the stream itself, so chiaki-ng's window, hidden
         /// behind it, loses nothing. On NVIDIA it stays as set: Vulkan works there, and an HDR stream needs it. One set
         /// already (e.g. "vulkan" to try it anyway) is kept.</summary>
         public static string Renderer(string already)
@@ -1082,7 +1082,7 @@ namespace SmoovPlay
             ResultsPath = Path.Combine(p.Logs, $"results-{stamp}.txt");
             log = new StreamWriter(LogPath, false, Encoding.UTF8) { AutoFlush = true };
             if (SystemCheck.GpuName == "unknown") SystemCheck.QueryGpu();  // fills in the GPU and driver
-            log.WriteLine($"[launcher] SmoovPlay {BuildInfo.Version}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}, {(SystemCheck.GpuName == "unknown" && SystemCheck.OtherGpu != null ? SystemCheck.OtherGpu + " (DirectML)" : SystemCheck.GpuName + ", driver " + SystemCheck.Driver)}"
+            log.WriteLine($"[launcher] Keel {BuildInfo.Version}, {DateTime.Now:yyyy-MM-dd HH:mm:ss}, {(SystemCheck.GpuName == "unknown" && SystemCheck.OtherGpu != null ? SystemCheck.OtherGpu + " (DirectML)" : SystemCheck.GpuName + ", driver " + SystemCheck.Driver)}"
                           + (Source != "chiaki" ? ", source " + Source : "") + (TestMode ? ", test mode (60 fps game played as 30 fps)" : ""));
             string args = "keel.py " + Sources.RunArgs(Source, Source == "window" ? WindowApp : CaptureVideo, CaptureAudio)
                           + (Source == "window" && !string.IsNullOrEmpty(WindowKeysArg) ? " --window-keys \"" + WindowKeysArg.Replace("\"", "") + "\"" : "")
@@ -1188,9 +1188,9 @@ namespace SmoovPlay
             else if (line.StartsWith("[run] playing"))  // the video is up: first, and after every in-app restart
                 OnState(PlayState.Playing, null);
             else if (line.StartsWith("[chiaki] this stream was already running"))
-                OnNote("This stream started before SmoovPlay. In chiaki-ng, end the stream and connect again.");
+                OnNote("This stream started before Keel. In chiaki-ng, end the stream and connect again.");
             else if (line.StartsWith("[tap] this stream was already running"))  // another app's compressed frames
-                OnNote("This stream started before SmoovPlay. Restart the stream in the app.");
+                OnNote("This stream started before Keel. Restart the stream in the app.");
             else if (line.StartsWith("[chiaki] WARNING:") || line.StartsWith("[tap] WARNING:"))
                 OnNote(line.Substring(line.IndexOf("WARNING:") + "WARNING:".Length).Trim());
             else if (line.StartsWith("[chiaki] stream ended") || line.StartsWith("[tap] the app stopped sending frames"))
@@ -1281,7 +1281,7 @@ namespace SmoovPlay
         public static string Collect(Paths p, string lastLog)
         {
             var sb = new StringBuilder();
-            sb.AppendLine($"SmoovPlay {BuildInfo.Version} diagnostics, {DateTime.Now:yyyy-MM-dd HH:mm}");
+            sb.AppendLine($"Keel {BuildInfo.Version} diagnostics, {DateTime.Now:yyyy-MM-dd HH:mm}");
             const string nt = @"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion";
             string product = Registry.GetValue(nt, "ProductName", "") as string, build = Registry.GetValue(nt, "CurrentBuild", "") as string;
             string release = Registry.GetValue(nt, "DisplayVersion", "") as string;
@@ -1306,7 +1306,7 @@ namespace SmoovPlay
             sb.AppendLine("Install: " + p.Install + (p.Dev ? " (dev)" : "")
                           + (p.Install.Any(c => c > 127) ? " (the path has letters outside English A-Z)" : ""));
             sb.AppendLine("Runtime: " + (File.Exists(p.Ready) ? File.ReadAllText(p.Ready).Trim() : "not ready"));
-            sb.AppendLine("chiaki-ng: " + (Chiaki.Ours(p) != null ? "running (started by SmoovPlay)" : "not started by SmoovPlay")
+            sb.AppendLine("chiaki-ng: " + (Chiaki.Ours(p) != null ? "running (started by Keel)" : "not started by Keel")
                           + $", {Chiaki.Others(p).Length} other chiaki-ng running");
             string settings = Paths.SettingsFile;
             sb.AppendLine("Settings: " + (File.Exists(settings) ? File.ReadAllText(settings).Trim() : "none saved"));

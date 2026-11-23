@@ -1,5 +1,5 @@
-// App window mode's shortcuts. framegen/hotkeys.py does the same in the pipeline; keep the two in step. SmoovPlay's
-// picture sits over the app without taking the keyboard (some apps stop drawing without it), so SmoovPlay's own keys
+// App window mode's shortcuts. framegen/hotkeys.py does the same in the pipeline; keep the two in step. Keel's
+// picture sits over the app without taking the keyboard (some apps stop drawing without it), so Keel's own keys
 // come through Windows' system-wide shortcuts: Ctrl+Alt with the usual key by default. People can change them on
 // the Play page; they're kept in the launcher's prefs as "window-key:<action>=<shortcut>" and passed to
 // run.py --window-keys. The pipeline says which it got ("[window-keys] {json}"), shown on the Play page.
@@ -10,7 +10,7 @@ using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
 using System.Windows.Input;
 
-namespace SmoovPlay
+namespace Keel
 {
     static class WindowKeys
     {
@@ -96,7 +96,7 @@ namespace SmoovPlay
         }
 
         /// <summary>What each action gets on this PC now (as the pipeline will: the first free one), and the
-        /// shortcuts another program has. Only while SmoovPlay isn't playing: its own would look taken.</summary>
+        /// shortcuts another program has. Only while Keel isn't playing: its own would look taken.</summary>
         public static Dictionary<string, string> Resolve(HashSet<string> prefs, List<string> taken)
         {
             var got = new Dictionary<string, string>();
@@ -180,7 +180,7 @@ namespace SmoovPlay
             return key.Value != null;
         }
 
-        /// <summary>Why `name` can't be the shortcut for `action`, or null. Not while SmoovPlay is playing (its own
+        /// <summary>Why `name` can't be the shortcut for `action`, or null. Not while Keel is playing (its own
         /// shortcuts would look taken).</summary>
         public static string Problem(string name, string action, HashSet<string> prefs)
         {
@@ -190,7 +190,7 @@ namespace SmoovPlay
             if ((mods & (ModCtrl | ModAlt | ModWin)) == 0)
                 return "Add Ctrl, Alt or Win: on its own (or with Shift only), the key would stop working in the game and the app.";
             if (Reserved.Contains(name)) return name + " belongs to Windows.";
-            if (Own.ContainsKey(name)) return name + " is SmoovPlay's own, for " + Own[name] + ".";
+            if (Own.ContainsKey(name)) return name + " is Keel's own, for " + Own[name] + ".";
             var others = Resolve(prefs, null).Where(kv => kv.Key != action && kv.Value == name).Select(kv => Find(kv.Key).Label).FirstOrDefault();
             if (others != null) return others + " already uses " + name + ". Change that one first.";
             if (!Free(name)) return "Another program on this PC already uses " + name + ". Pick another.";

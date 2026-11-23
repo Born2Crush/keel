@@ -1,7 +1,7 @@
-# Developing SmoovPlay
+# Developing Keel
 
-Everything for working on SmoovPlay itself: every command and tool, settings and hotkeys, how Instant replay and
-Looks work inside, the scheduler, upscaling, NVIDIA VFG, measured results and known limits. For what SmoovPlay is
+Everything for working on Keel itself: every command and tool, settings and hotkeys, how Instant replay and
+Looks work inside, the scheduler, upscaling, NVIDIA VFG, measured results and known limits. For what Keel is
 and how to get it, see the [README](../../README.md).
 
 ## What's where
@@ -11,8 +11,8 @@ and how to get it, see the [README](../../README.md).
 | [`framegen/`](../framegen/) | The pipeline: video sources (file, capture card, app window, chiaki-ng frame tap), repeat and cut detection, RIFE interpolation (PyTorch and TensorRT), FSR 1 and RTX VSR upscaling, the OpenGL window and the settings menu. |
 | [`run.py`](../run.py) | Command-line entry point. |
 | [`chiaki_tap/`](../chiaki_tap/) | The patch that adds a frame tap to chiaki-ng, and how to build it. |
-| [`docs/frame-tap.md`](frame-tap.md) | The frame tap's format, so any app can send its frames to SmoovPlay (Experimental), with a small C writer to start from. |
-| [`installer/`](../installer/) | `SmoovPlay-Setup.exe` and the SmoovPlay launcher, in C# and WPF. |
+| [`docs/frame-tap.md`](frame-tap.md) | The frame tap's format, so any app can send its frames to Keel (Experimental), with a small C writer to start from. |
+| [`installer/`](../installer/) | `Keel-Setup.exe` and the Keel launcher, in C# and WPF. |
 | [`native/rtxvsr/`](../native/rtxvsr/) | Optional wrapper around NVIDIA's RTX Video SDK. |
 | [`scripts/`](../scripts/) | Benchmarks, a model check and a fake chiaki-ng stream for testing without a PS5. |
 | [`tests/`](../tests/) | `pytest` tests. |
@@ -148,8 +148,8 @@ made-up PCs.
 | Sound in sync | On / Off (chiaki-ng holds its sound back to meet the picture) | live (PS5 Remote Play only) |
 | Simulate a 30 fps game | Off / On | live, this session only, never saved (any 60 Hz source: Remote Play, a capture card, or a file with `--raw`; `--test-mode`) |
 | Steady HUD | Off / On (off by default; results vary by game; RIFE and NVIDIA VFG, [`framegen/steady.py`](../framegen/steady.py)) | live |
-| Look, Which look | Off / On, and SmoovPlay's looks and yours (made on the launcher's Looks page) | live |
-| Looks in clips | Off / On (the look in saved instant replays too; only SmoovPlay's half of a before & after video) | live |
+| Look, Which look | Off / On, and Keel's looks and yours (made on the launcher's Looks page) | live |
+| Looks in clips | Off / On (the look in saved instant replays too; only Keel's half of a before & after video) | live |
 | Interpolation model | RIFE 4.22 lite / NVIDIA VFG (RTX 40 and 50 series, optional download, see below) | **restart** |
 | VFG quality | Low / Medium / High (NVIDIA VFG only) | **restart** |
 | AI engine | Auto (TensorRT at full motion detail, PyTorch at half: the faster for each) / TensorRT / PyTorch (RIFE only) | **restart** |
@@ -168,7 +168,7 @@ after video of it, `k` look on/off, `j` next look (`Shift+J` back), `q` or Esc q
 `Ctrl+Alt+R` and `Ctrl+Alt+B` work from any window.
 
 Instant replay (`framegen/replay.py`) keeps three tracks in memory as MPEG-TS pieces, one per encoded packet: every
-frame shown (timed when it was shown, so 90 fps is 90), each new game frame (timed when it arrived plus SmoovPlay's
+frame shown (timed when it was shown, so 90 fps is 90), each new game frame (timed when it arrived plus Keel's
 delay, so it lines up), and the game's sound, which chiaki-ng copies into a second shared-memory ring (see
 [`chiaki_tap/`](../chiaki_tap/)) or a capture card's player hands over. Frames go to YUV on the graphics card (0.3 ms
 at 1080p), to memory on a side stream, and to NVENC (else AMF, QSV or x264) on a thread of their own. Saving cuts
@@ -188,7 +188,7 @@ video window draws a look in passes: the per-pixel effects share one shader, and
 pixels (bloom, halation, blur, clarity, aberration, sharpening) starts a new pass on a half-float image; bloom,
 halation, blur and clarity use a pyramid of up to 6 halvings. `looks.render()` does the same maths in NumPy, and the tests compare the
 shaders with it. With **Looks in clips** on, the look is drawn again at the stream's size into a texture that CUDA
-reads, for the SmoovPlay track only. A share code is `SPL1-` and base64url of a compact binary: each value as its
+reads, for the Keel track only. A share code is `SPL1-` and base64url of a compact binary: each value as its
 difference from the default, deflated when that's shorter, with a 16-bit checksum; a newer version's extra
 settings are skipped by older ones. The launcher's Looks page uses `python -m framegen.looks` (`schema`, `encode`,
 `decode`, `import`, `save`, `delete`, `add-lut`) and shows edits live with the `look-show`, `look-hide` and
@@ -208,15 +208,15 @@ them.
 <details>
 <summary><b>NVIDIA VFG (optional, RTX 40 and 50 series)</b></summary>
 
-SmoovPlay can draw the in-between frames with NVIDIA's own Video Frame Generation (VFG, part of NVIDIA's Video
-Effects SDK) instead of RIFE. It isn't part of SmoovPlay or its downloads. **Set up NVIDIA VFG**, under
+Keel can draw the in-between frames with NVIDIA's own Video Frame Generation (VFG, part of NVIDIA's Video
+Effects SDK) instead of RIFE. It isn't part of Keel or its downloads. **Set up NVIDIA VFG**, under
 Interpolation model on the Settings page, downloads NVIDIA's `nvidia-vfx` package from NVIDIA's own package index
 into `runtime\vfx` (about 540 MB, pinned by version and file hash), and only once you accept NVIDIA's licence:
 the NVIDIA Software License Agreement, the Product-Specific Terms for NVIDIA AI Products and the NVIDIA Open Model
 License. **Remove** deletes it again. NVIDIA supports it on RTX 40 and 50 series cards only; RIFE works on every RTX
-card. If VFG can't start, SmoovPlay plays with RIFE instead and says why.
+card. If VFG can't start, Keel plays with RIFE instead and says why.
 
-NVIDIA's licence doesn't allow publishing VFG benchmark results, so this page has none, and SmoovPlay keeps VFG's
+NVIDIA's licence doesn't allow publishing VFG benchmark results, so this page has none, and Keel keeps VFG's
 timings and quality scores out of its logs and out of Copy diagnostics. They're shown on your own PC only: in the
 stats overlay, in Auto-detect (which times VFG too once it's set up, and suggests it when it keeps up at least as
 well as RIFE) and in test mode's report.
@@ -238,7 +238,7 @@ When the window is bigger than the frame (fullscreen on a 1440p monitor, say), i
   only works when frames are decoded on the GPU (the default for Remote Play), and not with HDR output yet. It runs
   one of two ways (`framegen/rtxvsr.py`):
   - **NVIDIA's package** (what the installed app uses): the VideoSuperRes effect in `nvidia-vfx`, the package
-    NVIDIA VFG comes in, so it's there once NVIDIA VFG is set up (RTX 40 and 50 series). SmoovPlay ships nothing of
+    NVIDIA VFG comes in, so it's there once NVIDIA VFG is set up (RTX 40 and 50 series). Keel ships nothing of
     NVIDIA's. Frames go in and out as NVIDIA's packed 10-bit RGB; the window copies the output words into an R32UI
     texture and draws it through an RGB10_A2 view of the same memory, so nothing unpacks them. A capture card's
     uncompressed frames get NVIDIA's models for clean video. Its licence forbids publishing benchmark results, so
@@ -355,12 +355,12 @@ Timing from a recorded clip, not a live stream, paced at 60 Hz with the OpenGL w
 ## Features in detail
 
 - **Smoother, not faster.** The extra frames are generated: motion gets smoother, but the game still responds like
-  30 fps, and a little later than without SmoovPlay. Great for driving, exploring and story missions; not for
+  30 fps, and a little later than without Keel. Great for driving, exploring and story missions; not for
   competitive online play.
-- **About 36 ms at 90 fps** (about 20 ms at 60 fps). That's how long a frame spends in SmoovPlay, from arriving to
+- **About 36 ms at 90 fps** (about 20 ms at 60 fps). That's how long a frame spends in Keel, from arriving to
   being on screen, on top of Remote Play's own delay.
   About 22 ms of it is a wait every frame generator has: each real frame is held back while the two in-between
-  frames before it are shown. When the graphics card falls behind for a moment, SmoovPlay drops to 60 fps rather
+  frames before it are shown. When the graphics card falls behind for a moment, Keel drops to 60 fps rather
   than add delay.
 - **1080p.** Remote Play arrives at 1080p, so the picture is a little softer than HDMI straight from the console.
 - **HDR** (*Experimental*, Settings → HDR, off by default). For a PS5 streaming in HDR: pick the H.265 HDR codec in
@@ -370,36 +370,36 @@ Timing from a recorded clip, not a live stream, paced at 60 Hz with the OpenGL w
   of switching the display to SDR. Instant replay clips are saved in SDR either way.
 - **Some wobble.** HUD text over fast motion, very fast camera turns and thin objects crossing each other can wobble
   a little. Press **I** in the video window to compare with frame generation off.
-- **Sound and picture stay in step.** chiaki-ng plays the sound, and SmoovPlay tells it to hold the sound back
-  by as long as the picture spends in SmoovPlay, measured as you play (**Sound in sync**, on by default).
+- **Sound and picture stay in step.** chiaki-ng plays the sound, and Keel tells it to hold the sound back
+  by as long as the picture spends in Keel, measured as you play (**Sound in sync**, on by default).
 - **Delay test:** press **L** in the video window, standing still where Options opens a menu. chiaki-ng presses
-  Options six times and SmoovPlay times each answer, then shows the PS5 and Remote Play's part, its own part and
+  Options six times and Keel times each answer, then shows the PS5 and Remote Play's part, its own part and
   the two together.
 - **Instant replay** (Settings, **Instant replay**: off until you pick a length, 30 seconds to 5 minutes) keeps
   the last stretch of what you played. Press **R** in the video window (or **Ctrl+Alt+R** from anywhere) to save
-  it to your Videos folder, in SmoovPlay, as an MP4 at the frame rate you see, with the game's own sound (PS5
+  it to your Videos folder, in Keel, as an MP4 at the frame rate you see, with the game's own sound (PS5
   Remote Play and capture cards; window capture has none). Saving takes a second or two. **B** (**Ctrl+Alt+B**)
-  saves a **before & after** video instead: the game's own frames next to SmoovPlay's, split down the middle or
+  saves a **before & after** video instead: the game's own frames next to Keel's, split down the middle or
   side by side, made in the background in about as long as the clip. The video encoder on your graphics card does
   the recording, apart from the AI; a 1-minute replay at 1080p and 90 fps keeps about 310 MB in memory. Turning it
   on during play pauses the picture for about 0.2 s once, while the encoders start.
 - **Looks** (the launcher's **Looks** page; off until you use one) put a grade on the picture. A look is a stack of
   effects applied top to bottom, like the nodes of a color grading app, each with its own amount: color, color
   wheels, split tone, black & white, LUTs (`.cube` files), bloom, halation, blur, clarity, chromatic aberration,
-  sharpening, film grain, vignette, scanlines, letterbox and color-blind assist. SmoovPlay comes with 14 (Cinematic,
+  sharpening, film grain, vignette, scanlines, letterbox and color-blind assist. Keel comes with 14 (Cinematic,
   Film, Vivid, Noir, Golden hour, Neon night, Retro VHS, Bleach bypass, Dreamy, Arctic, Sepia and three for color
   blindness). Try any change on one of them, and **Save as mine** keeps it as a look of your own (**Reset** puts
-  SmoovPlay's back). The page draws the look on sample screenshots from Grand Theft
+  Keel's back). The page draws the look on sample screenshots from Grand Theft
   Auto VI and five other games as you change it (hold the picture to see it without the look, and the arrows go to
   the next game). While you play, it shows your changes on the video as you make them, and in the video window **K** turns the look on and off and **J** goes to the next one (**Shift+J**
   back). **Copy code** gives a short code (`SPL1-`, about 35 to 60 characters) that rebuilds the look on
-  anyone's SmoovPlay, through **Paste a code**. A look takes about 0.02 to 0.35 ms of graphics card time a frame at
-  1440p. Saved clips stay clean unless **Looks in clips** is on (Settings, Instant replay); then only SmoovPlay's
+  anyone's Keel, through **Paste a code**. A look takes about 0.02 to 0.35 ms of graphics card time a frame at
+  1440p. Saved clips stay clean unless **Looks in clips** is on (Settings, Instant replay); then only Keel's
   half of a before & after video gets the look.
 - **Measure the whole delay yourself** with a phone's 240 fps slow motion and `scripts/latency_video.py`: film
-  the controller and screen (`press`: button to screen), or the PS5's own HDMI picture beside SmoovPlay's
-  (`side`: what Remote Play and SmoovPlay add). The script's help says how to film it.
-- **60 fps games pass through unchanged.** There are no gaps to fill. To see what SmoovPlay would do with one
+  the controller and screen (`press`: button to screen), or the PS5's own HDMI picture beside Keel's
+  (`side`: what Remote Play and Keel add). The script's help says how to film it.
+- **60 fps games pass through unchanged.** There are no gaps to fill. To see what Keel would do with one
   anyway, use [test mode](../README.md#only-have-60-fps-games-use-test-mode).
 - **Games between 40 and 60 fps** (unlocked performance modes) send their frames unevenly over a 60 Hz stream, so
   they stutter. **Even out 40-60 fps** (on by default, Experimental) times each frame and draws evenly spaced ones
@@ -416,5 +416,5 @@ Timing from a recorded clip, not a live stream, paced at 60 Hz with the OpenGL w
   median delay went from 37 to 66 ms and extra frames shown from 97% to 79-83% (two runs). Not tried with a real game
   that dips yet.
 - **One frame generator at a time.** Leave NVIDIA Smooth Motion, AMD Fluid Motion Frames and Lossless Scaling off
-  for SmoovPlay and chiaki-ng: on top of SmoovPlay they'd make frames out of its generated ones (more wobble) and
+  for Keel and chiaki-ng: on top of Keel they'd make frames out of its generated ones (more wobble) and
   add delay. Your other games aren't affected.

@@ -17,7 +17,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 
-namespace SmoovPlay
+namespace Keel
 {
     partial class Ui
     {
@@ -107,7 +107,7 @@ namespace SmoovPlay
                 }
             }
             else if (VfgUnsupported.Length > 0)
-                text = VfgUnsupported + " This PC can't use it, but RIFE 4.22 lite works on every graphics card SmoovPlay supports.";
+                text = VfgUnsupported + " This PC can't use it, but RIFE 4.22 lite works on every graphics card Keel supports.";
             else
             {
                 text = "NVIDIA VFG is optional: a separate download from NVIDIA (about " + vfgStatus["size_mb"] + " MB), under NVIDIA's licence. It also brings NVIDIA RTX VSR (Upscaler).";
@@ -151,9 +151,9 @@ namespace SmoovPlay
         {
             var licences = VfgLicences();
             Ask("\uE946", "Accent", "Set up NVIDIA VFG",
-                "NVIDIA VFG is NVIDIA's software, not part of SmoovPlay. SmoovPlay downloads it from NVIDIA (about " + vfgStatus["size_mb"]
+                "NVIDIA VFG is NVIDIA's software, not part of Keel. Keel downloads it from NVIDIA (about " + vfgStatus["size_mb"]
                 + " MB), along with NVIDIA RTX VSR, and using them means you accept NVIDIA's licence: " + string.Join(", ", licences.Keys) + ". Among other things, it doesn't "
-                + "allow publishing their speed or quality results, so SmoovPlay keeps them out of Copy diagnostics.",
+                + "allow publishing their speed or quality results, so Keel keeps them out of Copy diagnostics.",
                 "Accept and download", "Read the licence", "Cancel", r =>
                 {
                     if (r == 1) StartVfgInstall(thenDetect);

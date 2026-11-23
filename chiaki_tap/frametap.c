@@ -187,7 +187,7 @@ uint32_t frametap_audio_delay_ms(void)
 		return 0;
 	LARGE_INTEGER now;
 	QueryPerformanceCounter(&now);
-	if((int64_t)((uint64_t)now.QuadPart - *H64(56)) > (int64_t)(2 * freq)) // SmoovPlay stopped
+	if((int64_t)((uint64_t)now.QuadPart - *H64(56)) > (int64_t)(2 * freq)) // Keel stopped
 		return 0;
 	return ms > 500 ? 500 : ms;
 }

@@ -1,11 +1,11 @@
-# SmoovPlay launcher and installer
+# Keel launcher and installer
 
 Two Windows programs built from one C# source tree in `launcher\`. They use WPF on .NET Framework 4.8, which every Windows 10 and 11 PC has.
 
 | File | What it is |
 |---|---|
-| `SmoovPlay-Setup.exe` (~140 MB) | The launcher with the app and chiaki-ng embedded. Walks through **Check your PC → Choose a folder → Install → Ready to play**. Installs per user (no admin rights), downloads the runtime from official sources, prepares the GPU and adds shortcuts. |
-| `SmoovPlay.exe` (~0.3 MB) | The launcher, inside every install. Its left rail has five pages: **Play**, **Connect your PS5**, **PC check**, **Settings** and **Help**. Play starts the pipeline *before* chiaki-ng, so the stream's codec header is never missed. **Test with a 60 fps game**, under Play, does the same in test mode (`run.py --test-mode`) and shows a results card when it stops. While a stream plays, the launcher minimises to the taskbar, with a dot on its button (green: playing, amber: starting, red: stopped with an error), and comes back up when the session ends. **Settings** lists the pipeline's own settings (`python -m framegen.settings`): switches for on/off, dropdowns for the rest, each choice with a line on when to pick it. The interpolation model and upscaler dropdowns offer only what SmoovPlay supports today, and end with a note that other models may come later. **Auto-detect**, at the top, runs `python -m framegen.autodetect` (about 10 s; off while playing, and Play waits for it), shows what it found and what it suggests with a reason for each, and **Apply** sets the suggestions. Its output goes to `logs\autodetect.txt`. With nothing playing it edits the settings file; while a stream plays it sends each change to the running pipeline (`run.py --control`, see `framegen/remote.py`), which applies it straight away, and it follows changes made in the video window's menu. |
+| `Keel-Setup.exe` (~140 MB) | The launcher with the app and chiaki-ng embedded. Walks through **Check your PC → Choose a folder → Install → Ready to play**. Installs per user (no admin rights), downloads the runtime from official sources, prepares the GPU and adds shortcuts. |
+| `Keel.exe` (~0.3 MB) | The launcher, inside every install. Its left rail has five pages: **Play**, **Connect your PS5**, **PC check**, **Settings** and **Help**. Play starts the pipeline *before* chiaki-ng, so the stream's codec header is never missed. **Test with a 60 fps game**, under Play, does the same in test mode (`run.py --test-mode`) and shows a results card when it stops. While a stream plays, the launcher minimises to the taskbar, with a dot on its button (green: playing, amber: starting, red: stopped with an error), and comes back up when the session ends. **Settings** lists the pipeline's own settings (`python -m framegen.settings`): switches for on/off, dropdowns for the rest, each choice with a line on when to pick it. The interpolation model and upscaler dropdowns offer only what Keel supports today, and end with a note that other models may come later. **Auto-detect**, at the top, runs `python -m framegen.autodetect` (about 10 s; off while playing, and Play waits for it), shows what it found and what it suggests with a reason for each, and **Apply** sets the suggestions. Its output goes to `logs\autodetect.txt`. With nothing playing it edits the settings file; while a stream plays it sends each change to the running pipeline (`run.py --control`, see `framegen/remote.py`), which applies it straight away, and it follows changes made in the video window's menu. |
 
 Source files:
 
@@ -27,10 +27,10 @@ Source files:
 ```
 .venv\Scripts\python installer\build.py                  # both exes, into installer\dist
 .venv\Scripts\python installer\build.py --version 0.2.0  # a release's version (default: VERSION in build.py)
-.venv\Scripts\python installer\build.py --launcher-only  # only SmoovPlay.exe
+.venv\Scripts\python installer\build.py --launcher-only  # only Keel.exe
 ```
 
-A full build also writes `SmoovPlay-Setup.exe.sig`, the update signature (see Updates).
+A full build also writes `Keel-Setup.exe.sig`, the update signature (see Updates).
 
 Needs:
 
@@ -61,7 +61,7 @@ The folder step also checks the folder:
 
 * **Admin-only places** (Program Files, Windows) are refused.
 * **Network and removable drives** are refused.
-* **Long paths:** with Windows' long paths off, a path over 80 characters is refused, because the deepest package file sits about 155 characters below the install folder. The step offers **Use a shorter path** (`<drive>:\SmoovPlay`) and **Turn on long paths** (admin).
+* **Long paths:** with Windows' long paths off, a path over 80 characters is refused, because the deepest package file sits about 155 characters below the install folder. The step offers **Use a shorter path** (`<drive>:\Keel`) and **Turn on long paths** (admin).
 * **An existing install** is updated in place.
 
 Not handled in the app:
@@ -72,13 +72,13 @@ Not handled in the app:
 
 ## Connect your PS5
 
-The launcher opens on this page the first time it runs. It has eight steps the user ticks off, and SmoovPlay remembers them in `%APPDATA%\framegen\smoovplay-launcher.txt`:
+The launcher opens on this page the first time it runs. It has eight steps the user ticks off, and Keel remembers them in `%APPDATA%\framegen\smoovplay-launcher.txt`:
 
 1. Turn on Remote Play.
 2. Rest-mode settings (optional).
 3. Sign in to PSN in chiaki-ng.
 4. Register the PS5, automatically or with a PIN.
-5. Set the stream to 60 fps (the H.265 HDR codec only with HDR on in SmoovPlay's Settings).
+5. Set the stream to 60 fps (the H.265 HDR codec only with HDR on in Keel's Settings).
 6. Black picture? Turn off HDCP (only if needed). If the picture stays black, or the PS5 says the content can't be shown, turn off Enable HDCP (PS5: Settings → System → HDMI), and turn it back on afterwards for video apps like Netflix.
 7. Connect a controller.
 8. Press Play.
@@ -94,7 +94,7 @@ Every step can run again: **Retry** after a failure, or **Repair** in Help later
 1. Unpacks these:
    * `app\`: run.py, framegen and the RIFE weights.
    * `chiaki\`: chiaki-ng with the frame tap, its licences and the patch source.
-   * `SmoovPlay.exe`.
+   * `Keel.exe`.
 2. Downloads the Python 3.12.10 embeddable package from python.org, verifies its SHA-256, and sets its `._pth` file to see `Lib\site-packages` and `..\..\app`. It then installs pip with `get-pip.py`.
 3. Runs `pip install -r app\requirements-runtime.txt` with pinned versions, about 5 GB:
    * Sources: pypi.org, plus download.pytorch.org for CUDA PyTorch and pypi.nvidia.com for TensorRT's wheels.
@@ -108,8 +108,8 @@ None of PyTorch, TensorRT, CUDA or PyAV is ever redistributed by us.
 ## Install layout
 
 ```
-SmoovPlay\                   default: %LOCALAPPDATA%\Programs\SmoovPlay
-  SmoovPlay.exe
+Keel\                   default: %LOCALAPPDATA%\Programs\Keel
+  Keel.exe
   LICENSE.txt, THIRD_PARTY_NOTICES.txt
   app\                       run.py, framegen\, models\ (weights; TensorRT engines in models\trt)
   chiaki\                    chiaki-ng + licenses\ + source\
@@ -120,7 +120,7 @@ SmoovPlay\                   default: %LOCALAPPDATA%\Programs\SmoovPlay
 
 Settings stay in `%APPDATA%\framegen\` and are kept on uninstall.
 
-Uninstall (Help → Uninstall, or Apps & features) removes only what setup created, then the folder if it's empty. Setup never installs into a folder that already holds other files; it makes a `SmoovPlay` subfolder instead.
+Uninstall (Help → Uninstall, or Apps & features) removes only what setup created, then the folder if it's empty. Setup never installs into a folder that already holds other files; it makes a `Keel` subfolder instead.
 
 ## Updates
 
@@ -130,18 +130,18 @@ The launcher finds new releases on GitHub and, with a click, installs them itsel
 
 **Installing it.** Clicking that line asks **Update to v0.2.0?** (Update now, What's new, Later). Update now:
 
-1. Downloads `SmoovPlay-Setup.exe` from the release into `%TEMP%\SmoovPlay-update\`, with progress in the rail.
+1. Downloads `Keel-Setup.exe` from the release into `%TEMP%\Keel-update\`, with progress in the rail.
 2. Checks it before running anything:
-   * The SHA-256 must match both GitHub's asset digest and the signed one in `SmoovPlay-Setup.exe.sig`.
-   * The `.sig` must be signed with SmoovPlay's update key, whose public half is built into every launcher.
+   * The SHA-256 must match both GitHub's asset digest and the signed one in `Keel-Setup.exe.sig`.
+   * The `.sig` must be signed with Keel's update key, whose public half is built into every launcher.
    * The signed version must be the release's tag, and newer than the running app.
    * Nothing runs if any check fails, and the error offers the release page instead.
-3. Closes chiaki-ng if it's running from this install, starts `SmoovPlay-Setup.exe --update --dir <install> --wait <launcher pid>`, and closes the launcher.
-4. Setup waits for the launcher to exit, then runs its usual steps in place. Python and packages already there are kept, and pip only adds what changed. Engines stay cached, and settings, looks and clips are kept. Then it opens SmoovPlay again.
+3. Closes chiaki-ng if it's running from this install, starts `Keel-Setup.exe --update --dir <install> --wait <launcher pid>`, and closes the launcher.
+4. Setup waits for the launcher to exit, then runs its usual steps in place. Python and packages already there are kept, and pip only adds what changed. Engines stay cached, and settings, looks and clips are kept. Then it opens Keel again.
 
 The next launcher start deletes the downloaded setup. A dev launcher (`SMOOVPLAY_APP`), or a build without the update key, only links to the release page.
 
-**Publishing a release.** Build with `--version`, then upload **both** `installer\dist\SmoovPlay-Setup.exe` and `SmoovPlay-Setup.exe.sig` to a GitHub release tagged `v<version>`. A release without the `.sig` only gets a link to its page.
+**Publishing a release.** Build with `--version`, then upload **both** `installer\dist\Keel-Setup.exe` and `Keel-Setup.exe.sig` to a GitHub release tagged `v<version>`. A release without the `.sig` only gets a link to its page.
 
 **The signing key.** The first build makes an RSA-3072 key at `%USERPROFILE%\.smoovplay\update-signing-key.xml` (`SMOOVPLAY_SIGNING_KEY` overrides it), outside the repo. Back it up somewhere safe and never commit it:
 
@@ -161,12 +161,12 @@ Test switches:
 ## Command line
 
 ```
-SmoovPlay-Setup.exe --unattended --dir "C:\Games\SmoovPlay" [--no-shortcuts] [--skip-prepare]   # log: <dir>\install.log, exit code 0 = ok
-SmoovPlay-Setup.exe --update --dir "<install>" [--wait <pid>]   # update in place with the window (what Update now runs)
-SmoovPlay.exe --page play|guide|check|settings|help    # open on a page
-SmoovPlay.exe --diagnostics out.txt           # what "Copy diagnostics" copies (user folder replaced by %USERPROFILE%)
-SmoovPlay.exe --uninstall [--yes]             # --yes: already confirmed (the Help page asks in-app)
-SmoovPlay.exe --check-signature file.exe      # exit 0 if Microsoft-signed (tests the Visual C++ download check)
+Keel-Setup.exe --unattended --dir "C:\Games\Keel" [--no-shortcuts] [--skip-prepare]   # log: <dir>\install.log, exit code 0 = ok
+Keel-Setup.exe --update --dir "<install>" [--wait <pid>]   # update in place with the window (what Update now runs)
+Keel.exe --page play|guide|check|settings|help    # open on a page
+Keel.exe --diagnostics out.txt           # what "Copy diagnostics" copies (user folder replaced by %USERPROFILE%)
+Keel.exe --uninstall [--yes]             # --yes: already confirmed (the Help page asks in-app)
+Keel.exe --check-signature file.exe      # exit 0 if Microsoft-signed (tests the Visual C++ download check)
 ```
 
 ## Testing
@@ -184,7 +184,7 @@ Other test switches:
 * `SMOOVPLAY_SETTINGS=<file>`: uses this settings file instead of the real one, to show chosen settings without changing yours. Give `run.py` the same file (`--settings` in `SMOOVPLAY_RUN_ARGS`), or the Settings page and the pipeline read different files.
 * `SMOOVPLAY_PREFS=<file>`: keeps the guide's ticks out of the real profile.
 * `SMOOVPLAY_SOURCES=all`: also offers the video sources that aren't ready yet (`python -m framegen.sources`), with a picker on the Play page (`source-<kind>`), a setup guide for each, and a PC check card for a capture card in place of the home network. `SMOOVPLAY_CAPTURE=<index or video file>` is the capture card (a file stands in for one, played in real time through the capture path), and `SMOOVPLAY_SOURCE_FILE=<video file>` is the "Video file" source.
-* `FRAMEGEN_VFX_PATH=<folder>`: where NVIDIA VFG goes (a dev launcher only; an install always uses `runtime\vfx`). On the Settings page, under Interpolation model, **Set up NVIDIA VFG** shows NVIDIA's licence first, then runs `python -m framegen.vfg_setup --install --accept-nvidia-licence` into that folder (NVIDIA's pinned wheel from pypi.nvidia.com, output in `logs\vfg-setup.txt`) and picks it; **Remove** deletes it (only a folder with SmoovPlay's marker file). The NVIDIA VFG choice is greyed out until it's set up. Copy diagnostics leaves out a test report that includes NVIDIA VFG, because NVIDIA's licence forbids publishing its results.
+* `FRAMEGEN_VFX_PATH=<folder>`: where NVIDIA VFG goes (a dev launcher only; an install always uses `runtime\vfx`). On the Settings page, under Interpolation model, **Set up NVIDIA VFG** shows NVIDIA's licence first, then runs `python -m framegen.vfg_setup --install --accept-nvidia-licence` into that folder (NVIDIA's pinned wheel from pypi.nvidia.com, output in `logs\vfg-setup.txt`) and picks it; **Remove** deletes it (only a folder with Keel's marker file). The NVIDIA VFG choice is greyed out until it's set up. Copy diagnostics leaves out a test report that includes NVIDIA VFG, because NVIDIA's licence forbids publishing its results.
 * `SMOOVPLAY_DETECT_ARGS=--timing 9.3,6.8`: Auto-detect uses these times (full, half motion detail, in ms) instead of timing the AI model, so UI tests don't load the graphics card.
 * `SMOOVPLAY_FAKE_CHECKS=vc,driver,display,lan,net,longpaths`: shows those checks as problems, to see the fix-it UI on a PC that passes. The fixes still act for real.
 * `SMOOVPLAY_TRACE=<file>`: developer tracing.
@@ -201,7 +201,7 @@ set SMOOVPLAY_CHIAKI=%CD%\.venv\Scripts\python.exe
 set SMOOVPLAY_CHIAKI_ARGS=scripts\frametap_fake.py testdata\clip_1080p60.mp4 --seconds 20 --delay 1 --tap Local\sp-test
 set SMOOVPLAY_RUN_ARGS=--settings %TEMP%\sp-settings.json --no-minimize-chiaki --chiaki-tap Local\sp-test
 set SMOOVPLAY_SETTINGS=%TEMP%\sp-settings.json
-installer\dist\SmoovPlay.exe
+installer\dist\Keel.exe
 ```
 
 For **Test with a 60 fps game**, add `--native` to the fake's arguments so it sends a 60 fps game.

@@ -1,5 +1,5 @@
 """A live source that stalls must not stall the video loop: it yields Waiting, and the loop keeps the window
-answering (its keys, and Windows' "not responding" check, which used to close SmoovPlay mid-session)."""
+answering (its keys, and Windows' "not responding" check, which used to close Keel mid-session)."""
 import queue
 import threading
 import time

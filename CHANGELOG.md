@@ -5,7 +5,7 @@
 **App window** (Experimental)
 - **The Xbox app in full screen is no longer just missing from the list**
   ([#49](https://github.com/smoovplay/smoovplay/issues/49), [#43](https://github.com/smoovplay/smoovplay/issues/43)). In
-  full screen, Windows moves a Store app's window out of the list of windows SmoovPlay reads, so the Xbox app wasn't
+  full screen, Windows moves a Store app's window out of the list of windows Keel reads, so the Xbox app wasn't
   offered, and nothing said why. The launcher now says it's in full screen and how to leave it (its full screen button,
   or Shift+Win+Enter), and so does Play. In a window, it's found as before.
 
@@ -31,15 +31,15 @@
 **App window** (Experimental)
 - **No more "Python is not responding" and a black picture after a few seconds**
   ([#33](https://github.com/smoovplay/smoovplay/issues/33), [#34](https://github.com/smoovplay/smoovplay/issues/34)).
-  SmoovPlay checked for its shortcuts (Ctrl+Alt+M and the rest) in a way that made Windows treat the video window as
+  Keel checked for its shortcuts (Ctrl+Alt+M and the rest) in a way that made Windows treat the video window as
   not responding after 5 seconds. Windows then put a frozen copy of the window on screen, which window capture read
-  back as a black picture, and offered to close SmoovPlay. Thanks to
+  back as a black picture, and offered to close Keel. Thanks to
   [@KazimeirzOdnowiciel](https://github.com/KazimeirzOdnowiciel) ([#39](https://github.com/smoovplay/smoovplay/pull/39))!
 
 **Capture cards** (Experimental)
 - **A damaged frame from the card no longer stops capture** ([#38](https://github.com/smoovplay/smoovplay/issues/38),
   [#41](https://github.com/smoovplay/smoovplay/issues/41)). Cards and sticks that send compressed video (MJPEG), as
-  many USB ones do at 1080p 60, sometimes send a frame that can't be read, often right at the start. SmoovPlay
+  many USB ones do at 1080p 60, sometimes send a frame that can't be read, often right at the start. Keel
   stopped capturing at the first one, so the video window closed straight away or never showed a picture. Such frames
   are now skipped, and the log counts them. If none of the card's frames can be read for 5 seconds, capture stops
   with a message that says so. With an NVIDIA card, a damaged frame also no longer moves the decoding from the
@@ -47,7 +47,7 @@
 
 **AMD and Intel graphics** (Experimental)
 - **Less CPU use while playing** ([#40](https://github.com/smoovplay/smoovplay/issues/40)). Without an NVIDIA card,
-  part of SmoovPlay's work runs on the CPU every frame, and the threads doing it kept most of the CPU's cores busy
+  part of Keel's work runs on the CPU every frame, and the threads doing it kept most of the CPU's cores busy
   between frames while they waited for the next one. They now wait asleep.
 
 **Diagnostics**
@@ -64,12 +64,12 @@
 
 **Capture cards** (Experimental)
 - **Game frame rate: 30 fps no longer hitches on a capture card** ([#20](https://github.com/smoovplay/smoovplay/issues/20)).
-  When the PC fell behind for a moment and a frame was dropped, SmoovPlay lost count of which frames were new, and
+  When the PC fell behind for a moment and a frame was dropped, Keel lost count of which frames were new, and
   catching up a moment later showed as a hitch. Frames are now numbered as they come off the card, so a dropped one
   no longer moves the count.
 - **The card's sound is found on AVerMedia cards** ([#23](https://github.com/smoovplay/smoovplay/issues/23)). Names
   ending in "-Video" and "-Audio" now match, and AVerMedia's extra sound device called "Not To Use" is never picked.
-  Before, the two tied and SmoovPlay played the picture without sound.
+  Before, the two tied and Keel played the picture without sound.
 
 **App window** (Experimental)
 - **Capture keeps trying for 10 seconds when Windows takes it away**
@@ -77,7 +77,7 @@
   give up after two seconds. The log now says Windows' reason in words.
 
 **Setup**
-- **SmoovPlay installs into a folder whose name has letters outside English**
+- **Keel installs into a folder whose name has letters outside English**
   ([#24](https://github.com/smoovplay/smoovplay/issues/24)), such as Chinese, or an accented Windows user name.
   Setup's "Optimise for your graphics card" step failed there.
 
@@ -97,7 +97,7 @@
 **Display**
 - **The screen no longer goes black mid-game.** Windows turns the screen off after a while without mouse or
   keyboard input (15 minutes on many PCs), and a controller doesn't count, so the screen could go black until you
-  clicked. While the video plays, SmoovPlay now asks Windows to keep the screen on, as video players and games do.
+  clicked. While the video plays, Keel now asks Windows to keep the screen on, as video players and games do.
 - **Smaller stats overlays, out of the way of the game's HUD.** Both styles sit right in the corner, inside the
   margin games keep clear of their own HUD. Detailed is now a small box like Minimal's, not a strip across the top.
   New in Settings, Display (and the video window's menu, M): **Stats overlay position**, any corner, and **Stats
@@ -120,8 +120,8 @@
 
 **AMD and Intel graphics** (Experimental)
 - **chiaki-ng draws with OpenGL on AMD and Intel graphics** ([#19](https://github.com/smoovplay/smoovplay/issues/19),
-  a Radeon RX 9070 XT). chiaki-ng's default, Vulkan (which also decodes with Vulkan), crashed there. SmoovPlay
-  shows the picture itself, so chiaki-ng's own window, hidden behind it, loses nothing. It's for SmoovPlay's
+  a Radeon RX 9070 XT). chiaki-ng's default, Vulkan (which also decodes with Vulkan), crashed there. Keel
+  shows the picture itself, so chiaki-ng's own window, hidden behind it, loses nothing. It's for Keel's
   sessions only: chiaki-ng's saved setting stays as it is. On NVIDIA nothing changes.
 
 **Display**
@@ -152,10 +152,10 @@
 **Capture cards** (Experimental)
 - **Fewer pops in a capture card's sound, in heavy games too** ([#17](https://github.com/smoovplay/smoovplay/issues/17)).
   0.3.5 fixed most of the popping, but a little was left in a heavy game. Three things could still cause it:
-  - SmoovPlay gave Windows only about 20 ms of sound at a time, and a busy moment in SmoovPlay could make the next
+  - Keel gave Windows only about 20 ms of sound at a time, and a busy moment in Keel could make the next
     lot later than that. Windows now gets about 50 ms, taken off the sound's delay, so it stays in step.
   - The card's sound is read along with the picture, so when that's held up for a moment the sound comes in a
-    burst. SmoovPlay now keeps as much sound as the longest recent wait (up to 150 ms) ready to play.
+    burst. Keel now keeps as much sound as the longest recent wait (up to 150 ms) ready to play.
   - When the picture's delay changed by more than 40 ms, the sound skipped or paused to catch up. Changes of up to
     120 ms now play the sound 1% faster or slower until it's back in step instead.
   If the sound does run out, it now fades out and back in, and pauses once until there's enough again, where
@@ -168,7 +168,7 @@
 **Capture cards** (Experimental)
 - **No more popping in a capture card's sound** ([#17](https://github.com/smoovplay/smoovplay/issues/17), an Elgato
   HD60 X). The card's sound comes in 20 ms packets, and when the picture's delay was shorter than that (31 ms with
-  NVIDIA VFG at 120 fps, less the sound output's own delay), SmoovPlay's sound ran out before the next packet: a
+  NVIDIA VFG at 120 fps, less the sound output's own delay), Keel's sound ran out before the next packet: a
   short gap many times a second, heard as pops as loud as the game. It now always keeps a packet and a little more
   queued, so at worst the sound is about 20 ms later than the picture. The log says if the sound ever ran dry.
 
@@ -183,7 +183,7 @@
 - **New: Dip smoothing** (Settings → Smoothness, off by default), made to help 30 fps games that sometimes drop
   below 30, as big open-world games like GTA VI may at times on a base console. At each dip a frame stays on screen
   for 50 or 67 ms instead of 33 and the next one jumps, and the smooth motion around it makes the hitch stand out.
-  With Dip smoothing on, SmoovPlay spaces the frames it draws by when the game's frames really arrived, so a dip
+  With Dip smoothing on, Keel spaces the frames it draws by when the game's frames really arrived, so a dip
   looks like a brief slow-down instead of a freeze and a jump. It turns itself on after two dips within a second and
   off 3 s after the last, so a game holding a steady 30 is unchanged. Works with Game frame rate Auto or 30 fps.
 - **It's experimental.** It's been tried on simulated dipping games and a stand-in PS5, not yet on a real game that
@@ -241,12 +241,12 @@
 
 **Capture cards** (Experimental)
 - **Sound from cards that carry it on their video device**, as the AVerMedia Live Gamer 4K (GC573) does
-  ([#9](https://github.com/smoovplay/smoovplay/issues/9)). SmoovPlay only looked for a separate sound device named
+  ([#9](https://github.com/smoovplay/smoovplay/issues/9)). Keel only looked for a separate sound device named
   like the card; when there's none, it now tries the card itself, and plays the picture alone if that has no sound
   either.
 
 **Setup**
-- **A folder Windows won't let SmoovPlay write to is caught before installing**, such as a Program Files folder on
+- **A folder Windows won't let Keel write to is caught before installing**, such as a Program Files folder on
   another drive ([#9](https://github.com/smoovplay/smoovplay/issues/9)). Setup used to stop with an "access denied"
   error; it now tries writing there first (leaving nothing behind) and asks for another folder.
 
@@ -256,12 +256,12 @@
 - **Game frame rate: 30 fps** (Settings, Smoothness; and the in-video menu). For a game locked at 30 fps: every
   other frame is taken as new, so motion stays even whatever the scene. With PS5 Remote Play, frames are counted by
   the stream's own numbers, so frames lost on the way don't throw the rhythm off. On Auto, a still or dark scene could make
-  SmoovPlay read a locked-30 game (Gotham Knights on PS5) as 40 fps or more, which made motion uneven and kept
+  Keel read a locked-30 game (Gotham Knights on PS5) as 40 fps or more, which made motion uneven and kept
   turning Even out 40-60 fps on and off. Simulate a 30 fps game was the way round it, but that's a test mode: it also
   scores every frame, which costs graphics card time at 90 fps. The new setting is saved, as everything else you
   change in the in-video menu is.
 - **A frame log for each PS5 Remote Play session**, next to its log (frames-*.csv, the last 10 kept, about 1.5 MB per
-  5 minutes, no pictures): each frame's size and timing and what SmoovPlay made of it, so Auto can be tuned on real
+  5 minutes, no pictures): each frame's size and timing and what Keel made of it, so Auto can be tuned on real
   games.
 
 **Fixes**
@@ -278,7 +278,7 @@
 - **Results no longer say "about 60 fps, between 30 and 60"** when a game ran unevenly: they say how long it ran
   between 30 and 60 fps and that its frames were evened out.
 - **chiaki-ng stays minimised after Alt+Tab.** It was only minimised in the stream's first seconds, so after
-  switching to its window and back, its unsmoothed picture stayed up beside SmoovPlay's. Thanks to
+  switching to its window and back, its unsmoothed picture stayed up beside Keel's. Thanks to
   [@Vadko](https://github.com/Vadko) ([#5](https://github.com/smoovplay/smoovplay/pull/5))!
 - **The PC check recognises 6 GHz Wi-Fi** (Windows 11), which it used to call 2.4 or 5 GHz. Thanks to
   [@Vadko](https://github.com/Vadko) ([#4](https://github.com/smoovplay/smoovplay/pull/4))!
@@ -286,7 +286,7 @@
 **Capture cards** (Experimental)
 - **Finding cards is sturdier** ([#2](https://github.com/smoovplay/smoovplay/issues/2), an Elgato HD60 X that
   wasn't listed):
-  - SmoovPlay now reads device names from Windows' list without loading each camera's driver, as OBS does. Before,
+  - Keel now reads device names from Windows' list without loading each camera's driver, as OBS does. Before,
     it opened every camera and virtual camera to see what it carried, so one faulty driver could stop the whole
     list (or Play) before the card was found. Only the card you pick is opened.
   - Cards that report video and sound together were dropped from the list without a word; they're listed now.
@@ -297,19 +297,19 @@
   with one app at a time: close OBS or Elgato's apps first), blocked by Windows' camera privacy setting, or
   unplugged.
 - **The log notes a card on a USB 2 port** (1280×720 at 30 fps at most) and a card offering 10-bit HDR, which
-  SmoovPlay can't read yet: it uses 8-bit, so turn HDR off on the console if the picture looks washed out.
+  Keel can't read yet: it uses 8-bit, so turn HDR off on the console if the picture looks washed out.
 
 **App window** (Experimental)
 - **The Xbox app is found again** ([#1](https://github.com/smoovplay/smoovplay/issues/1),
   [#3](https://github.com/smoovplay/smoovplay/issues/3)). Its current version runs as XboxPcAppCE.exe, which
-  SmoovPlay didn't know, and Microsoft Store apps draw inside a frame window that SmoovPlay skipped. Both are listed
+  Keel didn't know, and Microsoft Store apps draw inside a frame window that Keel skipped. Both are listed
   now, under the app's own name.
 - **When a streaming app is running but can't be picked** (in the tray, on another desktop, too small), the Play
   page says so and what to do.
 - **The smooth picture fits the app's window.** It was drawn at 16:9 inside it, so a window of another shape (a
   browser's, say) looked squeezed, with bars over part of the app. It now lines up with the app exactly, even when
   the window hangs off the screen.
-- **SmoovPlay's keys work while the app has the keyboard**: Ctrl+Alt with the usual key, from anywhere. Ctrl+Alt+M
+- **Keel's keys work while the app has the keyboard**: Ctrl+Alt with the usual key, from anywhere. Ctrl+Alt+M
   menu (then the arrows, Enter and Esc work in it until it closes), Ctrl+Alt+F fullscreen, Ctrl+Alt+Esc quit,
   Ctrl+Alt+S stats, Ctrl+Alt+I smooth on/off. Before, M, F and Esc went to the app, and only Stop in the launcher
   ended it. The video lists them when it starts and when the mouse moves over it, and the Play page has them in a
@@ -324,9 +324,9 @@
     windows (never their titles)
   - your Windows user name is left out of every path, whatever its capitals (some were missed before), and device
     names like "Alex's iPhone" lose the name
-  - Windows 11 is called Windows 11 (Windows itself still says "Windows 10" in the place SmoovPlay read)
+  - Windows 11 is called Windows 11 (Windows itself still says "Windows 10" in the place Keel read)
 - **Frame tap is labelled "for developers"**, and points app users to App window: it only works with an app built
-  to send frames to SmoovPlay.
+  to send frames to Keel.
 
 ## 0.3.0
 
@@ -381,19 +381,19 @@
 The first public version. Windows 10 or 11, with an NVIDIA RTX graphics card recommended.
 
 **Play**
-- Plays your PS5 on the PC over Remote Play, through chiaki-ng (the open-source Remote Play app, with SmoovPlay's
+- Plays your PS5 on the PC over Remote Play, through chiaki-ng (the open-source Remote Play app, with Keel's
   frame tap built in). Nothing is installed on the console.
 - A 30 fps game becomes 60, 90 or 120 fps: RIFE 4.22 lite draws the in-between frames (TensorRT or PyTorch on the
   graphics card), and repeats and scene cuts are found so they aren't blended.
 - AMD FSR 1 scales the 1080p stream to your monitor (RTX VSR too, when running from source).
 - **Sound in sync:** chiaki-ng holds the game's sound back to meet the picture.
-- **Delay test:** press L while playing; SmoovPlay presses a button through chiaki-ng and times how long the PS5
+- **Delay test:** press L while playing; Keel presses a button through chiaki-ng and times how long the PS5
   takes to show it.
 - **Test mode:** try it with a 60 fps game, played as a 30 fps one, with every AI frame scored against the real one.
 - When no picture arrives, the video window says why, for example that chiaki-ng isn't streaming yet.
 - **Instant replay:** keep the last 30 seconds to 5 minutes and press R (or Ctrl+Alt+R anywhere) to save it as an
   MP4 at the frame rate you see, with the game's own sound from PS5 Remote Play or a capture card. B saves a before
-  & after video: the game's own frames next to SmoovPlay's, split screen or side by side. Recorded on the graphics
+  & after video: the game's own frames next to Keel's, split screen or side by side. Recorded on the graphics
   card's video encoder; off until you pick a length.
 - **Looks:** stack effects like the nodes of a color grading app (color, color wheels, split tone, LUTs, bloom,
   halation, blur, clarity, chromatic aberration, sharpening, film grain, vignette, scanlines, letterbox, color-blind
@@ -401,7 +401,7 @@ The first public version. Windows 10 or 11, with an NVIDIA RTX graphics card rec
   and J goes to the next one. Share a look as a short code that anyone can paste. Clips stay clean unless you turn
   on Looks in clips.
 - Optional NVIDIA Video Frame Generation (VFG) as the interpolation model on RTX 40 and 50 series cards: set up from
-  the launcher, downloaded from NVIDIA under its licence, not part of SmoovPlay.
+  the launcher, downloaded from NVIDIA under its licence, not part of Keel.
 
 **Launcher**
 - One installer: checks the PC, downloads the AI runtime from official sources, and walks you through pairing the

@@ -3,7 +3,7 @@
 // DirectML, and HDR). Each is marked with ExperimentalBadge() and
 // has a Send feedback button: it copies diagnostics (the same text as Copy diagnostics, which leaves out the Windows
 // user name and NVIDIA VFG's results) and opens a new GitHub issue from .github/ISSUE_TEMPLATE/experimental-feedback.yml
-// in the browser, titled for the feature. SmoovPlay itself sends nothing: the user pastes and posts it.
+// in the browser, titled for the feature. Keel itself sends nothing: the user pastes and posts it.
 
 using System;
 using System.Threading.Tasks;
@@ -12,7 +12,7 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 
-namespace SmoovPlay
+namespace Keel
 {
     partial class Ui
     {

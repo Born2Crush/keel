@@ -22,7 +22,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
-namespace SmoovPlay
+namespace Keel
 {
     partial class Ui
     {
@@ -88,7 +88,7 @@ namespace SmoovPlay
             T("LookPreviewTitle").Text = s.Game + "  ·  " + s.Scene;
             int c = s.Credit.IndexOf('©');
             T("LookPreviewCredit").Text = c >= 0 ? s.Credit.Substring(c) : s.Credit;
-            T("LookPreviewCredit").ToolTip = s.Credit + ". A screenshot from the game, to show what the look does; not part of SmoovPlay's licence.";
+            T("LookPreviewCredit").ToolTip = s.Credit + ". A screenshot from the game, to show what the look does; not part of Keel's licence.";
             T("LookPreviewCount").Text = (lookSamples.IndexOf(s) + 1) + " / " + lookSamples.Count;
             var e = Picked();
             T("LookPreviewBadge").Text = pvHolding || pvLast == null || pvLastFor != s.Id ? "ORIGINAL" : (e == null ? "LOOK" : e.Name.ToUpperInvariant());
@@ -192,7 +192,7 @@ namespace SmoovPlay
             pvStarts++;
             try
             {
-                pvDir = Path.Combine(Path.GetTempPath(), "SmoovPlay-preview");
+                pvDir = Path.Combine(Path.GetTempPath(), "Keel-preview");
                 Directory.CreateDirectory(pvDir);
                 var psi = Proc.Python(paths.Python, "-m framegen.looks_preview", paths.App);
                 psi.RedirectStandardInput = true;

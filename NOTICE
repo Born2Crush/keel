@@ -1,7 +1,7 @@
-SmoovPlay notices
+Keel notices
 =================
 
-SmoovPlay's own code is MIT licensed (see LICENSE).
+Keel's own code is MIT licensed (see LICENSE).
 
 The chiaki_tap/ folder holds a patch for chiaki-ng, which is licensed under the
 GNU AGPL 3.0; the patched chiaki-ng is a separate program under that licence.

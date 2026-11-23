@@ -63,7 +63,7 @@ CAPTURE_SIZES = {"1080p": (1920, 1080), "1440p": (2560, 1440), "2160p": (3840, 2
 IMPACT_PC = "an RTX 4070 Ti SUPER"  # where the numbers in `impact` and the hints were measured
 # scripts/looks_timing.py: GPU time of the built-in looks on a 1440p window (0.02 to 0.34 ms) and at 1080p for clips
 # (0.01 to 0.19 ms), measured while chiaki-ng streamed.
-LOOK_SPEED = "About 0.02 to 0.35 ms a frame of graphics card time for SmoovPlay's looks (1440p)."
+LOOK_SPEED = "About 0.02 to 0.35 ms a frame of graphics card time for Keel's looks (1440p)."
 LOOK_CLIPS_SPEED = "Up to about 0.2 ms more a frame of graphics card time, to draw it again at 1080p."
 
 SPECS: tuple[Spec, ...] = (
@@ -82,13 +82,13 @@ SPECS: tuple[Spec, ...] = (
                 120: "Three for each real one. Needs a 120\u00a0Hz display and a fast card. Adds about 40\u00a0ms of "
                      "delay."},
          help="How many frames you see each second. Higher is smoother, but needs a faster graphics card and a "
-              "display that runs at least that fast (G-Sync or FreeSync helps). Auto-detect, on SmoovPlay's "
+              "display that runs at least that fast (G-Sync or FreeSync helps). Auto-detect, on Keel's "
               "Settings page, picks the most this PC keeps up with."),
     # framegen/cadence.py FrameTimeline. Tried on simulated 40-55 fps games (tests/test_timeline.py), not a real one yet.
     Spec("even_out", "Even out 40-60 fps", (True, False), True, ON_OFF, group="Smoothness",
          applies=("interp", (True,)),
          help="For games that run between about 40 and 60 fps, like unlocked performance modes. Their frames "
-              "arrive unevenly, some staying on screen twice as long as others, so motion stutters. SmoovPlay "
+              "arrive unevenly, some staying on screen twice as long as others, so motion stutters. Keel "
               "times each one and draws evenly spaced frames from them at 60, 90 or 120 fps. 30 fps and 60 fps "
               "games aren't affected. Experimental: not tried with a real game yet.",
          impact={"picture": "Even motion in 40-60 fps games, instead of stutter.",
@@ -97,7 +97,7 @@ SPECS: tuple[Spec, ...] = (
     # still or dark scene can fool (Gotham Knights, locked at 30, read as 38-47 fps on PS5 Remote Play).
     Spec("game_fps", "Game frame rate", ("auto", "30"), "auto", {"auto": "Auto", "30": "30 fps"}, group="Smoothness",
          applies=("interp", (True,)),
-         hints={"auto": "SmoovPlay works out the game's frame rate as it plays. The default.",
+         hints={"auto": "Keel works out the game's frame rate as it plays. The default.",
                 "30": "For a game locked at 30\u00a0fps. Every other frame is taken as new, so nothing can misread it."},
          help="Auto works out the game's frame rate from the stream as it plays. A still or dark scene can fool it "
               "into reading a 30 fps game as 40 or more, which makes motion uneven. If you know the game is locked "
@@ -111,12 +111,12 @@ SPECS: tuple[Spec, ...] = (
     Spec("even_dips", "Dip smoothing", (False, True), False, ON_OFF, group="Smoothness",
          applies=("interp", (True,)), experimental=True,
          help="For 30 fps games that sometimes drop below 30, as some big open-world games do on a base console. "
-              "At each dip a frame stays up longer and the next one jumps. With this on, SmoovPlay spaces the "
+              "At each dip a frame stays up longer and the next one jumps. With this on, Keel spaces the "
               "frames it draws by when the game's frames arrived, so a dip looks like a brief slow-down instead. "
               "It's only on while the game dips, and adds delay then.",
          impact={"picture": "A dip below 30 fps looks like a brief slow-down, not a freeze and a jump.",
                  "speed": "While it dips: 17 to 50 ms more delay, and more graphics card work."}),
-    # RIFE: only the model SmoovPlay is tuned and tested with (setup prepares it). interpolator.MODELS has more, for
+    # RIFE: only the model Keel is tuned and tested with (setup prepares it). interpolator.MODELS has more, for
     # testing with run.py --model; one becomes a choice here once it's tested in real time and setup prepares it.
     # NVIDIA VFG (framegen/vfg.py): offered once the user has set it up on the launcher's Settings page. Its licence
     # forbids publishing benchmark results, so nothing here compares its speed or quality with RIFE's.
@@ -126,9 +126,9 @@ SPECS: tuple[Spec, ...] = (
          hints={"4.22.lite": "Fast and tested. The default.",
                 "vfg": "NVIDIA's own frame generation, for RTX 40 and 50 series cards. A separate download "
                        "from NVIDIA."},
-         help="The AI model that draws the in-between frames. RIFE 4.22 lite is the one SmoovPlay is tuned and "
+         help="The AI model that draws the in-between frames. RIFE 4.22 lite is the one Keel is tuned and "
               "tested with, fast enough for 90 and 120 fps. NVIDIA VFG (Video Frame Generation) is NVIDIA's own, "
-              "for RTX 40 and 50 series cards: SmoovPlay's Settings page downloads it from NVIDIA once you accept "
+              "for RTX 40 and 50 series cards: Keel's Settings page downloads it from NVIDIA once you accept "
               "NVIDIA's licence."),
     Spec("vfg_quality", "VFG quality", ("low", "medium", "high"), "medium",
          {"low": "Low", "medium": "Medium", "high": "High"}, live=False, group="Smoothness", applies=("model", ("vfg",)),
@@ -214,7 +214,7 @@ SPECS: tuple[Spec, ...] = (
          impact={"picture": "Sharper on a 4K screen. No extra detail on a 1080p screen.",
                  "speed": "About 2.1 ms a frame on an RTX 4080. An RTX 3060 can take about 11 ms, which can drop "
                           "frames at 90 and 120 fps."}),
-    # framegen/hdr.py. Off by default, and then nothing changes: an HDR stream comes out washed out, and SmoovPlay says
+    # framegen/hdr.py. Off by default, and then nothing changes: an HDR stream comes out washed out, and Keel says
     # so. "hdr10" needs the DXGI presentation (NVIDIA) and Windows' HDR; without them run.py uses "sdr" for the session.
     Spec("hdr", "HDR", ("off", "sdr", "hdr10"), "off",
          {"off": "Off", "sdr": "On, shown in SDR", "hdr10": "On, HDR output"}, live=False,
@@ -251,14 +251,14 @@ SPECS: tuple[Spec, ...] = (
     # framegen/looks.py (the looks; "Which look" lists the built-in ones, then the user's, from looks.CHOICES, which
     # the looks library keeps up to date) and framegen/looks_gl.py (drawing them, after the upscaler).
     Spec("look_on", "Look", (False, True), False, ON_OFF, group="Looks",
-         help="Effects on top of the picture, like a color grade, film grain or bloom: one of SmoovPlay's looks, or "
-              "your own, made on SmoovPlay's Looks page. K turns the look on and off, J goes to the next one. Saved "
+         help="Effects on top of the picture, like a color grade, film grain or bloom: one of Keel's looks, or "
+              "your own, made on Keel's Looks page. K turns the look on and off, J goes to the next one. Saved "
               "clips stay as the game looked unless Looks in clips is on.",
          impact={"picture": "Changes the colors and style of the picture, the way you choose.",
                  "speed": LOOK_SPEED}),
     Spec("look", "Which look", looks.CHOICES, looks.DEFAULT_LOOK, looks.NAMES, group="Looks",
          applies=("look_on", (True,)),
-         help="The look to use: SmoovPlay's own, then the ones you made or pasted on the Looks page. J goes to the "
+         help="The look to use: Keel's own, then the ones you made or pasted on the Looks page. J goes to the "
               "next one, Shift+J back."),
     Spec("fullscreen", "Fullscreen", (False, True), False, ON_OFF, group="Display",
          help="Fills the whole screen. It also skips the Windows desktop compositor, which removes about 12 ms "
@@ -325,46 +325,46 @@ SPECS: tuple[Spec, ...] = (
                 120: "Keeps about 610 MB in memory (1080p at 90 fps).",
                 300: "Keeps about 1.5 GB in memory (1080p at 90 fps)."},
          help="Keeps the last stretch of what you played, so you can save it after something good happens: press R "
-              "in the video window, or Ctrl+Alt+R from anywhere. Clips go to your Videos folder, in SmoovPlay, as "
+              "in the video window, or Ctrl+Alt+R from anywhere. Clips go to your Videos folder, in Keel, as "
               "MP4 at the frame rate you see, with the game's own sound (PS5 Remote Play and capture cards; window "
               "capture has none). B saves a before & after video instead.",
          impact={"picture": "None.",
                  "speed": "About 0.3 ms of graphics card time a frame; the encoding is on its video encoder, not "
                           "the AI's part."}),
     Spec("replay_save", "Saved clip", ("smoovplay", "compare", "both"), "smoovplay",
-         {"smoovplay": "SmoovPlay video", "compare": "Before & after", "both": "Both"},
+         {"smoovplay": "Keel video", "compare": "Before & after", "both": "Both"},
          group="Instant replay", applies=("replay", (30, 60, 120, 300)),
          hints={"smoovplay": "What you saw, with the game's sound. Saved in a second or two.",
-                "compare": "The game's own frames next to SmoovPlay's, in one video. Made in the background, in "
+                "compare": "The game's own frames next to Keel's, in one video. Made in the background, in "
                            "about as long as the clip.",
                 "both": "Both videos."},
-         help="What R saves. SmoovPlay video is what you saw, at 60, 90 or 120 fps. Before & after puts the game's "
-              "own frames next to SmoovPlay's in one video, to show the difference; it's made in the background "
+         help="What R saves. Keel video is what you saw, at 60, 90 or 120 fps. Before & after puts the game's "
+              "own frames next to Keel's in one video, to show the difference; it's made in the background "
               "and takes about as long as the clip. B always saves a before & after video."),
     Spec("replay_layout", "Before & after layout", ("split", "side"), "split",
          {"split": "Split screen", "side": "Side by side"}, group="Instant replay",
          applies=("replay", (30, 60, 120, 300)),
-         hints={"split": "One picture: the left half as the game sent it, the right half from SmoovPlay.",
+         hints={"split": "One picture: the left half as the game sent it, the right half from Keel.",
                 "side": "Both whole pictures next to each other, in a video twice as wide."},
          help="How a before & after video is laid out. Split screen is one picture: the left half as the game sent "
-              "it, the right half from SmoovPlay, with a line between. Side by side shows both whole pictures, in "
+              "it, the right half from Keel, with a line between. Side by side shows both whole pictures, in "
               "a video twice as wide."),
     Spec("look_clips", "Looks in clips", (False, True), False, ON_OFF, group="Instant replay",
          applies=("replay", (30, 60, 120, 300)),
          help="Puts the look you're using into saved clips too. Off keeps clips as the game looked, whatever look "
-              "you play with. In a before & after video, only the SmoovPlay side gets the look.",
+              "you play with. In a before & after video, only the Keel side gets the look.",
          impact={"picture": "Clips look like what you see, look included.", "speed": LOOK_CLIPS_SPEED}),
     Spec("minimize_chiaki", "Minimise chiaki-ng", (True, False), True, ON_OFF, group="PS5 Remote Play",
-         help="Minimises chiaki-ng's own window while SmoovPlay's video is open, so your graphics card doesn't "
+         help="Minimises chiaki-ng's own window while Keel's video is open, so your graphics card doesn't "
               "spend time drawing a copy nobody sees. chiaki-ng keeps streaming, playing sound and reading your "
               "controller, and its window comes back when you stop.",
          impact={"speed": "Saves the time your graphics card spends drawing chiaki-ng's window."},
          sources=("chiaki",), elsewhere={"": "Only used with PS5 Remote Play."}),
     Spec("audio_sync", "Sound in sync", (True, False), True, ON_OFF, group="PS5 Remote Play",
-         help="The sound (chiaki-ng's, or a capture card's, which SmoovPlay plays) would come as it arrives, while "
-              "the picture spends a little longer in SmoovPlay. On holds the sound back by that time (about 30 ms "
+         help="The sound (chiaki-ng's, or a capture card's, which Keel plays) would come as it arrives, while "
+              "the picture spends a little longer in Keel. On holds the sound back by that time (about 30 ms "
               "at 90 fps, measured as you play), so they line up. Press L in the video window for a delay test: it "
-              "times the whole trip, from a button press to SmoovPlay's screen (PS5 Remote Play).",
+              "times the whole trip, from a button press to Keel's screen (PS5 Remote Play).",
          impact={"speed": "None: only the sound waits, by as long as the picture does."}),
 )
 BY_KEY = {s.key: s for s in SPECS}

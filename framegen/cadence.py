@@ -190,7 +190,7 @@ class RhythmLock:
     "small" and "big"); else the checks' new-or-repeat call. Keyframes and ticks with no call say nothing.
 
     seq: the stream's own frame number (Remote Play), or a capture card's count as frames come off the card (before
-    SmoovPlay's queue, which drops one when the PC falls behind). Frames are counted by it rather than as they arrive,
+    Keel's queue, which drops one when the PC falls behind). Frames are counted by it rather than as they arrive,
     so a frame lost on the way doesn't shift the count (in a real Gotham Knights session, 23 lost frames moved the
     rhythm 11 times when counted as they arrived)."""
 

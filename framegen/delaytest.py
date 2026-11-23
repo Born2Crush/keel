@@ -1,7 +1,7 @@
 """The delay test (L in the video window, PS5 Remote Play): chiaki-ng presses a button on the PS5 a few times, and
 each time the pipeline times how long the answer takes to reach this PC, from the moment chiaki-ng sent the press
 to the first frame that shows it. That's the controller's trip to the PS5, the game's own response, encoding and
-the stream back. Add SmoovPlay's time (measured as it plays) and it's button to screen, all but the controller's
+the stream back. Add Keel's time (measured as it plays) and it's button to screen, all but the controller's
 own link (a few ms) and the monitor.
 
 It presses Options: in most games that opens the pause menu, a big change on screen that the game draws at its
@@ -124,15 +124,15 @@ class DelayTest:
             f"  PS5 answered in {np.median(self.ms):.0f} ms" if self.ms else "")
 
     def result(self, smoovplay_ms: float | None) -> str:
-        """The answer, in a line: the PS5 and Remote Play's part, SmoovPlay's, and the two together."""
+        """The answer, in a line: the PS5 and Remote Play's part, Keel's, and the two together."""
         if self.error and not self.ms:
             return (f"Delay test: {self.error}. Try where Options opens a menu, standing still"
                     if "nothing changed" in self.error else
-                    f"Delay test: {self.error}. Close chiaki-ng and open it from SmoovPlay")
+                    f"Delay test: {self.error}. Close chiaki-ng and open it from Keel")
         remote = float(np.median(self.ms))
         text = (f"Delay test: PS5 and Remote Play {remote:.0f} ms (button sent to the answer arriving, median of "
                 f"{len(self.ms)})")
         if smoovplay_ms is not None:
-            text += (f", SmoovPlay {smoovplay_ms:.0f} ms: {remote + smoovplay_ms:.0f} ms from button to "
-                     "SmoovPlay's screen, plus your controller's link and your monitor")
+            text += (f", Keel {smoovplay_ms:.0f} ms: {remote + smoovplay_ms:.0f} ms from button to "
+                     "Keel's screen, plus your controller's link and your monitor")
         return text

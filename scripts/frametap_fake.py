@@ -12,7 +12,7 @@ The clip's sound (or, without any, a quiet tone with a click each second) goes i
 as it's due, as chiaki-ng's does, for instant replay; --no-sound leaves it out (an older chiaki-ng).
 
 --hdr sends what a PS5 in HDR does (chiaki-ng's H.265 HDR codec): 10-bit HEVC in HDR10 (PQ, BT.2020), made from the
-SDR clip by framegen.hdr.expand_sdr (SDR white at 203 nits, highlights up to --peak nits), for SmoovPlay's HDR setting.
+SDR clip by framegen.hdr.expand_sdr (SDR white at 203 nits, highlights up to --peak nits), for Keel's HDR setting.
 """
 from __future__ import annotations
 

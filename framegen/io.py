@@ -22,8 +22,8 @@ TICK = 1.0 / 60.0
 
 
 def window_title() -> str:
-    """The play window's title. Keel sets FRAMEGEN_TITLE; anything else keeps the existing name."""
-    return os.environ.get("FRAMEGEN_TITLE") or "SmoovPlay"
+    """The play window's title. FRAMEGEN_TITLE overrides it; otherwise it is Keel."""
+    return os.environ.get("FRAMEGEN_TITLE") or "Keel"
 
 
 @dataclass
@@ -48,7 +48,7 @@ class Tick:
 class Waiting(NamedTuple):
     """What a live source yields instead of blocking when no frame has come for a moment (the stream stalled,
     chiaki-ng is reconnecting, the card lost its signal). The pipeline then keeps the window answering: its keys, the
-    launcher's commands and Windows' "not responding" check, which closed SmoovPlay mid-session when a stream
+    launcher's commands and Windows' "not responding" check, which closed Keel mid-session when a stream
     stalled with the loop stuck waiting for a frame."""
     since: float  # seconds since the last frame
     what: str  # where frames come from, for the message on screen ("the PS5")
@@ -794,7 +794,7 @@ class GLWindowSink:
 
     # ---- presentation ----------------------------------------------------------
     def _set_icon(self, glfw) -> None:
-        """SmoovPlay's logo in the title bar and on the taskbar instead of Python's: the plain SP at 16-32 px, the
+        """Keel's logo in the title bar and on the taskbar instead of Python's: the plain SP at 16-32 px, the
         full logo at 48 and 64 (framegen/assets, from docs/brand). A missing icon never stops a session."""
         try:
             from pathlib import Path
@@ -992,14 +992,14 @@ class GLWindowSink:
         try:
             self.hotkeys = Hotkeys(picked)
         except Exception as e:  # noqa: BLE001 - no shortcuts: the launcher's Stop and Settings page still work
-            print(f"[display] no shortcuts ({str(e)[:120]}): Stop and Settings on SmoovPlay's Play page")
+            print(f"[display] no shortcuts ({str(e)[:120]}): Stop and Settings on Keel's Play page")
         keys = describe(self.hotkeys.got) if self.hotkeys is not None else ""
         if self.hotkeys is not None:
             print(self.hotkeys.report(), flush=True)
             for name in self.hotkeys.taken:
                 print(f"[display] {name} is taken by another program")
-        self.KEYS_HINT = ("SmoovPlay's keys here (other keys go to the app):\n" + keys if keys
-                          else "Keys go to the app: use Stop and Settings on SmoovPlay's Play page")
+        self.KEYS_HINT = ("Keel's keys here (other keys go to the app):\n" + keys if keys
+                          else "Keys go to the app: use Stop and Settings on Keel's Play page")
         self.toast(self.KEYS_HINT, 12.0)
 
     # the video window's key each menu key stands for
@@ -1653,7 +1653,7 @@ class WindowSink:
     Keys: i = toggle interpolation, s = stats overlay, f = fullscreen, r/b = save the instant replay (plain or
     before & after), q/Esc = quit."""
 
-    NAME = "SmoovPlay"
+    NAME = "Keel"
 
     def __init__(self, w: int, h: int) -> None:
         cv2.namedWindow(self.NAME, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)

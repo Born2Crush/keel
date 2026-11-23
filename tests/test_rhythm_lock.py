@@ -76,7 +76,7 @@ def test_lost_frames_dont_move_the_rhythm_when_counted_by_the_streams_numbers():
 
 
 def test_a_capture_cards_frames_dropped_from_the_queue_dont_move_the_rhythm():
-    """A capture card's frames are numbered as they come off it (framegen/capture.py), so the ones SmoovPlay's queue
+    """A capture card's frames are numbered as they come off it (framegen/capture.py), so the ones Keel's queue
     drops when the PC falls behind leave gaps in the count. Counted as they arrived, each drop shifted the beat by a
     tick, and moving to the new beat a moment later showed as a hitch (issue 20, against Simulate a 30 fps game)."""
     rnd = random.Random(7)

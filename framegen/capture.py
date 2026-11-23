@@ -19,7 +19,7 @@ CapturePlay and Veyra, GPL, ideas only), and tested with a raw video file standi
 (tests/test_capture.py). The launcher marks capture cards Experimental.
 
     python -m framegen.capture --list [--json]   # the video and audio capture devices Windows has
-    python -m framegen.capture --formats NAME    # what a device offers, and the format SmoovPlay would pick
+    python -m framegen.capture --formats NAME    # what a device offers, and the format Keel would pick
 """
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ def dshow_names() -> list[Device]:
     asked.
 
     FFmpeg's own listing (-list_devices) also opens every device to see what it carries, so one faulty camera or
-    virtual-camera driver can crash or hang it, and SmoovPlay with it, before any card is listed. OBS lists names
+    virtual-camera driver can crash or hang it, and Keel with it, before any card is listed. OBS lists names
     this way first for the same reason. Opening a card by name (CardSource.open) loads only that card's driver."""
     import ctypes
     import uuid
@@ -318,12 +318,12 @@ def open_failure(device: str, log: str, error: str) -> str:
                 "Discord, a browser tab using the camera, or anything else that shows the card, then press Play "
                 "again: many cards, Elgato's USB ones among them, work with one app at a time")
     if "E_ACCESSDENIED" in text or "0X80070005" in text.upper() or "access is denied" in text.lower():
-        return (f"Windows wouldn't let SmoovPlay open {device}. Turn on Settings > Privacy & security > Camera > "
+        return (f"Windows wouldn't let Keel open {device}. Turn on Settings > Privacy & security > Camera > "
                 "Let desktop apps access your camera (and the same for Microphone), then press Play again")
     if "Could not find video device" in text:
         return f"Windows no longer lists {device}: reconnect the card, then press Look again on the Play page"
     if "Could not set video options" in text:
-        return f"{device} refused the video format SmoovPlay asked for"
+        return f"{device} refused the video format Keel asked for"
     return ""
 
 
@@ -359,7 +359,7 @@ def pick_mode(modes: list[Mode], w: int = 1920, h: int = 1080, fps: float = 60.0
         return None, "the card listed no video formats"
     usable = [m for m in modes if m.fmt in RAW_RANK or m.fmt in COMPRESSED_RANK]
     if not usable:
-        return None, "the card offers no format SmoovPlay can read (" + ", ".join(sorted({m.fmt for m in modes})) + ")"
+        return None, "the card offers no format Keel can read (" + ", ".join(sorted({m.fmt for m in modes})) + ")"
     sizes = {(m.w, m.h) for m in usable}
     if (w, h) in sizes:
         size = (w, h)
@@ -381,7 +381,7 @@ def pick_mode(modes: list[Mode], w: int = 1920, h: int = 1080, fps: float = 60.0
         notes.append("the card offers 1280x720 at 30 fps at most, as cards do on a USB 2 port: connect it to a USB 3 "
                      "port (blue, ideally on the back of the PC)")
     if any(m.fmt in _UNREADABLE.values() for m in modes):
-        notes.append("the card also offers 10-bit HDR, which SmoovPlay can't read yet, so it uses 8-bit "
+        notes.append("the card also offers 10-bit HDR, which Keel can't read yet, so it uses 8-bit "
                      f"{best.fmt.upper()}: if the picture looks washed out, turn HDR off on the console")
     return best, "; ".join(notes)
 
@@ -838,7 +838,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--raw", action="store_true",
                     help="with --list: FFmpeg's own listing, as it prints it (it opens every device, so a faulty "
                          "driver shows up here)")
-    ap.add_argument("--formats", metavar="NAME", help="what a video device offers, and what SmoovPlay would pick")
+    ap.add_argument("--formats", metavar="NAME", help="what a video device offers, and what Keel would pick")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.formats:

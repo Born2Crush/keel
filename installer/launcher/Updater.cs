@@ -9,7 +9,7 @@ using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 
-namespace SmoovPlay
+namespace Keel
 {
     /// <summary>A release on GitHub, as far as updating goes: its tag and the ids of its setup and signature files.</summary>
     class Release
@@ -28,7 +28,7 @@ namespace SmoovPlay
     /// </summary>
     static class GitHub
     {
-        public const string SetupName = "SmoovPlay-Setup.exe";
+        public const string SetupName = "Keel-Setup.exe";
 
         public static string Repo
         {
@@ -47,7 +47,7 @@ namespace SmoovPlay
         static HttpClient Client(TimeSpan timeout)
         {
             var http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = timeout };
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("SmoovPlay/" + BuildInfo.Version);
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Keel/" + BuildInfo.Version);
             return http;
         }
 
@@ -126,7 +126,7 @@ namespace SmoovPlay
                     }
                     resp.EnsureSuccessStatusCode();
                     long total = resp.Content.Headers.ContentLength ?? -1, got = 0;
-                    if (total > maxBytes) throw new Exception("the file is far bigger than a SmoovPlay setup");
+                    if (total > maxBytes) throw new Exception("the file is far bigger than a Keel setup");
                     using (var src = resp.Content.ReadAsStreamAsync().Result)
                     using (var dst = File.Create(dest + ".part"))
                     {
@@ -136,7 +136,7 @@ namespace SmoovPlay
                         {
                             dst.Write(buf, 0, n);
                             got += n;
-                            if (got > maxBytes) throw new Exception("the file is far bigger than a SmoovPlay setup");
+                            if (got > maxBytes) throw new Exception("the file is far bigger than a Keel setup");
                             if (total > 0) progress((double)got / total);
                         }
                     }
@@ -158,7 +158,7 @@ namespace SmoovPlay
     /// </summary>
     static class Updater
     {
-        public static string Folder { get { return Path.Combine(Path.GetTempPath(), "SmoovPlay-update"); } }
+        public static string Folder { get { return Path.Combine(Path.GetTempPath(), "Keel-update"); } }
 
         /// <summary>Why this copy can't update itself (then the release page is offered instead); null if it can.</summary>
         public static string Unavailable(Paths p)
@@ -176,7 +176,7 @@ namespace SmoovPlay
             if (!rel.CanInstall) throw new Exception(rel.Tag + " has no setup this version can install by itself");
             if (rel.SetupSize > 1L << 30) throw new Exception("the release's setup is far bigger than expected");
             Directory.CreateDirectory(Folder);
-            string setup = Path.Combine(Folder, "SmoovPlay-Setup-" + rel.Tag.TrimStart('v') + ".exe");  // (a tag Parse() took)
+            string setup = Path.Combine(Folder, "Keel-Setup-" + rel.Tag.TrimStart('v') + ".exe");  // (a tag Parse() took)
             string sig = setup + ".sig";
             try
             {
@@ -188,7 +188,7 @@ namespace SmoovPlay
                     throw new Exception("the download came through damaged");
                 string signed = UpdateSignature.Check(BuildInfo.UpdateKey, File.ReadAllText(sig), sha);
                 if (signed == null)
-                    throw new Exception("the update isn't signed with SmoovPlay's key, so it wasn't installed");
+                    throw new Exception("the update isn't signed with Keel's key, so it wasn't installed");
                 if (UpdateCheck.Parse(signed) == null || UpdateCheck.Compare(signed, rel.Tag) != 0)
                     throw new Exception("the update was signed as another version (" + signed + "), so it wasn't installed");
                 if (UpdateCheck.Compare(signed, BuildInfo.Version) <= 0)

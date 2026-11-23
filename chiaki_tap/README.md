@@ -33,7 +33,7 @@ Other apps can write the same shared memory, compressed or decoded frames: see [
 |---|---|
 | `frametap.c`, `frametap.h` | the tap's shared memory, compiled into chiaki-ng (Windows; a no-op elsewhere). Does nothing unless `CHIAKI_FRAMETAP=1` |
 | `frametap_session.cpp`, `frametap_session.h` | what the tap does inside chiaki-ng's StreamSession: copying frames and sound out, keyframe requests, the delay test's presses, the sound delay |
-| `apply_patch.py` | adds the tap to a chiaki-ng checkout: copies the files above in, then one-line edits to chiaki-ng's own files (six calls in streamsession.cpp, a friend line in streamsession.h, the files in CMakeLists.txt, and one check in qmlmainwindow.cpp: `CHIAKI_FRAMETAP_RENDERER=opengl` makes chiaki-ng draw with OpenGL for that session, without its fallback dialog or changing the saved setting, which SmoovPlay's launcher asks for without an NVIDIA card). It fails loudly if chiaki-ng moved the code, and refuses a checkout with an older tap patch: `git checkout -- gui/src/streamsession.cpp gui/CMakeLists.txt` first |
+| `apply_patch.py` | adds the tap to a chiaki-ng checkout: copies the files above in, then one-line edits to chiaki-ng's own files (six calls in streamsession.cpp, a friend line in streamsession.h, the files in CMakeLists.txt, and one check in qmlmainwindow.cpp: `CHIAKI_FRAMETAP_RENDERER=opengl` makes chiaki-ng draw with OpenGL for that session, without its fallback dialog or changing the saved setting, which Keel's launcher asks for without an NVIDIA card). It fails loudly if chiaki-ng moved the code, and refuses a checkout with an older tap patch: `git checkout -- gui/src/streamsession.cpp gui/CMakeLists.txt` first |
 | `selftest.py`, `selftest.c` | builds a small writer with MSYS2's gcc and checks it against the Python reader byte for byte, including the press, the sound delay and the sound ring. Uses its own tap name, so it runs while chiaki-ng streams |
 | `build_windows.sh` | full Windows build in MSYS2, mirroring chiaki-ng's own CI, plus the patch |
 | `run_chiaki_frametap.bat` | starts the built chiaki-ng with the tap on |
@@ -64,7 +64,7 @@ line, so find where that line went in the new streamsession.cpp and update its a
    PS5: sign in to PSN in chiaki-ng (or paste your account ID), then enter the 8-digit code from
    PS5 Settings → System → Remote Play → Link Device.
 3. **chiaki-ng settings:** resolution 1080p, FPS **60** (the pipeline expects the PS5's 60 Hz output with
-   repeats), codec H.265 (H.265 HDR only with SmoovPlay's HDR setting on: `--hdr sdr` or `--hdr hdr10`, see
+   repeats), codec H.265 (H.265 HDR only with Keel's HDR setting on: `--hdr sdr` or `--hdr hdr10`, see
    [`framegen/hdr.py`](../framegen/hdr.py)), bitrate as high as your network allows.
 4. **Start the pipeline**, ideally before connecting in chiaki-ng:
    ```powershell
@@ -101,7 +101,7 @@ which ones this chiaki-ng understands):
   adds it to the controller state it sends the PS5, notes the time it went out (the clock both sides share), and
   lets go after the hold. The pipeline then times the first frame that shows the answer.
 - **Hold the sound back** (Sound in sync): chiaki-ng plays the sound as it arrives, while the picture spends a while
-  in SmoovPlay. The pipeline writes that while (the median of the last ~2 s of frames, every 2 s) and chiaki-ng
+  in Keel. The pipeline writes that while (the median of the last ~2 s of frames, every 2 s) and chiaki-ng
   delays its sound by as much, 0–500 ms. If the pipeline stops (its heartbeat is over 2 s old), the delay drops
   to 0 by itself, so chiaki-ng on its own never plays late sound.
 
@@ -110,8 +110,8 @@ which ones this chiaki-ng understands):
 chiaki-ng also copies the game's sound, as it arrives and before its own volume, into a second shared-memory ring
 (`<tap name>-audio`: 512 slots of up to 8 KB of 16-bit PCM, each with its arrival time; layout in `frametap.h`).
 A chunk too big for one slot is split by whole samples, each part timed by the samples before it. The header's
-`features` gains a bit for it, so SmoovPlay knows a chiaki-ng from before this ring (whose instant replays are
-silent). Instant replay (`framegen/replay.py`) reads it every 20 ms and times the sound by SmoovPlay's delay, so
+`features` gains a bit for it, so Keel knows a chiaki-ng from before this ring (whose instant replays are
+silent). Instant replay (`framegen/replay.py`) reads it every 20 ms and times the sound by Keel's delay, so
 it meets the picture.
 
 `CHIAKI_FRAMETAP_NAME` gives the tap another shared-memory name (the self-test uses it).

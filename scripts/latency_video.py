@@ -10,16 +10,16 @@ press: film the controller and the screen together. Rest your thumb on the butto
   only movement in the button's box is the press. Use something that reacts at once and the same way each time, on
   a still part of the picture: in a 30 fps game, standing still, the pause menu (Options) is good. (The PS button's
   control centre is drawn at 60 fps over the game, so with frame generation on it passes straight through and
-  misses SmoovPlay's delay.) Press 10-15 times, a second or more apart. Reported: each press's delay and the
-  median. Compare setups by filming each: the PS5 straight into the screen, chiaki-ng on its own, SmoovPlay with
+  misses Keel's delay.) Press 10-15 times, a second or more apart. Reported: each press's delay and the
+  median. Compare setups by filming each: the PS5 straight into the screen, chiaki-ng on its own, Keel with
   frame generation off (I), and on.
-side: film two screens showing the same game: the PS5's own HDMI output and SmoovPlay (picture-by-picture on one
+side: film two screens showing the same game: the PS5's own HDMI output and Keel (picture-by-picture on one
   monitor is best, as both halves then go through the same screen). Any motion works. Reported: how far behind
-  the second box is, which is what Remote Play and SmoovPlay add to the picture. With frame generation on, the
+  the second box is, which is what Remote Play and Keel add to the picture. With frame generation on, the
   in-between frames show each change in steps, so this is the delay to about the middle of those steps.
 
 The boxes are drawn with the mouse on the first frame (Enter or Space to confirm each), or given as x,y,w,h in
-pixels: --button and --screen for press, --a (the PS5's own output) and --b (SmoovPlay) for side. A picture of
+pixels: --button and --screen for press, --a (the PS5's own output) and --b (Keel) for side. A picture of
 each press (the button as it starts, the screen before and as it changes) is saved next to the video, to check.
 """
 from __future__ import annotations
@@ -182,7 +182,7 @@ def main(argv=None) -> int:
     ap.add_argument("--button", help="press: the button's box, x,y,w,h in pixels")
     ap.add_argument("--screen", help="press: the box on screen where the reaction shows")
     ap.add_argument("--a", help="side: the PS5's own output (the earlier screen)")
-    ap.add_argument("--b", help="side: SmoovPlay (the later screen)")
+    ap.add_argument("--b", help="side: Keel (the later screen)")
     ap.add_argument("--no-sheet", action="store_true", help="press: don't save the picture of each press")
     a = ap.parse_args(argv)
 
@@ -191,7 +191,7 @@ def main(argv=None) -> int:
                  parse_box(a.screen) or pick_box(a.video, "where the screen reacts")]
     else:
         boxes = [parse_box(a.a) or pick_box(a.video, "the PS5's own picture"),
-                 parse_box(a.b) or pick_box(a.video, "SmoovPlay's picture")]
+                 parse_box(a.b) or pick_box(a.video, "Keel's picture")]
     crops, file_fps = read_boxes(a.video, boxes)
     fps = a.fps or file_fps
     if not fps:
@@ -221,7 +221,7 @@ def main(argv=None) -> int:
             print(f"Picture of each press (button, screen before, screen as it changes): {out}")
     else:
         frames, match = lag(crops[0], crops[1], fps)
-        print(f"SmoovPlay's picture is {frames * ms:.0f} ms behind the PS5's own ({frames:+.1f} frames; how well "
+        print(f"Keel's picture is {frames * ms:.0f} ms behind the PS5's own ({frames:+.1f} frames; how well "
               f"the two match there: {match:.2f}, where 1 is perfect)")
         if match < 0.3:
             print("That match is weak: check that both boxes show the whole game picture, and film more motion.")

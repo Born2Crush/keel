@@ -14,7 +14,7 @@ The drawing is the video window's own (framegen/looks_gl.py) in a hidden OpenGL 
 Without OpenGL it falls back to looks.render(), the NumPy reference: the same picture, about 0.1 to 0.2 s at 640x360.
 
 The sample pictures (framegen/samples, listed in samples.json) are screenshots from games, credited in samples.json,
-on the Looks page and in THIRD_PARTY_NOTICES.txt. They belong to their publishers and aren't covered by SmoovPlay's
+on the Looks page and in THIRD_PARTY_NOTICES.txt. They belong to their publishers and aren't covered by Keel's
 MIT licence.
 """
 from __future__ import annotations
@@ -58,7 +58,7 @@ class _Gl:
         if not glfw.init():
             raise RuntimeError("no OpenGL")
         glfw.window_hint(glfw.VISIBLE, glfw.FALSE)
-        self.win = glfw.create_window(64, 64, "SmoovPlay look preview", None, None)
+        self.win = glfw.create_window(64, 64, "Keel look preview", None, None)
         glfw.default_window_hints()
         if not self.win:
             glfw.terminate()

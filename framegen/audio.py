@@ -1,8 +1,8 @@
-"""Sound from a capture card, played in step with SmoovPlay's picture.
+"""Sound from a capture card, played in step with Keel's picture.
 
 A capture card's sound comes in as its own DirectShow audio device, read with the video (framegen/capture.py). It's
 played here on the PC's default output, through WASAPI (sounddevice, which bundles PortAudio), held back by as long
-as the picture spends in SmoovPlay, so the two line up: set_delay(), which the pipeline calls every couple of
+as the picture spends in Keel, so the two line up: set_delay(), which the pipeline calls every couple of
 seconds (Sound in sync), as it does for chiaki-ng's sound.
 
 DelayLine is the part that matters and needs no sound card: PCM goes in as it arrives and comes out at the
@@ -17,12 +17,12 @@ The queue never goes below the longest recent packet plus CUSHION_S, nor below t
 packets plus CUSHION_S. Sound comes in packets (20 ms from a card), and with less queued than the wait for the next
 one the output runs dry: a gap of silence every packet or so, heard as clicks as loud as the sound around them
 (issue 17, an Elgato HD60 X with a picture delay of 31 ms). Packets also come late when the thread reading the
-card is held up for a moment (a heavy game keeps SmoovPlay busier), so the cushion grows to the longest wait of the
+card is held up for a moment (a heavy game keeps Keel busier), so the cushion grows to the longest wait of the
 last GAP_WINDOW_S, up to MAX_WAIT_KEEP_S. Then the sound is a little later than the picture instead, which is hard
 to notice.
 
 Player hands the sound to Windows with OUTPUT_S buffered, so the output's callback (Python, which waits its turn
-with SmoovPlay's other threads) can be held up that long without Windows playing a gap; that buffer is taken off
+with Keel's other threads) can be held up that long without Windows playing a gap; that buffer is taken off
 the delay. stats() counts each kind of trouble for the log (framegen/capture.py: once a minute when something
 happened, and when the session ends), so diagnostics say which one it was.
 """

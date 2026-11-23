@@ -1,4 +1,4 @@
-"""Shortcuts for App window mode (Experimental). SmoovPlay's picture sits over the app as a click-through layer that
+"""Shortcuts for App window mode (Experimental). Keel's picture sits over the app as a click-through layer that
 never takes the keyboard: the app keeps it, as some apps stop drawing without it. So the video window's keys come
 through Windows' system-wide shortcuts (RegisterHotKey) instead, Ctrl+Alt with the usual key by default:
 
@@ -6,11 +6,11 @@ through Windows' system-wide shortcuts (RegisterHotKey) instead, Ctrl+Alt with t
     Ctrl+Alt+S  stats       Ctrl+Alt+I  smooth on/off
 
 A shortcut another program already has goes to the next one in its list (Ctrl+Alt+Space for the menu), and the video
-and the launcher say which keys SmoovPlay got. People can pick their own on the launcher's Play page, which passes
+and the launcher say which keys Keel got. People can pick their own on the launcher's Play page, which passes
 them as `run.py --window-keys "menu=Ctrl+Alt+K;quit=Ctrl+Alt+End"`.
 
 While the menu is open, its own keys (arrows, Enter, Esc, Backspace) are taken too, without Ctrl+Alt, and given back
-when it closes. Windows treats AltGr as Ctrl+Alt, so while SmoovPlay plays in this mode, AltGr with these keys types
+when it closes. Windows treats AltGr as Ctrl+Alt, so while Keel plays in this mode, AltGr with these keys types
 nothing (AltGr+M is µ on a German keyboard), which is why only five keys are taken.
 """
 from __future__ import annotations
@@ -108,7 +108,7 @@ def parse_arg(text: str | None) -> dict[str, str]:
         raise ValueError("two actions have the same shortcut")
     for action, name in out.items():
         if name in OWN:
-            raise ValueError(f"{action}: {name} is SmoovPlay's own, for {OWN[name]}")
+            raise ValueError(f"{action}: {name} is Keel's own, for {OWN[name]}")
     return out
 
 
@@ -166,7 +166,7 @@ class Hotkeys:
         (glfw.poll_events then finds the queue empty). Looking for WM_HOTKEY alone (PeekMessage filtered to it) makes
         Windows call the thread hung after 5 s, however often GLFW looks at the messages after it: Windows then puts
         a frozen copy of the video window on screen, which window capture reads back as a black picture, and offers
-        to close SmoovPlay ("Python is not responding" after 10 to 20 s, or on a click elsewhere).
+        to close Keel ("Python is not responding" after 10 to 20 s, or on a click elsewhere).
         """
         import ctypes
         from ctypes import wintypes as wt

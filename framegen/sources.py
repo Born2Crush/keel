@@ -51,7 +51,7 @@ class SourceInfo:
 KINDS = {
     "chiaki": SourceInfo("chiaki", "PS5 Remote Play", audio="chiaki-ng plays the sound",
                          controls="Your controller connects to this PC; chiaki-ng sends it to the PS5"),
-    "capture": SourceInfo("capture", "Capture card", audio="SmoovPlay plays the card's sound, in step with the picture",
+    "capture": SourceInfo("capture", "Capture card", audio="Keel plays the card's sound, in step with the picture",
                           controls="Your controller connects to the console as usual"),
     "window": SourceInfo("window", "App window", rate="variable", test_mode=False,
                          audio="The app plays its own sound, a little ahead of the picture",
@@ -222,16 +222,16 @@ def make_detector(info: SourceInfo, threshold: float = 2.0):
 
 # ----------------------------------------------------------------------------- the list for the launcher
 GUIDES = {
-    "chiaki": "Connect your PS5 with chiaki-ng (SmoovPlay sets it up), then press Play.",
+    "chiaki": "Connect your PS5 with chiaki-ng (Keel sets it up), then press Play.",
     "capture": "Connect the console's HDMI to the capture card and the card to this PC. On a PS5, turn off HDCP "
                "while you use it (Settings > System > HDMI). Set the console to 1080p, 60 Hz, HDR off (or the Capture card "
                "resolution picked in Settings).",
     "window": "Open the app you stream with (PS Remote Play, the Xbox app, Moonlight, or a browser) and start the "
-              "game, pick its window, then press Play. Keep the app's window on screen: SmoovPlay shows the smooth "
-              "picture on top of it, and the app keeps the controller and the keyboard. SmoovPlay's own keys use Ctrl+Alt "
+              "game, pick its window, then press Play. Keep the app's window on screen: Keel shows the smooth "
+              "picture on top of it, and the app keeps the controller and the keyboard. Keel's own keys use Ctrl+Alt "
               "(Ctrl+Alt+M menu, Ctrl+Alt+F fullscreen, Ctrl+Alt+Esc quit), and can be changed on the Play page.",
-    "tap": "For app developers: an app built to send its frames straight to SmoovPlay (docs/frame-tap.md in "
-           "SmoovPlay's repo). For the Xbox app, PS Remote Play, Moonlight or a browser, pick App window instead. "
+    "tap": "For app developers: an app built to send its frames straight to Keel (docs/frame-tap.md in "
+           "Keel's repo). For the Xbox app, PS Remote Play, Moonlight or a browser, pick App window instead. "
            "Press Play, then start the app: its smooth video opens in its own window, and the app keeps the "
            "controller and its sound.",
     "file": "For testing: a video file played as a source.",

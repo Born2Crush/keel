@@ -1,5 +1,5 @@
 """Side-by-side videos for judging Steady HUD by eye: the same HUD region, RIFE alone on the left, Steady HUD on the
-right, at 60 fps as SmoovPlay shows it (each clip played as a simulated 30 fps game).
+right, at 60 fps as Keel shows it (each clip played as a simulated 30 fps game).
 
     .venv\\Scripts\\python scripts\\steady_hud_compare.py testdata\\hud\\gt7.mp4 --crop 0,100,960,540 [--seconds 20]
 

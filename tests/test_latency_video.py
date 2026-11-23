@@ -77,7 +77,7 @@ def test_side_mode_finds_the_lag_between_two_screens(tmp_path):
     for i in range(n):
         f = np.zeros((H, W, 3), np.uint8)
         f[20:100, 10:150] = view(i + lag_frames, 1.0, 0)[..., None]  # the PS5's own output, ahead
-        f[20:100, 170:310] = view(i, 0.8, 30)[..., None]  # SmoovPlay: same picture, later, a different screen
+        f[20:100, 170:310] = view(i, 0.8, 30)[..., None]  # Keel: same picture, later, a different screen
         frames.append(f)
     path = tmp_path / "side.avi"
     _write(path, frames)

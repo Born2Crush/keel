@@ -181,7 +181,7 @@ class Stats:
     uneven_fps: list = field(default_factory=list)
     uneven_waits: int = 0
     dip_ticks: int = 0  # Dip smoothing: ticks played with frames timed as they arrived (waits count above)
-    # Time between the game's new frames as they reached SmoovPlay (stamped as they came off the stream, card or
+    # Time between the game's new frames as they reached Keel (stamped as they came off the stream, card or
     # window, before any processing): late frames and bunches point at the network or the capture (arrival_line)
     new_gaps_ms: list = field(default_factory=list)
     wall_s: float = 0.0
@@ -196,7 +196,7 @@ class Stats:
                     "report show them on this PC.")
 
     def arrival_line(self) -> str:
-        """How evenly the game's new frames reached SmoovPlay, or "" for a short session. A steady stream has its
+        """How evenly the game's new frames reached Keel, or "" for a short session. A steady stream has its
         frames the same time apart (33 ms for a 30 fps game); Wi-Fi or a busy capture shows as late frames and
         bunches (two close together after a late one), which look like stutter whatever the PC does."""
         gaps = self.new_gaps_ms
@@ -486,7 +486,7 @@ class Pipeline:
 
         def mini_text(g, s, proc, shown: int, skipped: int, testing: bool) -> MiniText:
             """Stats overlay style Minimal: frames on screen, the game's rate (amber while it's off the rate that's
-            needed, which the message about it explains), SmoovPlay's delay, and how well the PC keeps up: at 90 and
+            needed, which the message about it explains), Keel's delay, and how well the PC keeps up: at 90 and
             120 fps by the extra frames shown, at 60 by the AI's share of each frame's time."""
             parts = [(f"{s:.0f} fps" if s is not None else f"{hz} fps", "main")]
             if g is not None:
@@ -604,7 +604,7 @@ class Pipeline:
                     if hasattr(sink, "toast"):
                         sink.toast(result.replace("Delay test: ", "", 1), 15.0)
                     delay_test, ov_next = None, 0.0
-            # Sound: chiaki-ng plays it as it arrives, while the picture spends a while in SmoovPlay. Every 2 s,
+            # Sound: chiaki-ng plays it as it arrives, while the picture spends a while in Keel. Every 2 s,
             # chiaki-ng is told to hold the sound back by that while (the median of the last ~2 s of real frames).
             sync = settings is None or getattr(settings, "audio_sync", True)
             if remote is not None and t0 >= audio_next and (st.real_delay_ms or not sync):
@@ -678,14 +678,14 @@ class Pipeline:
                         print("[pipeline] game dipping below 30 fps: timing its frames as they arrived")
                         if hasattr(sink, "toast") and "dips" not in toasted:
                             toasted.add("dips")
-                            sink.toast("Game dipping below 30 fps: SmoovPlay is spacing its frames by when they "
+                            sink.toast("Game dipping below 30 fps: Keel is spacing its frames by when they "
                                        "arrived (Dip smoothing)", 6.0)
                     elif timed:
                         unshown = None
                         print(f"[pipeline] game at about {timeline.fps()} fps: evening out its frames")
                         if hasattr(sink, "toast") and "even" not in toasted:
                             toasted.add("even")
-                            sink.toast(f"Game at about {timeline.fps()} fps: SmoovPlay is spacing its frames evenly "
+                            sink.toast(f"Game at about {timeline.fps()} fps: Keel is spacing its frames evenly "
                                        "(Even out 40-60 fps)", 6.0)
                     else:
                         sched = CadenceScheduler()  # starts afresh, from the next new frame
@@ -829,8 +829,8 @@ class Pipeline:
                 if cmd == "delay_test" and delay_test is None:
                     if remote is None or not remote.can_press():
                         msg = ("The delay test works with PS5 Remote Play, through the chiaki-ng that comes with this "
-                               "SmoovPlay" if remote is None or not hasattr(remote, "press") else
-                               "The delay test needs the chiaki-ng that comes with this SmoovPlay: open it from there")
+                               "Keel" if remote is None or not hasattr(remote, "press") else
+                               "The delay test needs the chiaki-ng that comes with this Keel: open it from there")
                         print(f"[pipeline] {msg}")
                         if hasattr(sink, "toast"):
                             sink.toast(msg, 6.0)

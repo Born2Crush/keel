@@ -1,9 +1,9 @@
-SmoovPlay third-party notices
+Keel third-party notices
 ==============================
 
-SmoovPlay's own code is MIT licensed (LICENSE.txt). It contains, bundles or downloads the following.
+Keel's own code is MIT licensed (LICENSE.txt). It contains, bundles or downloads the following.
 
-Included in SmoovPlay (app\ folder)
+Included in Keel (app\ folder)
 ------------------------------------
 * RIFE network definitions, vendored from HolyWu/vs-rife. MIT License, Copyright (c) 2021 HolyWu.
   Full text: app\framegen\rife\LICENSE.
@@ -14,20 +14,20 @@ Included in SmoovPlay (app\ folder)
 * Sample pictures for the Looks page's preview (app\framegen\samples): screenshots from Grand Theft Auto VI and
   Grand Theft Auto V (c) Rockstar Games, Cyberpunk 2077 (c) CD PROJEKT RED, Forza Horizon 5 (c) Microsoft,
   Gran Turismo 7 (c) Sony Interactive Entertainment, and skate. (c) Electronic Arts. Included only to show what
-  a look does; they belong to their publishers and aren't covered by SmoovPlay's MIT licence.
+  a look does; they belong to their publishers and aren't covered by Keel's MIT licence.
 
 Bundled as a separate program (chiaki\ folder)
 ----------------------------------------------
-* chiaki-ng 1.10.1 with SmoovPlay's frame-tap patch. GNU Affero General Public License 3.0 (with the
+* chiaki-ng 1.10.1 with Keel's frame-tap patch. GNU Affero General Public License 3.0 (with the
   OpenSSL exception): chiaki\LICENSE-AGPL-3.0.txt. The source of the patch is in chiaki\source\ (see its
   README); the rest is upstream chiaki-ng v1.10.1 at https://github.com/streetpea/chiaki-ng. You can also ask
-  the SmoovPlay authors for the complete corresponding source.
+  the Keel authors for the complete corresponding source.
 * chiaki-ng's own dependencies, as built by its Windows CI: Qt 6 (LGPL 3.0), FFmpeg 9.0 "gpl-shared" build from
   https://github.com/streetpea/FFmpeg-Builds (GPL 3.0, see chiaki\licenses\FFmpeg-LICENSE.txt), SDL 3 and
   sdl2-compat (zlib), OpenSSL 3 (Apache 2.0), libplacebo (LGPL 2.1+), Opus (BSD), HarfBuzz, FreeType, ICU,
   libpng, zlib, zstd, GLib, hidapi, fftw (GPL 2+), SpeexDSP and others from MSYS2, each under its own licence.
 
-Downloaded by setup from their official sources (not distributed by SmoovPlay)
+Downloaded by setup from their official sources (not distributed by Keel)
 ---------------------------------------------------------------------------------
 * Python 3.12 embeddable package, python.org (PSF License).
 * pip, bootstrap.pypa.io (MIT).
@@ -40,7 +40,7 @@ Downloaded by setup from their official sources (not distributed by SmoovPlay)
   (onnxruntime-directml, MIT, with Microsoft's DirectML library under its own licence; runs RIFE on AMD and Intel
   cards), all from pypi.org, plus their dependencies.
 
-Downloaded only if you set it up, from NVIDIA (not distributed by SmoovPlay)
+Downloaded only if you set it up, from NVIDIA (not distributed by Keel)
 -----------------------------------------------------------------------------
 * NVIDIA Video Effects for Python (nvidia-vfx 0.2.0.0, for NVIDIA VFG), pypi.nvidia.com, into runtime\vfx,
   after you accept NVIDIA's licence on the Settings page: the NVIDIA Software License Agreement
@@ -50,5 +50,5 @@ Downloaded only if you set it up, from NVIDIA (not distributed by SmoovPlay)
   NVIDIA Open Model License
   (https://www.nvidia.com/en-us/agreements/enterprise-software/nvidia-open-model-license/).
 
-SmoovPlay isn't affiliated with or endorsed by Sony Interactive Entertainment, NVIDIA, AMD or any game
+Keel isn't affiliated with or endorsed by Sony Interactive Entertainment, NVIDIA, AMD or any game
 publisher. PlayStation and PS5 are trademarks of Sony Interactive Entertainment Inc.

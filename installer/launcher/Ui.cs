@@ -1,4 +1,4 @@
-// The SmoovPlay window (layout and styles in Ui.xaml). Setup mode walks through PC check -> folder -> install ->
+// The Keel window (layout and styles in Ui.xaml). Setup mode walks through PC check -> folder -> install ->
 // done; launcher mode has Play, the PS5 guide, the PC check, Settings (SettingsPage.cs) and Help in the left rail.
 // While a stream plays the launcher waits in the taskbar, its button showing a coloured dot, and comes back up when
 // the session ends or fails.
@@ -37,13 +37,13 @@ using System.Windows.Threading;
 using Path = System.IO.Path;
 using ShapePath = System.Windows.Shapes.Path;
 
-namespace SmoovPlay
+namespace Keel
 {
     partial class Ui
     {
         public readonly Window Window;
         readonly Options opts;
-        readonly bool setupMode;  // SmoovPlay-Setup.exe: the app is inside it
+        readonly bool setupMode;  // Keel-Setup.exe: the app is inside it
         Paths paths;
         Installer installer;
         Session session;
@@ -219,7 +219,7 @@ namespace SmoovPlay
 
         void Wire()
         {
-            Window.Title = setupMode ? "SmoovPlay Setup" : "SmoovPlay";
+            Window.Title = setupMode ? "Keel Setup" : "Keel";
             try
             {
                 using (var ico = System.Drawing.Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location))
@@ -270,7 +270,7 @@ namespace SmoovPlay
             Click("BtnShortPath", () =>
             {
                 string root2 = SafeRoot(dir.Text) ?? Path.GetPathRoot(Paths.DefaultInstall);
-                dir.Text = Path.Combine(root2, "SmoovPlay");
+                dir.Text = Path.Combine(root2, "Keel");
             });
             Click("BtnLongPaths", () => Busy("BtnLongPaths", SystemCheck.EnableLongPaths, err =>
             {
@@ -494,21 +494,21 @@ namespace SmoovPlay
         }
 
         /// <summary>Setup, opened by the launcher to update this install (--update --dir --wait, Updater.cs): straight to
-        /// installing once the launcher has closed, then SmoovPlay opens again.</summary>
+        /// installing once the launcher has closed, then Keel opens again.</summary>
         void StartUpdate()
         {
             updateMode = true;
             Show(E("Stepper"), true);
             Show(E("Nav"), false);
-            T("RailFooterTitle").Text = "Updating SmoovPlay";
+            T("RailFooterTitle").Text = "Updating Keel";
             T("RailFooterText").Text = "Your settings, looks and clips stay. Only parts this version changes are downloaded again.";
             BuildStepper();
             SetStep(2);
             E<TextBox>("DirBox").Text = paths.Install;
-            E<CheckBox>("ToggleDesktop").IsChecked = File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "SmoovPlay.lnk"));
+            E<CheckBox>("ToggleDesktop").IsChecked = File.Exists(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "Keel.lnk"));
             T("InstallOverline").Text = "UPDATING TO " + V(BuildInfo.Version);
-            T("InstallTitle").Text = "Updating SmoovPlay";
-            T("InstallSub").Text = "A minute or two. SmoovPlay opens again when it's done, with your settings, looks and clips.";
+            T("InstallTitle").Text = "Updating Keel";
+            T("InstallSub").Text = "A minute or two. Keel opens again when it's done, with your settings, looks and clips.";
             ShowPage("PageInstall");
             int wait = opts.Wait;
             Task.Run(() =>
@@ -530,12 +530,12 @@ namespace SmoovPlay
             var link = B("RailUpdate");
             link.Content = "Update available: " + V(tag);
             link.ToolTip = Updater.Unavailable(paths) == null
-                ? "Installs it: SmoovPlay closes, updates in a minute or two and opens again, with your settings."
+                ? "Installs it: Keel closes, updates in a minute or two and opens again, with your settings."
                 : "Opens the release page. Download the new setup and run it: it updates this install and keeps your settings.";
             Show(link, true);
             Show(B("RailCheck"), false);
             var help = T("HelpVersion");  // next to the version: the install path at the end gets cut off
-            if (!same) help.Text = $"SmoovPlay {BuildInfo.Version} ({tag} is out)  ·  Python {BuildInfo.PythonVersion}  ·  {paths.Install}";
+            if (!same) help.Text = $"Keel {BuildInfo.Version} ({tag} is out)  ·  Python {BuildInfo.PythonVersion}  ·  {paths.Install}";
             Snap("update");
         }
 
@@ -563,7 +563,7 @@ namespace SmoovPlay
                     t.Stop();
                     if ((link.Tag as string) == "busy") return;
                     link.Content = "Check for updates";
-                    link.ToolTip = "Asks GitHub for a newer SmoovPlay now (it also checks by itself when it opens).";
+                    link.ToolTip = "Asks GitHub for a newer Keel now (it also checks by itself when it opens).";
                 };
                 t.Start();
             }));
@@ -574,7 +574,7 @@ namespace SmoovPlay
             Show(E("Stepper"), false);
             Show(E("Nav"), true);
             BuildKeys();
-            T("HelpVersion").Text = $"SmoovPlay {BuildInfo.Version}  ·  Python {BuildInfo.PythonVersion}  ·  {paths.Install}";
+            T("HelpVersion").Text = $"Keel {BuildInfo.Version}  ·  Python {BuildInfo.PythonVersion}  ·  {paths.Install}";
             if (!paths.Dev) Task.Run(() => Updater.CleanUp());  // an update this one came from
             UpdateCheck.Start((tag, url) => Window.Dispatcher.BeginInvoke(new Action(() => ShowUpdate(tag, url))));
             Show(B("RailCheck"), GitHub.Repo != null);
@@ -583,7 +583,7 @@ namespace SmoovPlay
             B("HelpUninstall").IsEnabled = !paths.Dev;
             T("CheckOverline").Text = "PC CHECK";
             T("CheckTitle").Text = "Your PC";
-            T("CheckSub").Text = "What SmoovPlay found. Anything that needs attention can be fixed from here.";
+            T("CheckSub").Text = "What Keel found. Anything that needs attention can be fixed from here.";
             SetPlayState(PlayState.Idle, null);
             string showResults = Environment.GetEnvironmentVariable("SMOOVPLAY_SHOW_RESULTS");  // testing and docs
             if (!string.IsNullOrEmpty(showResults) && File.Exists(showResults)) ShowResults(showResults);
@@ -603,7 +603,7 @@ namespace SmoovPlay
             finishSetup = true;
             T("CheckOverline").Text = "FINISH SETUP";
             T("CheckTitle").Text = "Let's finish setting up";
-            T("CheckSub").Text = "SmoovPlay still needs Python, PyTorch and TensorRT (about 5 GB). First, a quick look at your PC.";
+            T("CheckSub").Text = "Keel still needs Python, PyTorch and TensorRT (about 5 GB). First, a quick look at your PC.";
             T("BtnCheckNextText").Text = "Finish setup";
             Nav("PageCheck");
         }
@@ -790,7 +790,7 @@ namespace SmoovPlay
             var fails = checks.Where(c => c.Level == Level.Fail).ToList();
             var warns = checks.Where(c => c.Level == Level.Warn).ToList();
             if (fails.Count == 0 && warns.Count == 0)
-                Summary("Your PC is ready for SmoovPlay", "Everything it needs is here.", "#243DDC8E", "Good", "\uE73E");
+                Summary("Your PC is ready for Keel", "Everything it needs is here.", "#243DDC8E", "Good", "\uE73E");
             else if (fails.Count == 0)
                 Summary(warns.Count == 1 ? "Ready, with one suggestion" : $"Ready, with {warns.Count} suggestions",
                         string.Join(", ", warns.Select(c => c.Title)) + ": hover a card for help.", "#24FFC24B", "Warn", "!");
@@ -860,17 +860,17 @@ namespace SmoovPlay
             try { return Path.GetPathRoot(Path.GetFullPath(dir.Trim())); } catch (Exception) { return null; }
         }
 
-        /// <summary>The folder setup will really use: never mixes SmoovPlay into a folder that has other things in it
-        /// (uninstall removes what setup made), so a non-empty folder gets a SmoovPlay folder inside.</summary>
+        /// <summary>The folder setup will really use: never mixes Keel into a folder that has other things in it
+        /// (uninstall removes what setup made), so a non-empty folder gets a Keel folder inside.</summary>
         static string ResolveDir(string raw, out bool sub)
         {
             sub = false;
             string dir = Path.GetFullPath(raw.Trim()).TrimEnd('\\');
-            if (dir.Length <= 3) { sub = true; return Path.Combine(dir + "\\", "SmoovPlay"); }  // a drive root
+            if (dir.Length <= 3) { sub = true; return Path.Combine(dir + "\\", "Keel"); }  // a drive root
             if (Directory.Exists(dir) && Directory.EnumerateFileSystemEntries(dir).Any() && !Paths.ForInstall(dir).IsInstall)
             {
                 sub = true;
-                return Path.Combine(dir, "SmoovPlay");
+                return Path.Combine(dir, "Keel");
             }
             return dir;
         }
@@ -905,7 +905,7 @@ namespace SmoovPlay
             }
             bool existing = dir != null && Paths.ForInstall(dir).IsInstall;
             if (problem == null && free < SystemCheck.NeedGB && !existing)
-                problem = $"Only {free:0} GB free on {root.TrimEnd('\\')}. SmoovPlay needs about {SystemCheck.NeedGB:0} GB: choose another drive, or free some space.";
+                problem = $"Only {free:0} GB free on {root.TrimEnd('\\')}. Keel needs about {SystemCheck.NeedGB:0} GB: choose another drive, or free some space.";
             driveUsedFrac = total > 0 ? (total - free) / total : 0;
             driveNeedFrac = total > 0 ? Math.Min(SystemCheck.NeedGB, Math.Max(free, 0)) / total : 0;
             LayoutDriveBar(true);
@@ -917,7 +917,7 @@ namespace SmoovPlay
             var note = T("DirExisting");
             if (problem == null && existing)
             {
-                note.Text = "SmoovPlay is already installed here. Setup updates it in place and keeps your settings.";
+                note.Text = "Keel is already installed here. Setup updates it in place and keeps your settings.";
                 note.Foreground = R("Good");
                 Show(note, true);
             }
@@ -953,11 +953,11 @@ namespace SmoovPlay
                 while (start.Length > 3 && !Directory.Exists(start)) start = Path.GetDirectoryName(start);
             }
             catch (Exception) { start = null; }
-            string picked = FolderPicker.Pick(new WindowInteropHelper(Window).Handle, "Where should SmoovPlay go? It needs about 12 GB.", start);
+            string picked = FolderPicker.Pick(new WindowInteropHelper(Window).Handle, "Where should Keel go? It needs about 12 GB.", start);
             if (picked == null) return;
             string name = Path.GetFileName(picked.TrimEnd('\\'));
             bool isInstall = Paths.ForInstall(picked).IsInstall;
-            box.Text = isInstall || name.Equals("SmoovPlay", StringComparison.OrdinalIgnoreCase) ? picked : Path.Combine(picked, "SmoovPlay");
+            box.Text = isInstall || name.Equals("Keel", StringComparison.OrdinalIgnoreCase) ? picked : Path.Combine(picked, "Keel");
             ValidateDir();
         }
 
@@ -985,7 +985,7 @@ namespace SmoovPlay
             bool repair = !fromPayload;
             if (setupMode) SetStep(2); else SetNavEnabled(false);
             T("InstallOverline").Text = updateMode ? "UPDATING TO " + V(BuildInfo.Version) : setupMode ? "STEP 3 OF 3  ·  INSTALLING" : repair && !finishSetup ? "REPAIR" : "FINISH SETUP";
-            T("InstallTitle").Text = updateMode ? "Updating SmoovPlay" : !repair ? "Setting things up" : finishSetup ? "Finishing setup" : redownload ? "Repairing SmoovPlay" : "Checking SmoovPlay";
+            T("InstallTitle").Text = updateMode ? "Updating Keel" : !repair ? "Setting things up" : finishSetup ? "Finishing setup" : redownload ? "Repairing Keel" : "Checking Keel";
             T("InstallPercent").Text = "0";
             T("InstallSpeed").Text = "";
             E("BarFill").BeginAnimation(FrameworkElement.WidthProperty, null);
@@ -1098,7 +1098,7 @@ namespace SmoovPlay
         }
 
         static readonly string[] StepHints =
-            { "Unpacking the app and chiaki-ng", "A private copy of Python, just for SmoovPlay", "About 5 GB: the bulk of the wait",
+            { "Unpacking the app and chiaki-ng", "A private copy of Python, just for Keel", "About 5 GB: the bulk of the wait",
               "Once, so it starts fast every time after", "Shortcuts and the Apps & features entry" };
 
         void SetInstallStep(int i)
@@ -1150,8 +1150,8 @@ namespace SmoovPlay
         {
             new[] { "Turn on Remote Play", "On the PS5: Settings → System → Remote Play → Enable Remote Play." },
             new[] { "Wire it up if you can", "Remote Play is smoothest with the PC and the PS5 both plugged into the router." },
-            new[] { "Stream at 60 fps", "In chiaki-ng's settings: 1080p and 60 fps. Playing in HDR? Pick the H.265 HDR codec and turn on HDR (Experimental) in SmoovPlay's Settings. SmoovPlay warns you if it's set differently." },
-            new[] { "Pick your frame rate", "On SmoovPlay's Settings page, or with M in the video window: 60, 90 or 120 fps, the upscaler and more." },
+            new[] { "Stream at 60 fps", "In chiaki-ng's settings: 1080p and 60 fps. Playing in HDR? Pick the H.265 HDR codec and turn on HDR (Experimental) in Keel's Settings. Keel warns you if it's set differently." },
+            new[] { "Pick your frame rate", "On Keel's Settings page, or with M in the video window: 60, 90 or 120 fps, the upscaler and more." },
             new[] { "Your controller just works", "Plug it into the PC or pair it over Bluetooth. It keeps working while chiaki-ng is minimised." },
         };
         int tip;
@@ -1218,8 +1218,8 @@ namespace SmoovPlay
             if (updateMode)
             {
                 SetStep(4);
-                T("DoneSub").Text = "Updated to " + V(BuildInfo.Version) + ". Opening SmoovPlay...";
-                T("BtnOpenText").Text = "Open SmoovPlay";
+                T("DoneSub").Text = "Updated to " + V(BuildInfo.Version) + ". Opening Keel...";
+                T("BtnOpenText").Text = "Open Keel";
                 var reopen = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
                 reopen.Tick += (s, e) => { reopen.Stop(); OpenAfterInstall(); };
                 reopen.Start();
@@ -1227,12 +1227,12 @@ namespace SmoovPlay
             else if (setupMode)
             {
                 SetStep(4);
-                T("DoneSub").Text = "It's in your Start menu too. Next, SmoovPlay walks you through connecting your PS5: about five minutes, once.";
-                T("BtnOpenText").Text = "Open SmoovPlay";
+                T("DoneSub").Text = "It's in your Start menu too. Next, Keel walks you through connecting your PS5: about five minutes, once.";
+                T("BtnOpenText").Text = "Open Keel";
             }
             else
             {
-                T("DoneSub").Text = finishSetup ? "Everything's downloaded and your graphics card is ready." : "Every part of SmoovPlay is in place.";
+                T("DoneSub").Text = finishSetup ? "Everything's downloaded and your graphics card is ready." : "Every part of Keel is in place.";
                 T("BtnOpenText").Text = "Let's play";
             }
             finishSetup = false;
@@ -1245,7 +1245,7 @@ namespace SmoovPlay
         {
             if (setupMode)
             {
-                try { Process.Start(new ProcessStartInfo(Path.Combine(paths.Install, "SmoovPlay.exe")) { WorkingDirectory = paths.Install }); }
+                try { Process.Start(new ProcessStartInfo(Path.Combine(paths.Install, "Keel.exe")) { WorkingDirectory = paths.Install }); }
                 catch (Exception e) { Toast("Couldn't open it: " + e.Message, true); return; }
                 allowClose = true;
                 Window.Close();
@@ -1253,7 +1253,7 @@ namespace SmoovPlay
             }
             T("CheckOverline").Text = "PC CHECK";
             T("CheckTitle").Text = "Your PC";
-            T("CheckSub").Text = "What SmoovPlay found. Anything that needs attention can be fixed from here.";
+            T("CheckSub").Text = "What Keel found. Anything that needs attention can be fixed from here.";
             Nav(prefs.Contains("guide-done") ? "PagePlay" : "PageGuide");
         }
 
@@ -1449,7 +1449,7 @@ namespace SmoovPlay
         }
 
         // ---- App window mode's keys (WindowKeys.cs) --------------------------------------------------------------
-        // The app keeps the keyboard, so SmoovPlay's keys come through Windows from anywhere: listed here, with what
+        // The app keeps the keyboard, so Keel's keys come through Windows from anywhere: listed here, with what
         // each gets on this PC (another program can have one), and changed by clicking one and pressing new keys.
         bool keysEditing;
         string keyListening;  // the action whose new keys are being pressed, or null
@@ -1487,7 +1487,7 @@ namespace SmoovPlay
             };
             DockPanel.SetDock(change, Dock.Right);
             head.Children.Add(change);
-            head.Children.Add(new TextBlock { Text = "SmoovPlay's keys while you play", FontSize = 13.5, FontWeight = FontWeights.SemiBold, Foreground = R("Text") });
+            head.Children.Add(new TextBlock { Text = "Keel's keys while you play", FontSize = 13.5, FontWeight = FontWeights.SemiBold, Foreground = R("Text") });
             sp.Children.Add(head);
             sp.Children.Add(new TextBlock { Text = "The app keeps the keyboard, so M, F and Esc go to it. These work from anywhere:", FontSize = 12, Foreground = R("Text2"),
                                             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 3, 0, 8) });
@@ -1541,7 +1541,7 @@ namespace SmoovPlay
             }
             sp.Children.Add(grid);
 
-            // keys another program has: what SmoovPlay uses instead
+            // keys another program has: what Keel uses instead
             foreach (var a in WindowKeys.Actions)
             {
                 string k = got.ContainsKey(a.Id) ? got[a.Id] : null;
@@ -1669,7 +1669,7 @@ namespace SmoovPlay
             var others = Chiaki.Others(paths);
             if (others.Length == 0) { StartSession(test); return; }
             Ask("\uE7BA", "Warn", "chiaki-ng is already open",
-                "SmoovPlay didn't start that copy, so it isn't passing the video on. Close it so SmoovPlay can open it again? A stream running in it ends.",
+                "Keel didn't start that copy, so it isn't passing the video on. Close it so Keel can open it again? A stream running in it ends.",
                 "Close it and play", "Play anyway", "Cancel", r =>
                 {
                     if (r == 1) Task.Run(() => { Chiaki.Close(others); OnUi(() => StartSession(test)); });
@@ -1736,10 +1736,10 @@ namespace SmoovPlay
             bool running = busy || st == PlayState.Playing;
             switch (st)
             {
-                case PlayState.Starting: title = "Starting SmoovPlay"; sub = "Waking up the AI model..."; break;
+                case PlayState.Starting: title = "Starting Keel"; sub = "Waking up the AI model..."; break;
                 case PlayState.Waiting:
                     title = "Waiting for your stream";
-                    sub = source.Kind == "tap" ? "Start the app that sends its frames to SmoovPlay. Its smooth video opens as soon as they come."
+                    sub = source.Kind == "tap" ? "Start the app that sends its frames to Keel. Its smooth video opens as soon as they come."
                         : "chiaki-ng is open. Connect to your PS5 there and start Remote Play.";
                     break;
                 case PlayState.Found: title = "Stream found"; sub = (detail != null ? detail + ". " : "") + "Loading the AI model..."; break;
@@ -1765,14 +1765,14 @@ namespace SmoovPlay
                 case PlayState.Ended: title = "The stream ended"; sub = "Press Play to connect again."; break;
                 case PlayState.Stopped: title = "Stopped"; sub = "Press Play to start again."; break;
                 case PlayState.Error:
-                    title = "SmoovPlay stopped";
+                    title = "Keel stopped";
                     sub = Shorten(detail ?? "It stopped unexpectedly.", 180) + "  Copy diagnostics puts the details on the clipboard for a bug report.";
                     break;
                 default:
                     title = "Ready when you are";
                     sub = source.RemotePlay ? "Press Play. chiaki-ng opens: connect to your PS5 there, and the smooth video appears in its own window."
                         : source.Kind == "capture" ? "Press Play. The smooth video from your capture card appears in its own window."
-                        : source.Kind == "window" ? "Press Play. The smooth picture appears over the app's window, which keeps the keyboard and the controller. SmoovPlay's own keys are below."
+                        : source.Kind == "window" ? "Press Play. The smooth picture appears over the app's window, which keeps the keyboard and the controller. Keel's own keys are below."
                         : source.Kind == "tap" ? "Press Play, then start the app. Its smooth video appears in its own window."
                         : "Press Play to play the test video.";
                     break;
@@ -1788,7 +1788,7 @@ namespace SmoovPlay
             Show(E<ShapePath>("PlayTri"), !running);
             Show(E("PlayStop"), running);
             AutomationProperties.SetName(B("PlayButton"), running ? "Stop" : "Play");
-            B("PlayButton").ToolTip = running ? (source.RemotePlay ? "Stop SmoovPlay (chiaki-ng stays open)" : "Stop SmoovPlay") : null;
+            B("PlayButton").ToolTip = running ? (source.RemotePlay ? "Stop Keel (chiaki-ng stays open)" : "Stop Keel") : null;
             E("PlayLive").Visibility = st == PlayState.Playing ? Visibility.Visible : Visibility.Hidden;
             var spin = E<Ellipse>("PlaySpin");
             if (busy)
@@ -1917,7 +1917,7 @@ namespace SmoovPlay
             var others = Chiaki.Others(paths);
             if (others.Length > 0) { Toast("chiaki-ng is already open", false); return; }
             if (Chiaki.Start(paths, l => playLog.Add(l))) Toast("Opening chiaki-ng...", false);
-            else Toast("chiaki-ng wasn't found in the install folder. Repair SmoovPlay from Help.", true);
+            else Toast("chiaki-ng wasn't found in the install folder. Repair Keel from Help.", true);
         }
 
         // ------------------------------------------------------------------------------------------- setup guides
@@ -1928,34 +1928,34 @@ namespace SmoovPlay
             new[] { "rest", "Let it wake from rest mode (optional)", "Settings → System → Power Saving → Features Available in Rest Mode: turn on Stay Connected to the Internet and Enable Turning On PS5 from Network.", null },
             new[] { "psn", "Sign in to PSN in chiaki-ng", "Open chiaki-ng. When it asks, sign in to PlayStation Network in the browser window it opens, then paste the address you land on back into chiaki-ng.", "chiaki" },
             new[] { "register", "Register your PS5", "chiaki-ng finds consoles on your network. Click the one marked Automatic Registration Available and choose Yes. Not offered? Use a PIN from the PS5: Settings → System → Remote Play → Link Device.", null },
-            new[] { "video", "Stream at 60 fps", "In chiaki-ng's settings, under Video: resolution 1080p (720p on a weak connection) and 60 fps. For HDR, pick the H.265 HDR codec and turn on HDR (Experimental) in SmoovPlay's Settings (Picture); otherwise pick a codec without HDR. SmoovPlay warns you if it's set differently.", null },
+            new[] { "video", "Stream at 60 fps", "In chiaki-ng's settings, under Video: resolution 1080p (720p on a weak connection) and 60 fps. For HDR, pick the H.265 HDR codec and turn on HDR (Experimental) in Keel's Settings (Picture); otherwise pick a codec without HDR. Keel warns you if it's set differently.", null },
             new[] { "hdcp", "Black picture? Turn off HDCP", "Only if you need it: if the picture stays black, or the PS5 says the content can't be shown, go to Settings → System → HDMI on the PS5, turn off Enable HDCP and connect again. Video apps like Netflix need HDCP, so turn it back on when you're done playing.", null },
             new[] { "controller", "Connect your controller", "Plug it into the PC with USB or pair it over Bluetooth. It keeps working while chiaki-ng is minimised.", null },
-            new[] { "play", "Press Play", "Always start from SmoovPlay: press Play, then connect to your PS5 in chiaki-ng. The smooth video opens in its own window.", "play" },
+            new[] { "play", "Press Play", "Always start from Keel: press Play, then connect to your PS5 in chiaki-ng. The smooth video opens in its own window.", "play" },
         };
 
         static readonly string[][] WindowGuide =
         {
             new[] { "window-app", "Open the app and start a game", "PS Remote Play, the Xbox app, Moonlight, or a browser for cloud gaming. If the app has a frame rate setting, pick 60 fps.", null },
-            new[] { "window-screen", "Keep its window on screen", "Not minimised, and on the monitor plugged into the graphics card. SmoovPlay covers it with the smooth picture (or the whole monitor, in fullscreen) and leaves itself out of what it captures.", null },
+            new[] { "window-screen", "Keep its window on screen", "Not minimised, and on the monitor plugged into the graphics card. Keel covers it with the smooth picture (or the whole monitor, in fullscreen) and leaves itself out of what it captures.", null },
             new[] { "window-sound", "Sound and controller", "The app keeps the controller, the keyboard and its own sound. Its sound comes a little ahead of the smooth picture.", null },
-            new[] { "window-play", "Pick the window, then press Play", "Choose the app's window under the source buttons on the Play page. The app keeps the keyboard, so SmoovPlay's keys use Ctrl+Alt: Ctrl+Alt+M menu, Ctrl+Alt+F fullscreen, Ctrl+Alt+Esc quit. The Play page lists them all, and you can change them there.", "play" },
+            new[] { "window-play", "Pick the window, then press Play", "Choose the app's window under the source buttons on the Play page. The app keeps the keyboard, so Keel's keys use Ctrl+Alt: Ctrl+Alt+M menu, Ctrl+Alt+F fullscreen, Ctrl+Alt+Esc quit. The Play page lists them all, and you can change them there.", "play" },
         };
 
         static readonly string[][] CaptureGuide =
         {
             new[] { "capture-wire", "Connect the card", "The console's HDMI output goes into the card's HDMI input, and the card into this PC: USB 3 (a blue port) or a PCIe slot. A card with an HDMI output can pass the picture on to your TV too.", null },
             new[] { "capture-hdcp", "Turn off HDCP on a PS5", "On the PS5: Settings → System → HDMI → turn off Enable HDCP. With it on, the card only gets a blank picture. Turn it back on when you're done: video apps like Netflix need it. Xbox and Switch games don't need this.", null },
-            new[] { "capture-mode", "1080p, 60 Hz, HDR off", "Set the console's video output to 1080p at 60 Hz, with HDR off. SmoovPlay expects a 60 Hz signal, in which a 30 fps game shows each frame twice. Picked a higher Capture card resolution in Settings (Experimental)? Set the console to that instead.", null },
-            new[] { "capture-sound", "Sound and controller", "Your controller stays connected to the console as usual. SmoovPlay plays the card's sound on this PC, held back to meet the smooth picture. If you'd rather listen through the card's HDMI output, pick no sound for the card on the Play page.", null },
+            new[] { "capture-mode", "1080p, 60 Hz, HDR off", "Set the console's video output to 1080p at 60 Hz, with HDR off. Keel expects a 60 Hz signal, in which a 30 fps game shows each frame twice. Picked a higher Capture card resolution in Settings (Experimental)? Set the console to that instead.", null },
+            new[] { "capture-sound", "Sound and controller", "Your controller stays connected to the console as usual. Keel plays the card's sound on this PC, held back to meet the smooth picture. If you'd rather listen through the card's HDMI output, pick no sound for the card on the Play page.", null },
             new[] { "capture-play", "Press Play", "The smooth video from the card opens in its own window.", "play" },
         };
 
         static readonly string[][] TapGuide =
         {
-            new[] { "tap-app", "For app developers: an app that sends its frames to SmoovPlay", "An app built for it can hand its frames straight to SmoovPlay, saying which are repeats, so nothing is captured from the screen. The format is docs/frame-tap.md in SmoovPlay's GitHub repo. For the Xbox app, PS Remote Play, Moonlight or a browser, pick App window instead.", null },
+            new[] { "tap-app", "For app developers: an app that sends its frames to Keel", "An app built for it can hand its frames straight to Keel, saying which are repeats, so nothing is captured from the screen. The format is docs/frame-tap.md in Keel's GitHub repo. For the Xbox app, PS Remote Play, Moonlight or a browser, pick App window instead.", null },
             new[] { "tap-sound", "Sound and controller", "The app keeps the controller and plays its own sound.", null },
-            new[] { "tap-play", "Press Play, then start the app", "Either can go first: SmoovPlay waits for the app's frames, then the smooth video opens in its own window.", "play" },
+            new[] { "tap-play", "Press Play, then start the app", "Either can go first: Keel waits for the app's frames, then the smooth video opens in its own window.", "play" },
         };
 
         string[][] GuideSteps
@@ -1975,8 +1975,8 @@ namespace SmoovPlay
             bool ps5 = source.RemotePlay;
             T("GuideOverline").Text = ps5 || source.Kind == "capture" ? "ONE-TIME SETUP  ·  ABOUT 5 MINUTES" : source.Kind == "window" ? "ONE-TIME SETUP  ·  ABOUT 2 MINUTES" : "TESTING";
             T("GuideTitle").Text = ps5 ? "Connect your PS5" : source.Kind == "capture" ? "Set up your capture card" : source.Kind == "window" ? "Set up window capture" : source.Name;
-            T("GuideSub").Text = ps5 ? "SmoovPlay gets the picture from chiaki-ng, a free, unofficial Remote Play app that comes with it. Sony doesn't make or support it. Tick each step as you go; SmoovPlay remembers."
-                : "SmoovPlay gets the picture from " + (source.Kind == "capture" ? "a capture card between your console and this PC" : source.Kind == "window" ? "another app's window on this PC" : "a video file") + ". Tick each step as you go; SmoovPlay remembers.";
+            T("GuideSub").Text = ps5 ? "Keel gets the picture from chiaki-ng, a free, unofficial Remote Play app that comes with it. Sony doesn't make or support it. Tick each step as you go; Keel remembers."
+                : "Keel gets the picture from " + (source.Kind == "capture" ? "a capture card between your console and this PC" : source.Kind == "window" ? "another app's window on this PC" : "a video file") + ". Tick each step as you go; Keel remembers.";
             Show(B("BtnGuideDocs"), ps5);
             Show(B("BtnGuideChiaki"), ps5);
             var host = E<StackPanel>("GuideSteps");
@@ -2115,7 +2115,7 @@ namespace SmoovPlay
         void AskRepair()
         {
             if (session != null && session.Running) { Toast("Stop playing first", true); return; }
-            Ask("\uE90F", "Accent", "Repair SmoovPlay",
+            Ask("\uE90F", "Accent", "Repair Keel",
                 "A quick repair checks every part and puts back anything missing (a few minutes). A full repair downloads everything again (about 5 GB).",
                 "Quick repair", "Full repair", "Cancel", r => { if (r == 1 || r == 2) UnlessSaving("Repairing", () => StartInstall(false, r == 2)); });
         }
@@ -2129,7 +2129,7 @@ namespace SmoovPlay
             if (session != null && session.Running) { Toast("Stop playing first, then update", true); return; }
             bool chiaki = Updater.ChiakiInInstall(paths).Length > 0;
             Ask("\uE896", "Accent", "Update to " + V(updateTag) + "?",
-                "SmoovPlay downloads it (about 140 MB), closes, updates in a minute or two and opens again. " +
+                "Keel downloads it (about 140 MB), closes, updates in a minute or two and opens again. " +
                 "Your settings, looks and clips stay." + (chiaki ? " chiaki-ng closes too, since it's updated with it." : ""),
                 "Update now", "What's new", "Later", r =>
                 {
@@ -2202,7 +2202,7 @@ namespace SmoovPlay
         void AskUninstall()
         {
             if (session != null && session.Running) { Toast("Stop playing first", true); return; }
-            Ask("\uE74D", "Bad", "Uninstall SmoovPlay?", "This removes SmoovPlay from " + paths.Install + ". Your settings are kept, in case you come back.",
+            Ask("\uE74D", "Bad", "Uninstall Keel?", "This removes Keel from " + paths.Install + ". Your settings are kept, in case you come back.",
                 "Uninstall", null, "Cancel", r =>
                 {
                     if (r != 1) return;
@@ -2210,7 +2210,7 @@ namespace SmoovPlay
                     {
                         try
                         {
-                            Process.Start(new ProcessStartInfo(Path.Combine(paths.Install, "SmoovPlay.exe"), "--uninstall --yes") { WorkingDirectory = Path.GetTempPath() });
+                            Process.Start(new ProcessStartInfo(Path.Combine(paths.Install, "Keel.exe"), "--uninstall --yes") { WorkingDirectory = Path.GetTempPath() });
                             allowClose = true;
                             Window.Close();
                         }
@@ -2275,7 +2275,7 @@ namespace SmoovPlay
             foreach (var v in started) savingKnown[v.Pid] = v.Out;
             if (started.Count > 0)
                 Toast((started.Count == 1 ? "A before & after video is" : started.Count + " before & after videos are")
-                    + " being made, usually for a minute or two. It carries on if you close SmoovPlay.", false);
+                    + " being made, usually for a minute or two. It carries on if you close Keel.", false);
             if (savingKnown.Count == 0) savingTimer.Stop();
         }
 
@@ -2432,7 +2432,7 @@ namespace SmoovPlay
             if (installer != null)
             {
                 e.Cancel = true;
-                Ask("\uE769", "Accent", "Setup is still running", "Stop it now? Running SmoovPlay again picks up where it stopped.",
+                Ask("\uE769", "Accent", "Setup is still running", "Stop it now? Running Keel again picks up where it stopped.",
                     "Stop and close", null, "Keep going", r =>
                     {
                         if (r != 1) return;
@@ -2446,7 +2446,7 @@ namespace SmoovPlay
             if (session != null && session.Running)
             {
                 e.Cancel = true;
-                Ask("\uE768", "Accent", "SmoovPlay is running", "Stop it and close? chiaki-ng stays open.", "Stop and close", null, "Keep playing", r =>
+                Ask("\uE768", "Accent", "Keel is running", "Stop it and close? chiaki-ng stays open.", "Stop and close", null, "Keep playing", r =>
                 {
                     if (r != 1) return;
                     // Closes once the session has gone: it finishes a clip being saved first (a second or two).

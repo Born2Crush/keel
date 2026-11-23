@@ -131,7 +131,7 @@ def test_the_no_picture_hints(monkeypatch):
         src._beat = clock[0]
         assert src.why() == ""
         src._no_header = True
-        assert "started before SmoovPlay" in src.why() and "Ctrl+O" in src.why()
+        assert "started before Keel" in src.why() and "Ctrl+O" in src.why()
         clock[0] += 5
         src._ring = (src.tap.header().write_seq, clock[0])
         assert "decoder has stopped" in src.why()  # the reader's loop hasn't gone round for 5 s

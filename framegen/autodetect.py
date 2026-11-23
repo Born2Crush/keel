@@ -363,7 +363,7 @@ def recommend(current: dict, timing: dict, display: Display | None, *, gpu: str 
                              "faster of the two for each.")
     else:
         reasons["engine"] = ("TensorRT isn't installed, so Auto uses PyTorch, about 12% slower at full motion "
-                             "detail. Repair SmoovPlay, on the Help page, puts it back.")
+                             "detail. Repair Keel, on the Help page, puts it back.")
     if timing["full"].get("estimated"):
         notes.append("TensorRT hasn't been set up for this graphics card yet, so its speed is estimated. It does "
                      "that the first time you play, in a minute or two.")

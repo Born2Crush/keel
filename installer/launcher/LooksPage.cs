@@ -1,18 +1,18 @@
-// The launcher's Looks page: SmoovPlay's own looks and the user's (framegen/looks.py), and an editor for them laid
+// The launcher's Looks page: Keel's own looks and the user's (framegen/looks.py), and an editor for them laid
 // out like the nodes of a color grading app: a look is a stack of effects, applied top to bottom, each with a switch,
 // an amount and its own settings.
 //
-// The effect types, their settings and SmoovPlay's looks come from the pipeline (python -m framegen.looks schema),
+// The effect types, their settings and Keel's looks come from the pipeline (python -m framegen.looks schema),
 // so a new effect shows up here with no launcher change. The user's looks are JSON files in %APPDATA%\framegen\looks
 // ("my:<file name>"), which this page writes itself (framegen/looks.py reads and cleans them); share codes and LUT
 // files go through python -m framegen.looks (encode, import, add-lut).
 //
 // While playing, the video shows the look picked here, live: changes go to the running pipeline as
 // "look-show <JSON>" (framegen/remote.py), at most 25 times a second, and leaving the page sends "look-hide", so the
-// video goes back to the Look settings' look. "Use this look" sets those (look, look_on). SmoovPlay's own looks can
+// video goes back to the Look settings' look. "Use this look" sets those (look, look_on). Keel's own looks can
 // be changed freely to try things: the changes stay in memory (presetOriginal keeps what each was) and show on the
 // preview and the video, and nothing is written until "Save as mine" makes a copy of yours ("My Cinematic"). Reset,
-// or putting every change back, makes it SmoovPlay's look again.
+// or putting every change back, makes it Keel's look again.
 
 using System;
 using System.Collections.Generic;
@@ -31,7 +31,7 @@ using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 
-namespace SmoovPlay
+namespace Keel
 {
     partial class Ui
     {
@@ -51,7 +51,7 @@ namespace SmoovPlay
 
         class LookEntry
         {
-            public string Id, Name, Code, File;  // Code: SmoovPlay's looks only (yours are encoded when copied)
+            public string Id, Name, Code, File;  // Code: Keel's looks only (yours are encoded when copied)
             public bool Builtin;
             public Dictionary<string, object> Look;  // {"name", "nodes": List of node dictionaries}
         }
@@ -66,7 +66,7 @@ namespace SmoovPlay
         string lookScrolledTo;  // the look the list last scrolled to
         Session lookShownTo;  // the session a look-show went to (and no look-hide since)
         readonly Dictionary<string, List<bool>> lookOpen = new Dictionary<string, List<bool>>();  // look id -> nodes open
-        // One of SmoovPlay's looks with changes being tried: its id -> the look as it was (JSON). Gone on Reset, on
+        // One of Keel's looks with changes being tried: its id -> the look as it was (JSON). Gone on Reset, on
         // Save as mine, or once the changes are all put back.
         readonly Dictionary<string, string> presetOriginal = new Dictionary<string, string>();
         DispatcherTimer lookTimer;
@@ -162,7 +162,7 @@ namespace SmoovPlay
                     Id = (string)e["id"], Name = (string)e["name"], Builtin = (bool)e["builtin"], Look = look,
                     Code = e.ContainsKey("code") ? e["code"] as string : null, File = e.ContainsKey("path") ? e["path"] as string : null,
                 };
-                // A reload (a pasted code, say) keeps the changes being tried on SmoovPlay's looks.
+                // A reload (a pasted code, say) keeps the changes being tried on Keel's looks.
                 var was = entry.Builtin && presetOriginal.ContainsKey(entry.Id) && lookEntries != null ? lookEntries.FirstOrDefault(x => x.Id == entry.Id) : null;
                 if (was != null) entry.Look = was.Look;
                 entries.Add(entry);
@@ -187,7 +187,7 @@ namespace SmoovPlay
         }
 
         bool LookInUse(string id) { return SettingText("look_on") == "true" && (SettingText("look") ?? "cinematic") == id; }
-        /// <summary>One of SmoovPlay's looks with changes being tried (not saved anywhere).</summary>
+        /// <summary>One of Keel's looks with changes being tried (not saved anywhere).</summary>
         bool Changed(LookEntry e) { return e != null && e.Builtin && presetOriginal.ContainsKey(e.Id); }
 
         List<bool> OpenFlags(LookEntry e)
@@ -208,8 +208,8 @@ namespace SmoovPlay
             bool live = LooksLive;
             Show(E("LooksLive"), live);
             T("LooksStatus").Text =
-                looksError != null ? "Couldn't load the looks: " + Shorten(looksError, 160) + ". Repair SmoovPlay, on the Help page, puts back anything missing."
-                : !paths.RuntimeReady ? "Finish setting up SmoovPlay first."
+                looksError != null ? "Couldn't load the looks: " + Shorten(looksError, 160) + ". Repair Keel, on the Help page, puts back anything missing."
+                : !paths.RuntimeReady ? "Finish setting up Keel first."
                 : lookEntries == null ? "Loading..."
                 : live ? "The video shows the look you pick here, as you change it. Use this look keeps it on after you leave this page."
                 : "Effects on top of the picture, applied top to bottom. Press Play to see changes live. While you play, K turns the look on and off and J goes to the next one.";
@@ -228,7 +228,7 @@ namespace SmoovPlay
             var list = E<StackPanel>("LooksList");
             list.Children.Clear();
             if (lookEntries == null) return;
-            // SmoovPlay's looks always first, so they stay where they are: the first change to one of them adds a look
+            // Keel's looks always first, so they stay where they are: the first change to one of them adds a look
             // of yours, and with yours on top that pushed every row down, under the pointer, between two clicks.
             var mine = lookEntries.Where(x => !x.Builtin).ToList();
             FrameworkElement picked = null;
@@ -346,8 +346,8 @@ namespace SmoovPlay
             left.Children.Add(new TextBlock
             {
                 Style = S("Small"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap,
-                Text = changed ? "Changed here, not saved. Save as mine keeps it as a look of your own; Reset puts SmoovPlay's back."
-                     : e.Builtin ? "One of SmoovPlay's looks. Try any change: Save as mine keeps it as a look of your own."
+                Text = changed ? "Changed here, not saved. Save as mine keeps it as a look of your own; Reset puts Keel's back."
+                     : e.Builtin ? "One of Keel's looks. Try any change: Save as mine keeps it as a look of your own."
                      : "Yours. Changes are saved as you make them.",
             });
             g.Children.Add(left);
@@ -360,7 +360,7 @@ namespace SmoovPlay
                                         ToolTip = "Keeps this as a look of your own (My " + e.Name + "), to use, change more and share. " + e.Name + " stays as it was." };
                 save.Click += (s, ev) => SaveAsMine(e);
                 buttons.Children.Add(save);
-                var reset = new Button { Style = S("Ghost"), Height = 36, Margin = new Thickness(8, 0, 0, 0), Content = "Reset", ToolTip = "Puts " + e.Name + " back the way SmoovPlay has it." };
+                var reset = new Button { Style = S("Ghost"), Height = 36, Margin = new Thickness(8, 0, 0, 0), Content = "Reset", ToolTip = "Puts " + e.Name + " back the way Keel has it." };
                 reset.Click += (s, ev) => ResetPreset(e);
                 buttons.Children.Add(reset);
             }
@@ -368,14 +368,14 @@ namespace SmoovPlay
             {
                 bool inUse = LookInUse(e.Id), locked = SessionRunning && !LooksLive;
                 var use = new Button { Style = S(inUse ? "Secondary" : "Primary"), Height = 36, Padding = new Thickness(16, 0, 16, 0), Content = inUse ? "Turn the look off" : "Use this look", IsEnabled = !locked };
-                use.ToolTip = locked ? "SmoovPlay is starting. Try again once the video is on screen."
+                use.ToolTip = locked ? "Keel is starting. Try again once the video is on screen."
                     : inUse ? "Plays without a look. K in the video window turns it back on."
                     : "Turns this look on, now and next time. K in the video window turns it off and on.";
                 ToolTipService.SetShowOnDisabled(use, true);
                 use.Click += (s, ev) => UseLook(e, !inUse);
                 buttons.Children.Add(use);
             }
-            var copy = new Button { Style = S("Ghost"), Height = 36, Margin = new Thickness(8, 0, 0, 0), Content = "Copy code", ToolTip = "Copies a short code for this look. Anyone with SmoovPlay can paste it on their Looks page to get the same look." };
+            var copy = new Button { Style = S("Ghost"), Height = 36, Margin = new Thickness(8, 0, 0, 0), Content = "Copy code", ToolTip = "Copies a short code for this look. Anyone with Keel can paste it on their Looks page to get the same look." };
             copy.Click += (s, ev) => CopyLookCode(e);
             buttons.Children.Add(copy);
             if (!e.Builtin)
@@ -501,7 +501,7 @@ namespace SmoovPlay
                     if (n == current) drop.SelectedItem = item;
                 }
                 var add = new ComboBoxItem { Style = S("DropItem"), Content = "Add a .cube file...", Tag = "" };
-                AutomationProperties.SetHelpText(add, "Copies a LUT made in DaVinci Resolve, Photoshop or another app into SmoovPlay's looks folder.");
+                AutomationProperties.SetHelpText(add, "Copies a LUT made in DaVinci Resolve, Photoshop or another app into Keel's looks folder.");
                 drop.Items.Add(add);
                 drop.SelectionChanged += (s, ev) =>
                 {
@@ -611,7 +611,7 @@ namespace SmoovPlay
         }
 
         // ---- changes
-        /// <summary>The picked look, ready to change. A change to one of SmoovPlay's looks is a try-out: what it was is
+        /// <summary>The picked look, ready to change. A change to one of Keel's looks is a try-out: what it was is
         /// kept (Reset), and nothing is written until Save as mine.</summary>
         LookEntry EditablePicked()
         {
@@ -630,7 +630,7 @@ namespace SmoovPlay
             return look;
         }
 
-        /// <summary>Puts one of SmoovPlay's looks back the way it was before the changes tried on it.</summary>
+        /// <summary>Puts one of Keel's looks back the way it was before the changes tried on it.</summary>
         void RestorePreset(LookEntry e)
         {
             string was;
@@ -647,7 +647,7 @@ namespace SmoovPlay
             PreviewPicked();
         }
 
-        /// <summary>The changes tried on one of SmoovPlay's looks become a look of yours ("My Cinematic"); SmoovPlay's
+        /// <summary>The changes tried on one of Keel's looks become a look of yours ("My Cinematic"); Keel's
         /// goes back to how it was.</summary>
         void SaveAsMine(LookEntry e)
         {
@@ -704,11 +704,11 @@ namespace SmoovPlay
             string was;
             if (e.Builtin && presetOriginal.TryGetValue(e.Id, out was) && Json.Serialize(e.Look) == was)
             {
-                presetOriginal.Remove(e.Id);  // every change put back: SmoovPlay's look again
+                presetOriginal.Remove(e.Id);  // every change put back: Keel's look again
                 RenderLookList();
                 RenderLookHead();
             }
-            lookSaveDue = e;  // (SaveLook leaves SmoovPlay's looks alone)
+            lookSaveDue = e;  // (SaveLook leaves Keel's looks alone)
             lookSaveAt = DateTime.UtcNow.AddMilliseconds(500);
             lookHidden = false;
             if (LooksLive) lookSendDue = true;
@@ -852,7 +852,7 @@ namespace SmoovPlay
                 if (!on) { lookSendDue = false; HidePreview(); }
                 return;  // its state line confirms it, and the page follows
             }
-            if (SessionRunning) { Toast("SmoovPlay is starting. Try again once the video is on screen.", true); return; }
+            if (SessionRunning) { Toast("Keel is starting. Try again once the video is on screen.", true); return; }
             try
             {
                 if (on) WriteSetting("look", e.Id);
@@ -872,7 +872,7 @@ namespace SmoovPlay
             {
                 try
                 {
-                    file = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SmoovPlay-look-code.json");
+                    file = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Keel-look-code.json");
                     var data = new Dictionary<string, object> { { "version", 1 }, { "name", "My " + e.Name }, { "nodes", Nodes(e) } };
                     File.WriteAllText(file, Json.Serialize(data), new UTF8Encoding(false));
                 }
@@ -895,7 +895,7 @@ namespace SmoovPlay
         {
             try { Clipboard.SetText(code); }
             catch (Exception ex) { Toast("Couldn't copy it: " + ex.Message, true); return; }
-            Toast("Copied the look's code. Anyone with SmoovPlay can paste it on their Looks page.", false);
+            Toast("Copied the look's code. Anyone with Keel can paste it on their Looks page.", false);
         }
 
         void PasteLookCode()

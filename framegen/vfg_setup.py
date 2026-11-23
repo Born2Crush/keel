@@ -119,17 +119,17 @@ def install(folder: str, proxy: str = "") -> int:
         return 2
     target = Path(folder)
     if target.exists() and read_marker(folder) is None and any(target.iterdir()):
-        print(f"[vfg] {folder} already has files that SmoovPlay didn't put there; not touching it")
+        print(f"[vfg] {folder} already has files that Keel didn't put there; not touching it")
         return 2
     staging = target.with_name(target.name + ".partial")
     sentinel = staging / ".smoovplay-staging"
     if staging.exists():
         if not sentinel.exists():
-            print(f"[vfg] {staging} is in the way and isn't SmoovPlay's; move it and try again")
+            print(f"[vfg] {staging} is in the way and isn't Keel's; move it and try again")
             return 2
         shutil.rmtree(staging)  # a stopped earlier attempt
     staging.mkdir(parents=True)
-    sentinel.write_text("SmoovPlay is installing NVIDIA VFG here; deleted when it's done\n", encoding="utf-8")
+    sentinel.write_text("Keel is installing NVIDIA VFG here; deleted when it's done\n", encoding="utf-8")
     with tempfile.TemporaryDirectory(dir=target.parent) as tmp:
         req = Path(tmp) / "vfg-requirements.txt"
         req.write_text(f"{PACKAGE}=={VERSION} --hash=sha256:{WHEEL_SHA256}\n", encoding="utf-8")
@@ -169,12 +169,12 @@ def remove(folder: str) -> int:
         print("[vfg] not installed")
         return 0
     if read_marker(folder) is None:
-        print(f"[vfg] {folder} wasn't installed by SmoovPlay; not removing it")
+        print(f"[vfg] {folder} wasn't installed by Keel; not removing it")
         return 2
     try:
         shutil.rmtree(target)
     except OSError as e:  # e.g. a running session still has its DLLs loaded
-        print(f"[vfg] couldn't remove it ({e}). Close SmoovPlay's video window and try again.")
+        print(f"[vfg] couldn't remove it ({e}). Close Keel's video window and try again.")
         return 1
     print(f"[vfg] removed {folder}")
     return 0
@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(st))
         else:
             print(f"folder: {folder or '(FRAMEGEN_VFX_PATH not set)'}\ninstalled: {st['installed']}"
-                  f"{' (by SmoovPlay, ' + st['version'] + ')' if st['ours'] else ''}\n"
+                  f"{' (by Keel, ' + st['version'] + ')' if st['ours'] else ''}\n"
                   f"graphics card: {st['gpu'] or 'none found'}{' - ' + st['unsupported'] if st['unsupported'] else ''}")
         return 0
     if not folder:

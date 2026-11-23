@@ -6,7 +6,7 @@ using System;
 using System.IO;
 using System.Security.Cryptography;
 
-namespace SmoovPlay
+namespace Keel
 {
     static class SignUpdateTool
     {

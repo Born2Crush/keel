@@ -1,7 +1,7 @@
 """HDR from PS5 Remote Play: settings "hdr" (off by default; with it off nothing here runs).
 
 A PS5 streaming in HDR (chiaki-ng's H.265 HDR codec) sends 10-bit H.265 in HDR10: BT.2020 colours and PQ (SMPTE
-ST 2084) brightness, up to 10,000 nits. The rest of SmoovPlay works on 8-bit SDR frames, where that comes out washed
+ST 2084) brightness, up to 10,000 nits. The rest of Keel works on 8-bit SDR frames, where that comes out washed
 out, so framegen/chiaki_tap.py hands each decoded frame to a StreamConverter, which makes the pipeline's frames:
 
   "sdr"   (HDR stream, shown in SDR) 8-bit SDR, tone-mapped on the GPU as each frame is decoded: PQ to light, BT.2390's

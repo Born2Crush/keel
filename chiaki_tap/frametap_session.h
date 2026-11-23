@@ -1,4 +1,4 @@
-// SmoovPlay's frame tap, as chiaki-ng's StreamSession uses it. Everything the tap does inside chiaki-ng lives in
+// Keel's frame tap, as chiaki-ng's StreamSession uses it. Everything the tap does inside chiaki-ng lives in
 // frametap_session.cpp; chiaki-ng's own files only get one-line calls to these (apply_patch.py) and one friend line
 // in streamsession.h, so a new chiaki-ng version is quick to patch.
 //
@@ -24,9 +24,9 @@ class FrameTapSession
 		static void End();
 		// When chiaki-ng sets up its sound output.
 		static void AudioFormat(unsigned int rate, size_t sample_size);
-		// In place of QueueAudioOutData: holds the sound back by SmoovPlay's picture delay when SmoovPlay asks.
+		// In place of QueueAudioOutData: holds the sound back by Keel's picture delay when Keel asks.
 		static void QueueAudio(StreamSession *session, const QByteArray &buf);
-		// At the top of PushAudioFrame: the game's sound as it arrives, for SmoovPlay's instant replay.
+		// At the top of PushAudioFrame: the game's sound as it arrives, for Keel's instant replay.
 		static void PushAudio(StreamSession *session, const int16_t *buf, size_t samples_count);
 
 	private:

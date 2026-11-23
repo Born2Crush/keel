@@ -16,7 +16,7 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Microsoft.Win32;
 
-namespace SmoovPlay
+namespace Keel
 {
     enum Level { Checking, Ok, Info, Warn, Fail }
 
@@ -121,7 +121,7 @@ namespace SmoovPlay
             string build = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows NT\CurrentVersion", "CurrentBuild", "0") as string ?? "0";
             int b; int.TryParse(build, out b);
             if (!Environment.Is64BitOperatingSystem || b < 10240)
-                c.Set(Level.Fail, "Not supported", "SmoovPlay needs 64-bit Windows 10 or 11.");
+                c.Set(Level.Fail, "Not supported", "Keel needs 64-bit Windows 10 or 11.");
             else
                 c.Set(Level.Ok, b >= 22000 ? "Windows 11" : "Windows 10", "64-bit, build " + b + ".");
         }
@@ -211,7 +211,7 @@ namespace SmoovPlay
             }
             if (GpuName == "unknown")
             {
-                c.Set(Level.Fail, "No graphics card found", "SmoovPlay needs a DirectX 12 graphics card: NVIDIA RTX, or AMD Radeon or Intel Arc (Experimental).");
+                c.Set(Level.Fail, "No graphics card found", "Keel needs a DirectX 12 graphics card: NVIDIA RTX, or AMD Radeon or Intel Arc (Experimental).");
                 c.Tip = "If this PC has an NVIDIA card, its driver may not be installed: get it from nvidia.com, then check again.";
                 c.WithFix("Get the driver", "driver");
                 return;
@@ -250,14 +250,14 @@ namespace SmoovPlay
             else if (DriverMajor < GoodDriver)
                 c.Set(Level.Warn, Driver, $"Works, but {GoodDriver} or newer is recommended (and needed for RTX 50 cards).").WithFix("Get the driver", "driver");
             else
-                c.Set(Level.Ok, Driver, "Up to date for SmoovPlay.");
+                c.Set(Level.Ok, Driver, "Up to date for Keel.");
         }
 
         /// <summary>PyTorch needs msvcp140.dll from the Visual C++ 2015-2022 runtime, and a recent one: binaries built with
         /// newer compilers crash with runtimes older than 14.40.</summary>
         static void VcRuntime(Check c)
         {
-            c.Tip = "The Microsoft Visual C++ 2015-2022 Redistributable (x64). Many games install it; SmoovPlay can download it " +
+            c.Tip = "The Microsoft Visual C++ 2015-2022 Redistributable (x64). Many games install it; Keel can download it " +
                     "from Microsoft and install it for you (Windows asks for permission).";
             string sys32 = Environment.GetFolderPath(Environment.SpecialFolder.System);
             string msvcp = Path.Combine(sys32, "msvcp140.dll");
@@ -292,7 +292,7 @@ namespace SmoovPlay
             string value = c.Value + $"  ·  {gb:0} GB memory";
             if (gb >= 12) c.Set(Level.Ok, value, c.Detail);
             else if (gb >= 8) c.Set(Level.Info, value, c.Detail + " Close big apps if the stream stutters.");
-            else c.Set(Level.Warn, value, "Under 8 GB of memory: SmoovPlay may run short while you play.");
+            else c.Set(Level.Warn, value, "Under 8 GB of memory: Keel may run short while you play.");
         }
 
         public static double FreeGB(string dir)
@@ -306,7 +306,7 @@ namespace SmoovPlay
             var root = Path.GetPathRoot(Path.GetFullPath(installDir)).TrimEnd('\\');
             double gb = FreeGB(installDir);
             if (gb >= NeedGB)
-                c.Set(Level.Ok, $"{gb:0} GB free on {root}", $"SmoovPlay needs about {NeedGB:0} GB.");
+                c.Set(Level.Ok, $"{gb:0} GB free on {root}", $"Keel needs about {NeedGB:0} GB.");
             else if (freshInstall)
                 c.Set(Level.Warn, $"{gb:0} GB free on {root}", $"About {NeedGB:0} GB is needed: pick another drive in the next step, or free some space.");
             else
@@ -334,7 +334,7 @@ namespace SmoovPlay
             var failed = new List<string>();
             using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) })
             {
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("SmoovPlay-installer/" + BuildInfo.Version);
+                http.DefaultRequestHeaders.UserAgent.ParseAdd("Keel-installer/" + BuildInfo.Version);
                 var tasks = Servers.Select(s => Task.Run(() =>
                 {
                     try
@@ -425,17 +425,17 @@ namespace SmoovPlay
             }
             if (bestNow == 0) { c.Set(Level.Info, "Unknown", ""); return; }
             string value = $"{wNow}×{hNow} at {bestNow} Hz";
-            c.Tip = "SmoovPlay turns 30 fps games into 60, 90 or 120 fps. Each needs a display running at least that fast " +
-                    "(or one with G-Sync/FreeSync). Pick the rate in SmoovPlay's menu (press M in the video window).";
+            c.Tip = "Keel turns 30 fps games into 60, 90 or 120 fps. Each needs a display running at least that fast " +
+                    "(or one with G-Sync/FreeSync). Pick the rate in Keel's menu (press M in the video window).";
             if (bestPossible > bestNow + 5)
                 c.Set(Level.Warn, value, $"It can run at {bestPossible} Hz, but Windows has it at {bestNow} Hz. Raise it for smoother play.")
                  .WithFix("Open display settings", "display");
             else if (bestNow >= 115)
-                c.Set(Level.Ok, value, "Fast enough for SmoovPlay's 120 fps mode.");
+                c.Set(Level.Ok, value, "Fast enough for Keel's 120 fps mode.");
             else if (bestNow >= 85)
                 c.Set(Level.Ok, value, "Fast enough for 90 fps. 120 fps needs a 120 Hz display.");
             else
-                c.Set(Level.Info, value, "SmoovPlay will show 60 fps. A 120 Hz display makes it even smoother.");
+                c.Set(Level.Info, value, "Keel will show 60 fps. A 120 Hz display makes it even smoother.");
         }
 
         /// <summary>Wired or Wi-Fi: Remote Play is much steadier over a cable.</summary>
@@ -551,12 +551,12 @@ namespace SmoovPlay
         /// paths are off, leaves room for an install folder of about 80 with a little to spare.</summary>
         public const int MaxDirLength = 80;
 
-        /// <summary>Why SmoovPlay can't write to this folder, or null if it can. Tried for real (a folder made in it,
+        /// <summary>Why Keel can't write to this folder, or null if it can. Tried for real (a folder made in it,
         /// or in the nearest one that exists, and removed straight away), as a folder Windows protects only shows by
         /// refusing: a Program Files on another drive, say, which FolderProblem's name check doesn't know.</summary>
         public static string WriteProblem(string dir)
         {
-            const string NoAdmin = "Windows doesn't let SmoovPlay write to that folder without admin rights. Choose one in your user folder, or a folder of your own on any drive.";
+            const string NoAdmin = "Windows doesn't let Keel write to that folder without admin rights. Choose one in your user folder, or a folder of your own on any drive.";
             if (Faked("readonlydir")) return NoAdmin;
             string probe;
             try { probe = Path.GetFullPath(dir.Trim()); }
@@ -571,7 +571,7 @@ namespace SmoovPlay
                 return null;
             }
             catch (UnauthorizedAccessException) { return NoAdmin; }
-            catch (IOException e) { return "SmoovPlay can't write to that folder (" + e.Message.Trim().TrimEnd('.') + "). Choose another one."; }
+            catch (IOException e) { return "Keel can't write to that folder (" + e.Message.Trim().TrimEnd('.') + "). Choose another one."; }
             catch (Exception) { return null; }  // couldn't tell: the install says if it can't
             finally { try { if (Directory.Exists(test)) Directory.Delete(test, true); } catch (Exception) { } }
         }
@@ -604,7 +604,7 @@ namespace SmoovPlay
         /// Returns null on success, or what went wrong.</summary>
         public static string InstallVcRuntime(Action<string> status)
         {
-            string dir = Path.Combine(Path.GetTempPath(), "SmoovPlay-vc");
+            string dir = Path.Combine(Path.GetTempPath(), "Keel-vc");
             Directory.CreateDirectory(dir);
             string exe = Path.Combine(dir, "vc_redist.x64.exe");
             try
@@ -612,7 +612,7 @@ namespace SmoovPlay
                 status("Downloading from Microsoft...");
                 using (var http = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
                 {
-                    http.DefaultRequestHeaders.UserAgent.ParseAdd("SmoovPlay-installer/" + BuildInfo.Version);
+                    http.DefaultRequestHeaders.UserAgent.ParseAdd("Keel-installer/" + BuildInfo.Version);
                     var bytes = http.GetByteArrayAsync(VcRedistUrl).Result;
                     File.WriteAllBytes(exe, bytes);
                 }

@@ -13,7 +13,7 @@ at the stream's size for instant replay clips ("Looks in clips"). This module is
 - TYPES: the node types and their settings, the one table the launcher's Looks page, the share codes and both
   renderers use. A type's `code` and its settings' order are part of the share-code format: never change or reuse
   them, only add.
-- BUILTIN: the looks SmoovPlay comes with. Library: those plus the user's own (%APPDATA%\\framegen\\looks\\*.json,
+- BUILTIN: the looks Keel comes with. Library: those plus the user's own (%APPDATA%\\framegen\\looks\\*.json,
   ids "my:<file name>"), and their .cube LUTs (looks\\luts).
 - encode() / decode(): share codes, "SPL1-" and URL-safe base64 of the settings that differ from the defaults
   (quantised to each setting's step), with a checksum. A look of five nodes is about 60 characters.
@@ -480,9 +480,9 @@ def decode(code: str) -> dict:
     text = "".join(str(code or "").split())  # chat apps wrap long lines
     m = re.fullmatch(r"(?i)SPL(\d+)-([A-Za-z0-9_-]+)", text)
     if not m:
-        raise CodeError("That isn't a SmoovPlay look code. Look codes start with SPL1-.")
+        raise CodeError("That isn't a Keel look code. Look codes start with SPL1-.")
     if m.group(1) != "1":
-        raise CodeError("That look code is from a newer version of SmoovPlay. Update SmoovPlay to use it.")
+        raise CodeError("That look code is from a newer version of Keel. Update Keel to use it.")
     try:
         data = base64.urlsafe_b64decode(m.group(2) + "=" * (-len(m.group(2)) % 4))
     except ValueError:
@@ -491,7 +491,7 @@ def decode(code: str) -> dict:
         raise CodeError("That look code is incomplete or has a typo. Copy it again, all of it.")
     flags, body = data[0], data[1:-2]
     if flags & ~1:
-        raise CodeError("That look code is from a newer version of SmoovPlay. Update SmoovPlay to use it.")
+        raise CodeError("That look code is from a newer version of Keel. Update Keel to use it.")
     try:
         if flags & 1:
             body = zlib.decompress(body, -15)
@@ -533,7 +533,7 @@ def _parse(body: bytes) -> dict:
         head = varint()
         t = BY_CODE.get(head >> 1)
         if t is None:
-            raise CodeError("That look uses an effect this version of SmoovPlay doesn't have. Update SmoovPlay "
+            raise CodeError("That look uses an effect this version of Keel doesn't have. Update Keel "
                             "to use it.")
         n = node(t.key, on=not head & 1)
         mask = varint()
@@ -582,7 +582,7 @@ def load_cube(path) -> Lut:
         elif word == "LUT_3D_SIZE":
             size = int(line.split()[1])
         elif word == "LUT_1D_SIZE":
-            raise ValueError("it's a 1D LUT; SmoovPlay uses 3D LUTs (LUT_3D_SIZE)")
+            raise ValueError("it's a 1D LUT; Keel uses 3D LUTs (LUT_3D_SIZE)")
         elif word == "DOMAIN_MIN":
             dmin = tuple(float(v) for v in line.split()[1:4])
         elif word == "DOMAIN_MAX":
@@ -703,10 +703,10 @@ class Library:
 
     def add_lut(self, src) -> str:
         """Copies a .cube file into the luts folder (after checking it); returns its name. ValueError if it's not one
-        SmoovPlay can use."""
+        Keel can use."""
         src = Path(src)
         if src.suffix.lower() != ".cube":
-            raise ValueError("SmoovPlay reads LUTs in the .cube format")
+            raise ValueError("Keel reads LUTs in the .cube format")
         load_cube(src)
         self.lut_folder.mkdir(parents=True, exist_ok=True)
         name = _lut_name(src.name)

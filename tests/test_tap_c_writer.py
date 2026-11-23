@@ -1,4 +1,4 @@
-"""docs/frame-tap-writer.c, the C example in docs/frame-tap.md, against SmoovPlay's reader (framegen/tap.py): built
+"""docs/frame-tap-writer.c, the C example in docs/frame-tap.md, against Keel's reader (framegen/tap.py): built
 with MSYS2's gcc when it's there (C:\\msys64 or D:\\msys64), run on a tap name of its own, read on the CPU."""
 import os
 import subprocess

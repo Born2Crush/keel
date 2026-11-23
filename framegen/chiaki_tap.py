@@ -517,7 +517,7 @@ class ChiakiSource:
                   "[chiaki] WARNING: the stream is set to 30 fps. Set chiaki-ng's frame rate to 60 so the "
                   "pipeline sees the PS5's 60 Hz output (it expects repeats, not every other frame missing).")
         self.hdr_stream = h.codec == 2  # chiaki-ng's H.265 HDR codec: 10-bit HDR10 from the PS5
-        self.convert = None  # set_hdr(): a framegen.hdr.StreamConverter, when SmoovPlay's HDR setting is on
+        self.convert = None  # set_hdr(): a framegen.hdr.StreamConverter, when Keel's HDR setting is on
         self._hdr_told = False
         self.q: queue.Queue = queue.Queue(maxsize=3)
         self.dropped = 0  # decoded frames dropped because the pipeline fell behind
@@ -723,7 +723,7 @@ class ChiakiSource:
         return cuda_frame_to_bgr(fr) if self.decoder_kind == "cuda" else fr.to_ndarray(format="bgr24")
 
     def set_hdr(self, out: str | None, display_peak: float | None = None, why: str = "") -> None:
-        """SmoovPlay's HDR setting (framegen/hdr.py), before the frames start: out "sdr8" (tone-mapped to SDR),
+        """Keel's HDR setting (framegen/hdr.py), before the frames start: out "sdr8" (tone-mapped to SDR),
         "pq16" (kept HDR10, for HDR output) or None (off: as before; why: the reason, if it's on but can't be used).
         Only an HDR stream is converted."""
         self._hdr_told = True
@@ -733,12 +733,12 @@ class ChiakiSource:
                       + ("Have the app send it without HDR." if self.app else
                          "Pick a codec without HDR in chiaki-ng's Video settings."))
             elif self.hdr_stream:
-                print(f"{self.tag} WARNING: this stream is HDR, and HDR is off in SmoovPlay's settings, so its colours "
-                      "look washed out. Turn on HDR in SmoovPlay's Settings (Picture), or "
+                print(f"{self.tag} WARNING: this stream is HDR, and HDR is off in Keel's settings, so its colours "
+                      "look washed out. Turn on HDR in Keel's Settings (Picture), or "
                       + ("have the app send it without HDR." if self.app else "pick a codec without HDR in chiaki-ng."))
             return
         if not self.hdr_stream:
-            print(f"{self.tag} HDR is on in SmoovPlay's settings, but this stream isn't HDR: shown as usual."
+            print(f"{self.tag} HDR is on in Keel's settings, but this stream isn't HDR: shown as usual."
                   + ("" if self.app else " (For HDR, pick chiaki-ng's H.265 HDR codec.)"))
             return
         from .hdr import StreamConverter
@@ -823,11 +823,11 @@ class ChiakiSource:
             return ("The app isn't streaming. Start its stream (or wait while it reconnects)" if self.app else
                     "chiaki-ng isn't streaming. Connect to the PS5 in chiaki-ng (or wait while it reconnects)")
         if now - self._beat > 3:
-            return "SmoovPlay's video decoder has stopped. Press Q, then Play again"
+            return "Keel's video decoder has stopped. Press Q, then Play again"
         if now - self._ring[1] > 1:
             return ("The app" if self.app else "chiaki-ng") + " isn't sending any frames. Is its stream still running?"
         if self._no_header:
-            return ("This stream started before SmoovPlay, so its start is missing.\n"
+            return ("This stream started before Keel, so its start is missing.\n"
                     + ("Restart the stream in the app" if self.app else
                        "In chiaki-ng press Ctrl+O, click the x to end the stream, then connect again"))
         return ""

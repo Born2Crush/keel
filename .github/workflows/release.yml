@@ -1,6 +1,6 @@
 # Starts a release as a draft, published under the project rather than a person.
-# Run it from the Actions tab, or: gh workflow run release.yml -f tag=v0.1.0 -f title="SmoovPlay 0.1.0 (early release)"
-# Then add the notes, upload SmoovPlay-Setup.exe and SmoovPlay-Setup.exe.sig from installer/dist to the draft,
+# Run it from the Actions tab, or: gh workflow run release.yml -f tag=v0.1.0 -f title="Keel 0.1.0 (early release)"
+# Then add the notes, upload Keel-Setup.exe and Keel-Setup.exe.sig from installer/dist to the draft,
 # and publish it.
 name: Draft a release
 

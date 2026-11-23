@@ -3,23 +3,23 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace SmoovPlay
+namespace Keel
 {
     /// <summary>
-    /// A release carries SmoovPlay-Setup.exe.sig next to the setup. installer\build.py makes it with a private key
+    /// A release carries Keel-Setup.exe.sig next to the setup. installer\build.py makes it with a private key
     /// that stays on the PC that builds releases (never in the repo or on GitHub), and the launcher checks it against
     /// the public key built into it (BuildInfo.UpdateKey). It names the version and the setup's SHA-256, so a release
     /// installs only the setup that was signed, as the version it was signed as: someone with access to the GitHub
     /// account alone can't push an update, or pass an older setup off as a newer one.
     ///
-    ///     SmoovPlay update signature 1
+    ///     Keel update signature 1
     ///     version 0.2.0
     ///     sha256 3F2A...
     ///     signature BASE64   (RSA PKCS#1 v1.5 with SHA-256 over the three lines above, each ending in \n)
     /// </summary>
     static class UpdateSignature
     {
-        const string Head = "SmoovPlay update signature 1";
+        const string Head = "Keel update signature 1";
         public const int KeyBits = 3072;
 
         static string Signed(string version, string sha256)

@@ -2,7 +2,7 @@
 
 - VfxVsr, what the installed app uses (Experimental): the VideoSuperRes effect in NVIDIA's own `nvidia-vfx` package,
   the one NVIDIA VFG comes in (framegen/vfg_setup.py). Each user downloads it from NVIDIA after accepting NVIDIA's
-  licence, so SmoovPlay ships nothing of NVIDIA's. That licence forbids publishing benchmark results: its timings
+  licence, so Keel ships nothing of NVIDIA's. That licence forbids publishing benchmark results: its timings
   stay on the user's PC (never in the log, which Copy diagnostics includes). Like VFG, the launcher only offers the
   package on RTX 40 and 50 series cards.
 - RtxVsr, for developers: the RTX Video SDK (free developer download, NVIDIA RTX SDKs licence), not part of this
@@ -85,10 +85,10 @@ def vfx_reason() -> str | None:
     if not torch.cuda.is_available():
         return "it needs an NVIDIA RTX card"
     if torch.cuda.get_device_capability(0) < MIN_COMPUTE:
-        return ("it comes with NVIDIA VFG's download from NVIDIA, which SmoovPlay offers on RTX 40 and 50 series "
+        return ("it comes with NVIDIA VFG's download from NVIDIA, which Keel offers on RTX 40 and 50 series "
                 "cards. AMD FSR 1 works on any card")
     if not installed():
-        return ("it comes with NVIDIA VFG's download from NVIDIA: set up NVIDIA VFG on SmoovPlay's Settings page "
+        return ("it comes with NVIDIA VFG's download from NVIDIA: set up NVIDIA VFG on Keel's Settings page "
                 "(Interpolation model). AMD FSR 1 works on any card")
     return None
 

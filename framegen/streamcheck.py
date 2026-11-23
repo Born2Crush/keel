@@ -114,8 +114,8 @@ class StreamCheck:
         game_fps = float(np.median(per_s)) if len(per_s) else float("nan")
         steady = int(np.count_nonzero((per_s >= 28) & (per_s <= 32)))
         if len(per_s):
-            lines.append(f"Stream: {stream_fps:.0f} frames a second reached SmoovPlay"
-                         + (f"; {missing} never did (packet loss, or SmoovPlay fell behind)" if missing else ""))
+            lines.append(f"Stream: {stream_fps:.0f} frames a second reached Keel"
+                         + (f"; {missing} never did (packet loss, or Keel fell behind)" if missing else ""))
             lines.append(f"Game frame rate, by the size check: {game_fps:.0f} fps (median); "
                          f"{_pct(steady, len(per_s))} of seconds at 28-32 fps")
             bands = [("under 25", per_s < 25), ("25-27", (per_s >= 25) & (per_s < 28)),

@@ -1,15 +1,15 @@
-"""Instant replay: the last 30 s to 5 min of SmoovPlay's picture, kept in memory and saved when asked.
+"""Instant replay: the last 30 s to 5 min of Keel's picture, kept in memory and saved when asked.
 
 Three tracks are kept while it's on (settings.replay), each as MPEG-TS in memory, a piece per encoded packet, so the
 oldest can be dropped and any stretch cut out at a keyframe (one every second):
-- after: every frame SmoovPlay shows, real and AI, timed when it was shown (so 90 fps really is 90), except at
+- after: every frame Keel shows, real and AI, timed when it was shown (so 90 fps really is 90), except at
   120 fps, where it's every other frame (60 fps: encoding all 120 a second fell behind, and took time from play);
-- before: each new frame from the game, once, timed when it arrived plus SmoovPlay's delay, so it lines up with
-  after: the game's own frames as they'd look without SmoovPlay;
+- before: each new frame from the game, once, timed when it arrived plus Keel's delay, so it lines up with
+  after: the game's own frames as they'd look without Keel;
 - sound: the game's sound (PS5 Remote Play through chiaki-ng's frame tap, chiaki_tap/frametap.h, or a capture
   card's), timed the same way, so it meets both pictures.
 
-Saving (R in the video window, or Ctrl+Alt+R from anywhere) copies a stretch into an MP4 in Videos\\SmoovPlay without
+Saving (R in the video window, or Ctrl+Alt+R from anywhere) copies a stretch into an MP4 in Videos\\Keel without
 encoding it again: a second or two. A before & after video (B, Ctrl+Alt+B, or the "Saved clip" setting) is encoded
 afresh by `python -m framegen.replay compose`, in a process of its own at low priority, so play isn't disturbed.
 
@@ -41,7 +41,7 @@ from av.video.frame import PictureType
 
 ROOT = Path(__file__).resolve().parents[1]
 # A before & after video being made keeps a file here named after its process id, holding the video's path, so the
-# launcher knows. It carries on after the video window and the launcher close; updating SmoovPlay would stop it.
+# launcher knows. It carries on after the video window and the launcher close; updating Keel would stop it.
 SAVING_DIR = Path(os.environ.get("APPDATA", Path.home())) / "framegen" / "saving"
 TB = 90000  # MPEG-TS clock: every timestamp here is in 1/90000 s
 OFFSET = 10 * TB  # timestamps start 10 s in, so none is ever negative
@@ -277,7 +277,7 @@ def _cut(ring: list, start: int, end: int, at_key: bool = True) -> list:
 
 # ---- saving ---------------------------------------------------------------------------------------------------
 def videos_folder() -> Path:
-    """Where clips go: SMOOVPLAY_REPLAY_DIR if set, else Videos\\SmoovPlay (wherever Windows keeps Videos)."""
+    """Where clips go: SMOOVPLAY_REPLAY_DIR if set, else Videos\\Keel (wherever Windows keeps Videos)."""
     if os.environ.get("SMOOVPLAY_REPLAY_DIR"):
         return Path(os.environ["SMOOVPLAY_REPLAY_DIR"])
     base = Path.home() / "Videos"
@@ -291,7 +291,7 @@ def videos_folder() -> Path:
                 ctypes.windll.ole32.CoTaskMemFree(ptr)
         except Exception:  # noqa: BLE001 - fall back to ~/Videos
             pass
-    return base / "SmoovPlay"
+    return base / "Keel"
 
 
 def _unique(path: Path) -> Path:
@@ -384,7 +384,7 @@ class Recorder:
                  encoder: str | None = None, device: str = "auto", notify=None, hotkeys: bool = False,
                  drop_when_behind: bool = True, size: tuple | None = None, mark_dir: Path | None = None) -> None:
         self.clip, self.layout = clip, layout
-        self.mark_dir = mark_dir  # SAVING_DIR when SmoovPlay runs it: before & after videos say they're being made
+        self.mark_dir = mark_dir  # SAVING_DIR when Keel runs it: before & after videos say they're being made
         self.size = (size[0] & ~1, size[1] & ~1) if size else None
         self._prep_lock = threading.Lock()
         self.out_dir = Path(out_dir) if out_dir is not None else None
@@ -413,7 +413,7 @@ class Recorder:
         self._pools: dict = {}
         self._sound_fn = None
         # Settings "Looks in clips": fn(frame) -> the frame with the look drawn on (the video window's baked()), for
-        # the SmoovPlay video only; the before frames stay as the game sent them. None: clips as the game looked.
+        # the Keel video only; the before frames stay as the game sent them. None: clips as the game looked.
         self.look = None
         # HDR output (framegen/hdr.py): frames come as float16 HDR10, and this turns them into the 8-bit SDR frames
         # clips are made of (hdr.pq16_to_sdr8), the same way "shown in SDR" would show them. None: frames are SDR.
@@ -458,7 +458,7 @@ class Recorder:
                 self._hotkeys = None
 
     def set_delay(self, ms: float) -> None:
-        """SmoovPlay's delay (a real frame's arrival to the screen): the before frames and the sound move by it."""
+        """Keel's delay (a real frame's arrival to the screen): the before frames and the sound move by it."""
         self._delay_s = max(0.0, ms / 1000)
 
     def attach_sound(self, fn) -> None:
@@ -865,7 +865,7 @@ class Recorder:
         stamp = time.strftime("%Y-%m-%d %H-%M-%S")
         saved = []
         if kind in ("smoovplay", "both"):
-            path = _unique(folder / f"SmoovPlay {stamp}.mp4")
+            path = _unique(folder / f"Keel {stamp}.mp4")
             t0 = time.perf_counter()
             to_mp4(path, (head, after), sound, base, end)
             print(f"[replay] saved {secs:.1f} s -> {path} ({path.stat().st_size / 1e6:.0f} MB, "
@@ -881,8 +881,8 @@ class Recorder:
             span_b = max(1e-6, (before[-1][0] - max(base, before[0][0])) / TB)
             n_b = sum(1 for p in before if p[0] >= base)
             labels = (f"Original {_snap_fps(max(1, n_b - 1) / span_b)} fps",
-                      f"SmoovPlay {_snap_fps((len(after) - 1) / max(1e-6, secs))} fps")
-            path = _unique(folder / f"SmoovPlay {stamp} before and after.mp4")
+                      f"Keel {_snap_fps((len(after) - 1) / max(1e-6, secs))} fps")
+            path = _unique(folder / f"Keel {stamp} before and after.mp4")
             tmp = Path(tempfile.mkdtemp(prefix="smoovplay-replay-"))
             _write_ts(tmp / "after.ts", head, after)
             _write_ts(tmp / "before.ts", bhead, before)
@@ -900,7 +900,7 @@ class Recorder:
             if sys.platform == "win32":
                 flags = subprocess.BELOW_NORMAL_PRIORITY_CLASS | subprocess.CREATE_NO_WINDOW
             t0 = time.perf_counter()
-            # A process of its own, which carries on if play stops or SmoovPlay closes: only its result waits here.
+            # A process of its own, which carries on if play stops or Keel closes: only its result waits here.
             proc = subprocess.Popen(cmd, cwd=ROOT, creationflags=flags, stdin=subprocess.DEVNULL,
                                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                                     errors="replace")
@@ -1046,7 +1046,7 @@ def _yuv(frame):
 
 
 def compose(after: str, before: str, out_path: str, sound: str | None = None, layout: str = "split",
-            labels: tuple = ("Original", "SmoovPlay"), encoder: str | None = None) -> float:
+            labels: tuple = ("Original", "Keel"), encoder: str | None = None) -> float:
     """A before & after video: `before`'s frames (the game's own, held until the next) and `after`'s (every frame
     shown), at after's times, split down the middle or side by side, with labels; `sound` copied in. Returns its
     length in seconds."""
@@ -1147,7 +1147,7 @@ def compose(after: str, before: str, out_path: str, sound: str | None = None, la
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="Instant replay tools (SmoovPlay runs this itself).")
+    ap = argparse.ArgumentParser(description="Instant replay tools (Keel runs this itself).")
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("compose", help="make a before & after video from instant replay's tracks")
     c.add_argument("--after", required=True)
@@ -1155,7 +1155,7 @@ def main(argv=None) -> int:
     c.add_argument("--sound")
     c.add_argument("--out", required=True)
     c.add_argument("--layout", choices=["split", "side"], default="split")
-    c.add_argument("--labels", nargs=2, default=["Original", "SmoovPlay"])
+    c.add_argument("--labels", nargs=2, default=["Original", "Keel"])
     c.add_argument("--encoder", default=None)
     c.add_argument("--cleanup", metavar="FOLDER", help="delete this folder (the tracks) when done")
     c.add_argument("--mark", metavar="FOLDER", help="keep FOLDER/<process id>.txt (the video's path) while making it, "
@@ -1186,7 +1186,7 @@ def main(argv=None) -> int:
         mark.unlink(missing_ok=True)
     try:
         print(f"[replay] before & after: {secs:.1f} s -> {a.out}")
-    except OSError:  # SmoovPlay has closed meanwhile: nobody is reading
+    except OSError:  # Keel has closed meanwhile: nobody is reading
         pass
     return 0
 

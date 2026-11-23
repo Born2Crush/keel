@@ -1,5 +1,5 @@
 // See frametap_session.h. The frame tap's work inside chiaki-ng's StreamSession: copying frames and sound out,
-// SmoovPlay's keyframe requests, the delay test's button presses and the sound delay. It reaches the session's
+// Keel's keyframe requests, the delay test's button presses and the sound delay. It reaches the session's
 // private parts as a friend (one line in streamsession.h).
 #include <frametap_session.h>
 
@@ -26,7 +26,7 @@ bool FrameTapSession::Begin(StreamSession *session, ChiakiSession *chiaki_sessio
 	CHIAKI_LOGI(session->GetChiakiLog(), "Frame tap on: copying every video frame to shared memory " FRAMETAP_NAME);
 	chiaki_session_set_video_sample_cb(chiaki_session, VideoSample, session);
 #ifdef _WIN32
-	// SmoovPlay's video window opens as the stream starts, while chiaki-ng (where the player just pressed connect)
+	// Keel's video window opens as the stream starts, while chiaki-ng (where the player just pressed connect)
 	// is in front, and Windows only lets a window come to the front if the program in front allows it.
 	AllowSetForegroundWindow(ASFW_ANY);
 #endif
@@ -52,7 +52,7 @@ bool FrameTapSession::VideoSample(uint8_t *buf, size_t buf_size, int32_t frames_
 	return chiaki_ffmpeg_decoder_video_sample_cb(buf, buf_size, frames_lost, frame_recovered, session->ffmpeg_decoder);
 }
 
-// SmoovPlay's delay test: press the buttons, send the state at once, note the time, let go after hold_ms.
+// Keel's delay test: press the buttons, send the state at once, note the time, let go after hold_ms.
 void FrameTapSession::Press(StreamSession *session, uint32_t buttons, uint32_t hold_ms)
 {
 	session->keyboard_state.buttons |= buttons;
@@ -64,7 +64,7 @@ void FrameTapSession::Press(StreamSession *session, uint32_t buttons, uint32_t h
 	});
 }
 
-// Sound held back by SmoovPlay's picture delay (frametap_audio_delay_ms): a first-in first-out buffer of exactly
+// Sound held back by Keel's picture delay (frametap_audio_delay_ms): a first-in first-out buffer of exactly
 // that much sound. Each frame in sends one frame's worth out, so the device is fed as steadily as before; while the
 // delay grows that's silence, and when it shrinks the oldest sound is skipped.
 static QByteArray &TapAudioFifo() { static QByteArray fifo; return fifo; }

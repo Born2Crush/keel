@@ -2,11 +2,11 @@
 # renders it, never a screen capture). Opens and closes the launcher once per case, with its own prefs and settings
 # files, so your own are never touched. Uses the GPU only to draw the window.
 #
-#   powershell -ExecutionPolicy Bypass -File scripts\launcher_shots.ps1 [-Exe installer\dist\SmoovPlay.exe] [-Only settings]
+#   powershell -ExecutionPolicy Bypass -File scripts\launcher_shots.ps1 [-Exe installer\dist\Keel.exe] [-Only settings]
 #
 # Dev mode needs SMOOVPLAY_PYTHON (a Python with the app's packages), or -Python. Writes out\launcher_shots\<case>\.
 param(
-    [string]$Exe = "installer\dist\SmoovPlay.exe",
+    [string]$Exe = "installer\dist\Keel.exe",
     [string]$Python = $env:SMOOVPLAY_PYTHON,
     [string]$Out = "out\launcher_shots",
     [int]$Seconds = 7,

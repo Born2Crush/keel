@@ -5,7 +5,7 @@
 The live stream check (framegen.streamcheck) runs at the end of every Remote Play session; this gives the same
 report from a saved log, re-running the size check (chiaki_tap.SizeRepeatDetector) as it is now, so a changed
 detector can be tried against a real session. CPU only. Logs from sessions with "Simulate a 30 fps game" (or the
-old --chiaki-as-30) say nothing about the size check: their repeats are SmoovPlay's own copies.
+old --chiaki-as-30) say nothing about the size check: their repeats are Keel's own copies.
 """
 from __future__ import annotations
 

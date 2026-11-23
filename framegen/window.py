@@ -12,7 +12,7 @@ How it works:
   and stays there (framegen/dda.py), as Remote Play's frames do; otherwise, or if that can't start (the monitor on
   another graphics card, Windows HDR mode), FFmpeg's ddagrab brings it to the CPU as BGR (through PyAV: no extra
   package).
-- SmoovPlay's own window sits on top as a click-through overlay that never takes the focus (the app keeps it:
+- Keel's own window sits on top as a click-through overlay that never takes the focus (the app keeps it:
   some apps stop updating without it), and is left out of the capture (io.py, exclude_from_capture: Windows'
   WDA_EXCLUDEFROMCAPTURE, Windows 10 2004 or newer), so the capture sees the app underneath.
 - Frames come when the app draws, not on a fixed beat: run.py puts them on a 60 Hz beat (sources.Clock60). An app
@@ -25,7 +25,7 @@ How it works:
   the last frame stays up until it's back.
 
 Limits (Experimental, not tried with a real app yet):
-- The app's window must stay on screen, not minimised, and not covered by other windows (SmoovPlay's aside).
+- The app's window must stay on screen, not minimised, and not covered by other windows (Keel's aside).
 - The monitor it's on has to be one the main graphics adapter drives (DXGI adapter 0, where ddagrab looks).
 - The app plays its own sound, which comes a little ahead of the picture.
 - Without the GPU path, frames go through the CPU (about 2-4 ms more at 1080p).
@@ -403,7 +403,7 @@ def find_windows(left_out: dict | None = None) -> list[AppWindow]:
         # A Store app in full screen (the Xbox app's own full screen, or Shift+Win+Enter): Windows moves its frame out
         # of the desktop's layer of windows into one of its own (an "immersive" z-order band), and since Windows 8
         # EnumWindows lists only the desktop's. FindWindowEx still finds the frame. It's noted rather than listed: an
-        # ordinary window, as SmoovPlay's is, may not be able to show over it. Switched away from, it's also cloaked
+        # ordinary window, as Keel's is, may not be able to show over it. Switched away from, it's also cloaked
         # and its app suspended, which is when someone presses Look again: still noted, the app known by its ID.
         frame = u32.FindWindowExW(None, None, STORE_FRAME_CLASS, None)
         for _ in range(256):  # a handful of frames; the cap only guards against a loop
@@ -662,7 +662,7 @@ def open_window(query: str) -> WindowSource:
                  for q in query.split("|") if q.strip().lower().startswith("exe:")} - {None}
         full = sorted(KNOWN[e] for e, why in left_out.items() if FULL_SCREEN in why and (not asked or KNOWN[e] in asked))
         if full:
-            raise RuntimeError(f"the {full[0]} is in full screen, where SmoovPlay can't find its window: leave full "
+            raise RuntimeError(f"the {full[0]} is in full screen, where Keel can't find its window: leave full "
                                "screen (its full screen button, or Shift+Win+Enter), then press Play again")
         raise RuntimeError(f"no app window matches {query!r}: open the app and start streaming, then press Play again "
                            "(python -m framegen.window --list shows what's found)")

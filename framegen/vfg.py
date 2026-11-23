@@ -1,7 +1,7 @@
 """NVIDIA Video Frame Generation (VFG) as an interpolation engine, in place of RIFE.
 
 VFG is a filter in NVIDIA's Video Effects SDK, used here through NVIDIA's official `nvidia-vfx` Python package.
-It is NOT part of this repo or of SmoovPlay's downloads: each user installs it from NVIDIA after accepting
+It is NOT part of this repo or of Keel's downloads: each user installs it from NVIDIA after accepting
 NVIDIA's licence, through the launcher's Settings page or framegen/vfg_setup.py, into its own folder
 (FRAMEGEN_VFX_PATH). It runs on RTX 40 and 50 series cards only (driver 570.65 or newer).
 
@@ -20,7 +20,7 @@ import torch
 from .vfg_setup import MIN_COMPUTE, add_to_path, installed
 
 QUALITY = {"low": 0, "medium": 1, "high": 2}
-NOT_SET_UP = "NVIDIA VFG isn't set up on this PC. SmoovPlay's Settings page downloads it from NVIDIA."
+NOT_SET_UP = "NVIDIA VFG isn't set up on this PC. Keel's Settings page downloads it from NVIDIA."
 
 
 def import_vfx():

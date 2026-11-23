@@ -125,7 +125,7 @@ def test_before_and_after_split_and_side_by_side(rec, tmp_path):
     c.close()
     left, right = img[60:90, 4:30].reshape(-1, 3).mean(0), img[60:90, -30:-4].reshape(-1, 3).mean(0)
     assert left[0] > 120 and left[1] < 80  # the game's own frames (blue) on the left
-    assert right[1] > 120 and right[0] < 80  # SmoovPlay's (green) on the right
+    assert right[1] > 120 and right[0] < 80  # Keel's (green) on the right
     side = rec.save("compare", layout="side", wait=True)
     assert len(side) == 1 and _probe(side[0])["video"][2] == 2 * W
     assert not list(tmp_path.glob("*.part")) and not list(tmp_path.glob("*.ts"))
@@ -142,7 +142,7 @@ def test_labels_name_the_frame_rates(rec, monkeypatch):
     _feed(rec, 3)
     rec.save("compare", wait=True)
     labels = seen[0][seen[0].index("--labels") + 1:][:2]
-    assert labels == ["Original 30 fps", "SmoovPlay 90 fps"]
+    assert labels == ["Original 30 fps", "Keel 90 fps"]
 
 
 def test_stopping_waits_for_the_clip_but_not_the_before_and_after(rec, tmp_path, monkeypatch, capsys):
@@ -163,7 +163,7 @@ def test_stopping_waits_for_the_clip_but_not_the_before_and_after(rec, tmp_path,
     rec.close(wait_saves=30)
     took = time.perf_counter() - t1
     assert procs and procs[0].poll() is None and took < 2.5
-    assert len(list(tmp_path.glob("SmoovPlay *.mp4"))) == 1  # the clip itself is there
+    assert len(list(tmp_path.glob("Keel *.mp4"))) == 1  # the clip itself is there
     assert "still being made: they carry on in the background" in capsys.readouterr().out
     procs[0].wait(10)
 
@@ -238,7 +238,7 @@ def test_a_gap_becomes_silence_and_running_ahead_is_skipped():
         for k in range(50):
             r._encode_sound(_chunk(t_gap + k * 0.01))
         assert r._a_next == pytest.approx(t_gap + 0.5 + 0.2, abs=0.02)  # silence put in, then the sound on time
-        # SmoovPlay's delay drops by 100 ms and stays there: after a second the sound skips 100 ms, back in step
+        # Keel's delay drops by 100 ms and stays there: after a second the sound skips 100 ms, back in step
         r.set_delay(100)
         for k in range(150):
             r._encode_sound(_chunk(t_gap + 0.5 + k * 0.01))

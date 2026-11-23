@@ -15,7 +15,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 
-namespace SmoovPlay
+namespace Keel
 {
     partial class Ui
     {
@@ -135,7 +135,7 @@ namespace SmoovPlay
             b.IsEnabled = can;
             b.Content = detecting ? "Testing..." : detectResult != null || detectError != null ? "Run again" : "Auto-detect";
             b.ToolTip = SessionRunning ? "Stop playing first: the test needs the graphics card to itself."
-                : !paths.RuntimeReady ? "Finish setting up SmoovPlay first." : null;
+                : !paths.RuntimeReady ? "Finish setting up Keel first." : null;
             if (detectApply != null) detectApply.IsEnabled = !(SessionRunning && liveState == null);  // starting: settings are locked
         }
 

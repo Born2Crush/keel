@@ -6,7 +6,7 @@
 mmcss: does the scheduling boost (MMCSS for the pipeline's threads, high GPU priority) keep frames on time when
   the PC is busy? Four sessions: boost on / off (FRAMEGEN_NO_BOOST=1), each with the PC idle and with a
   background load (scripts/ab_check.py load: busy CPU cores plus a GPU loop at normal priority).
-rife425: RIFE 4.25 lite against 4.22 lite (the one SmoovPlay ships), same engine, same clip: speed (running
+rife425: RIFE 4.25 lite against 4.22 lite (the one Keel ships), same engine, same clip: speed (running
   behind, extra frames shown, AI frame time) and quality (dB against the real frames test mode leaves out; 60 and
   120 fps output score, 90 doesn't).
 
