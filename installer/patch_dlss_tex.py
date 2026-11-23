@@ -79,6 +79,8 @@ METHODS = '''
         texdesc = (c.c_ubyte * 256)()
         for i in range(3):
             c.c_int.from_buffer(texdesc, 4 * i).value = 1
+        if kind == 1:
+            c.c_int.from_buffer(texdesc, 16).value = 1
         rt.cudaCreateTextureObject.argtypes = [c.POINTER(c.c_ulonglong), c.c_void_p, c.c_void_p, c.c_void_p]
         rt.cudaCreateTextureObject.restype = c.c_int
         made = c.c_ulonglong(0)
