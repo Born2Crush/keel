@@ -1,11 +1,10 @@
 """Keel owns the PS5 Remote Play session before any picture is shown.
 
 chiaki-ng sends the stream's codec header once, as its first packet, and the frame tap only keeps
-about half a second of packets. If Keel attaches to a stream that already started, and no earlier
-run saved that header, nothing can be decoded. The play window then sits on "No picture from the
-PS5" and tells you to end the stream by hand. Keel does that itself: it starts chiaki-ng when it
-isn't running, and when the stream's start is already gone it ends that stream and connects again,
-and only then hands the tap to the decoder.
+about half a second of packets. Keel keeps that header, including from an earlier connection, and
+joins a stream that is already running. It starts chiaki-ng when it isn't running. It reconnects
+only when no header has ever been saved, and the decoder is already reading so that one reconnect
+is caught. The player is not asked to end the stream.
 
 The decision (join / start / restart) is pure. Driving chiaki-ng's window is Windows-only.
 """
@@ -30,29 +29,51 @@ class SessionError(RuntimeError):
 
 
 def header_matches(saved: bytes, session: int, codec: int) -> bool:
-    """True when `saved` is the codec header ChiakiSource stored for this same stream."""
     return len(saved) > 8 and struct.unpack_from("<II", saved) == (session, codec)
 
 
 def header_path(tap_name: str) -> Path:
-    """Where ChiakiSource keeps the codec header for this tap."""
     return Path(tempfile.gettempdir()) / (tap_name.split("\\")[-1] + "-header.bin")
 
 
-def saved_header(tap_name: str) -> bytes:
-    """The header file ChiakiSource writes (empty if there isn't one)."""
+def durable_header_path() -> Path:
+    root = os.environ.get("APPDATA")
+    base = Path(root) / "framegen" if root else Path.home() / ".framegen"
+    return base / "chiaki-header.bin"
+
+
+def _read_header(path: Path) -> bytes:
     try:
-        return header_path(tap_name).read_bytes()
+        return path.read_bytes()
     except OSError:
         return b""
 
 
-def codec_header_blob(session: int, codec_id: int, packets: list[bytes]) -> bytes:
-    """The header file for a stream, from its packets, or b\"\" if none of them is the codec header.
+def saved_header(tap_name: str) -> bytes:
+    return _read_header(header_path(tap_name)) or _read_header(durable_header_path())
 
-    chiaki-ng sends that header once, as the first packet. The ring keeps about half a second, and the
-    decoder opens only after the model has loaded, so the file is what lets Keel join a stream it just started.
-    """
+
+def saved_headers(tap_name: str) -> list[bytes]:
+    return [b for b in (_read_header(header_path(tap_name)), _read_header(durable_header_path())) if b]
+
+
+def header_params(saved: bytes, codec: int) -> bytes:
+    if len(saved) <= 8 or struct.unpack_from("<II", saved)[1] != codec:
+        return b""
+    return saved[8:]
+
+
+def remember_header(tap_name: str, session: int, codec: int, params: bytes) -> None:
+    blob = struct.pack("<II", int(session), int(codec)) + params
+    for path in (header_path(tap_name), durable_header_path()):
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(blob)
+        except OSError:
+            pass
+
+
+def codec_header_blob(session: int, codec_id: int, packets: list[bytes]) -> bytes:
     from .chiaki_tap import CODECS, param_sets
     codec = CODECS.get(codec_id)
     if codec is None:
@@ -65,7 +86,6 @@ def codec_header_blob(session: int, codec_id: int, packets: list[bytes]) -> byte
 
 
 def keep_codec_header(tap, tap_name: str, *, sleep=time.sleep, clock=time.perf_counter, wait_s: float = 1.5) -> bool:
-    """Copy the codec header out of the ring into ChiakiSource's file. False if it isn't there yet."""
     deadline = clock() + wait_s
     while True:
         h = tap.header()
@@ -78,10 +98,7 @@ def keep_codec_header(tap, tap_name: str, *, sleep=time.sleep, clock=time.perf_c
                     packets.append(pkt.data)
             blob = codec_header_blob(h.session, h.codec, packets)
             if blob:
-                try:
-                    header_path(tap_name).write_bytes(blob)
-                except OSError:
-                    return False
+                remember_header(tap_name, h.session, h.codec, blob[8:])
                 print("[keel] saved the stream's codec header for when the picture opens")
                 return True
         if clock() >= deadline:
@@ -90,17 +107,8 @@ def keep_codec_header(tap, tap_name: str, *, sleep=time.sleep, clock=time.perf_c
 
 
 def join_plan(live: bool, write_seq: int, session: int, codec: int, saved: bytes) -> str:
-    """What to do before the decoder attaches.
-
-    "join": the stream's start is still in the tap, or its codec header was saved.
-    "start": chiaki-ng isn't streaming.
-    "restart": the stream began earlier and its start is missing. Attaching now is the stuck banner.
-    """
-    if not live:
-        return "start"
-    if write_seq <= EARLY_SEQ or header_matches(saved, session, codec):
-        return "join"
-    return "restart"
+    del write_seq, session, codec, saved
+    return "start" if not live else "join"
 
 
 def _until(pred, seconds: float, sleep, clock) -> bool:
@@ -114,7 +122,6 @@ def _until(pred, seconds: float, sleep, clock) -> bool:
 
 
 def own_session(read, control, saved: bytes, *, sleep, clock, timeout_s: float = 45.0) -> str:
-    """Drive `control` until `read()` is a stream Keel can show from its start. Returns "join"."""
     control.ensure_running()
     deadline = clock() + timeout_s
     restarts = 0
@@ -155,13 +162,22 @@ def own_session(read, control, saved: bytes, *, sleep, clock, timeout_s: float =
             _until(fresh, max(0.0, deadline - clock()), sleep, clock)
 
 
+def catch_running_stream(control=None, sleep=time.sleep) -> None:
+    print("[keel] catching the stream that is already running")
+    try:
+        control = control if control is not None else WinChiaki()
+        control.end_stream()
+        sleep(0.3)
+        control.connect()
+    except SessionError as e:
+        print(f"[keel] {e}")
+
+
 def relaunch_without_tap(live: bool, window_open: bool) -> bool:
-    """chiaki-ng was opened on its own, so the frame tap is off. Keel starts it again."""
     return window_open and not live
 
 
 def find_chiaki() -> str | None:
-    """chiaki.exe: KEEL_CHIAKI or CHIAKI_EXE, then the copy a SmoovPlay install already put on this PC."""
     names = []
     for key in ("KEEL_CHIAKI", "CHIAKI_EXE"):
         value = os.environ.get(key)
@@ -178,8 +194,6 @@ def find_chiaki() -> str | None:
 
 
 class WinChiaki:
-    """Start chiaki-ng, and the key presses that end a stream and connect again."""
-
     EXE = "chiaki.exe"
 
     def close_running(self) -> None:
@@ -200,8 +214,7 @@ class WinChiaki:
         exe = find_chiaki()
         if exe is None:
             raise SessionError(
-                "Keel couldn't find chiaki.exe. It looks in the SmoovPlay install folder, "
-                "or in KEEL_CHIAKI.")
+                "Keel couldn't find chiaki.exe. It looks in the SmoovPlay install folder, or in KEEL_CHIAKI.")
         env = os.environ.copy()
         env["CHIAKI_FRAMETAP"] = "1"
         subprocess.Popen([exe], env=env, cwd=str(Path(exe).parent))
@@ -255,7 +268,6 @@ def _user32():
 
 
 def own_chiaki_stream(tap_name: str, timeout_s: float = 45.0) -> str:
-    """Open the frame tap, make a stream Keel can show, and close the tap again."""
     if sys.platform != "win32":
         raise SessionError("Keel owns the PS5 stream on Windows, where chiaki-ng runs.")
     from .chiaki_tap import FrameTap
@@ -266,7 +278,7 @@ def own_chiaki_stream(tap_name: str, timeout_s: float = 45.0) -> str:
         header = tap.header()
         action = join_plan(header.live, header.write_seq, header.session, header.codec, saved)
         if action == "join":
-            keep_codec_header(tap, tap_name)
+            keep_codec_header(tap, tap_name, wait_s=0)
             print("[keel] PS5 stream is one Keel can show from its start")
             return "join"
         opened = windows_of(WinChiaki.EXE)
@@ -277,9 +289,8 @@ def own_chiaki_stream(tap_name: str, timeout_s: float = 45.0) -> str:
         if relaunch_without_tap(header.live, opened):
             control.close_running()
         try:
-            result = own_session(tap.header, control, saved, sleep=time.sleep,
-                                 clock=time.perf_counter, timeout_s=timeout_s)
-            keep_codec_header(tap, tap_name)
+            result = own_session(tap.header, control, saved, sleep=time.sleep, clock=time.perf_counter, timeout_s=timeout_s)
+            keep_codec_header(tap, tap_name, wait_s=0)
         except SessionError:
             if action == "start":
                 print("[keel] still no PS5 stream; waiting for chiaki-ng to connect")
