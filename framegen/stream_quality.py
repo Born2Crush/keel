@@ -3,8 +3,8 @@
 chiaki-ng's preset, used whenever the saved bitrate is 0, is 15 Mbps. Its remote
 profile starts at 720p. Both throw away picture the tap can carry. Remote Play's
 highest size and rate in chiaki-ng are 1080p and 60 fps. The settings slider
-stops at 100 Mbps, but the number chiaki-ng sends is the saved one, with no cap
-in its settings. Keel writes 200 Mbps (kbps). The frame tap holds one compressed
+is compiled in at 100 Mbps. Keel raises that cap to 200 in chiaki.exe before
+chiaki-ng starts, and writes 200 Mbps (kbps). The frame tap holds one compressed
 frame of SLOT_SIZE - SLOT_HEADER bytes. At 60 fps a 200 Mbps average frame is
 about a fifth of that slot, so a keyframe several times the average still fits.
 What the console actually sends was not measured here.
@@ -21,8 +21,9 @@ from .chiaki_tap import SLOT_HEADER, SLOT_SIZE
 
 WIDTH, HEIGHT, FPS = 1920, 1080, 60
 CODEC = "h265"
-# Saved as kbps. chiaki-ng's slider stops at 100; GetBitrate* returns the saved
-# number and the launch spec sends it (streamconnection.c, bw_kbps_sent).
+# Saved as kbps. The slider's compiled cap is 100 until Keel raises it to 200
+# (framegen/chiaki_bitrate.py). GetBitrate* returns the saved number and the
+# launch spec sends it (streamconnection.c, bw_kbps_sent).
 BITRATE_KBPS = 200_000
 # HKCU\Software\Chiaki\Chiaki, or Chiaki-<profile> when a profile is current.
 REG_ORG = r"Software\Chiaki"
@@ -55,7 +56,7 @@ def profile() -> dict[str, str | int]:
 
 
 def _profile_name(read) -> str:
-    """chiaki-ng's current profile, or "" for the default hive. `read(path) -> value or None`."""
+    """chiaki-ng's current profile, or \"\" for the default hive. `read(path) -> value or None`."""
     name = read(REG_ORG + r"\Chiaki\settings", "current_profile")
     if not isinstance(name, str):
         return ""
