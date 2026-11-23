@@ -64,6 +64,38 @@ def patch_io(text: str) -> str:
         "            self._draw_stats(_with_scaler(text, label), ux, uy, uw, uh)",
         "the status line",
     )
+    text = _need(
+        text,
+        "if self._draw_dlss(frame, on_gpu, dest, pw, ph):\n"
+        "                if plan is not None:",
+        "if self._draw_dlss(frame, on_gpu, dest, pw, ph):\n"
+        "                if getattr(self, \"_dlss_kind\", \"\") == \"image\":\n"
+        "                    label = \"NVIDIA SR\"\n"
+        "                if plan is not None:",
+        "the image fallback label",
+    )
+    text = _need(
+        text,
+        "out = scaler.upscale(frame if on_gpu else _host(frame))\n"
+        "                    self._upload_rgb(tex, pw, ph, out)",
+        "out = scaler.upscale(frame if on_gpu else _host(frame))\n"
+        "                    self._dlss_kind = getattr(scaler, \"kind\", \"dlss\")\n"
+        "                    self._upload_rgb(tex, pw, ph, out)",
+        "the upscaler kind",
+    )
+    text = _need(
+        text,
+        'mode, label = "bilinear", "DLSS unavailable"',
+        'why = str(getattr(self, "_dlss_why", "") or "unavailable").replace("DLSS ", "")\n'
+        '                mode, label = "bilinear", "DLSS " + why[:42]',
+        "the DLSS failure line",
+    )
+    text = _need(
+        text,
+        'if not getattr(self, "_said_dlss_why", False):',
+        'self._dlss_why = why or "unavailable"\n        if not getattr(self, "_said_dlss_why", False):',
+        "the DLSS failure note",
+    )
     if "def _with_scaler(" not in text:
         text = text.replace(
             "    @classmethod\n    def make(cls, parts, health: str = \"\", second: str = \"\") -> \"MiniText\":\n"
