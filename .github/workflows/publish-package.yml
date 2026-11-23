@@ -1,0 +1,50 @@
+name: Publish package
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the Windows package
+        run: python installer/make_package.py
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.3.12
+          name: Keel 0.3.12 for Windows
+          make_latest: true
+          body: |
+            Unzip Keel-0.3.12-windows.zip and run Install-Keel.bat.
+            It installs Keel for the current user and downloads Python, PyTorch, and TensorRT (about 5 GB).
+            chiaki-ng is not in the zip. After install, set KEEL_CHIAKI in keel-local.cmd to chiaki.exe.
+          files: |
+            installer/dist/Keel-0.3.12-windows.zip
+            installer/dist/Keel-0.3.12-windows.zip.sha256
+
+      - name: Install ORAS
+        run: |
+          curl -sSL -o oras.tgz https://github.com/oras-project/oras/releases/download/v1.2.3/oras_1.2.3_linux_amd64.tar.gz
+          tar -xzf oras.tgz
+          sudo mv oras /usr/local/bin/oras
+
+      - name: Publish the package
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+          oras push "ghcr.io/born2crush/keel:0.3.12" \
+            installer/dist/Keel-0.3.12-windows.zip:application/zip \
+            installer/dist/Keel-0.3.12-windows.zip.sha256:text/plain
