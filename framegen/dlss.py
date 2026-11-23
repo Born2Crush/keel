@@ -93,9 +93,20 @@ def find_dll() -> Path | None:
     found = _first_file(root / tail for root in roots for tail in tails)
     if found is not None:
         return found
-    system = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "nvngx_dlss.dll"
-    if system.is_file():
-        return system
+    system_root = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    found = _first_file([system_root / "nvngx_dlss.dll"])
+    if found is not None:
+        return found
+    ngx = find_ngx()
+    if ngx is not None:
+        found = _first_file([ngx.parent / "nvngx_dlss.dll"])
+        if found is not None:
+            return found
+    # Current drivers keep the feature library in the driver store, not under Program Files.
+    store = system_root / "DriverStore" / "FileRepository"
+    if store.is_dir():
+        for path in store.glob("*/nvngx_dlss.dll"):
+            return path
     # The driver drops versioned copies a few folders down. Stop at the first one.
     for root in roots:
         base = root / "NVIDIA Corporation"
@@ -149,6 +160,8 @@ class DlssScaler:
         self.handle = ctypes.c_void_p()
         self._src = (0, 0)
         self._zeros = None
+        self._feature_dll = feature
+        self._scratch = None
 
     def _sym(self, *names: str):
         """The driver's export drops the 'with_' the C header uses."""
@@ -216,11 +229,33 @@ class DlssScaler:
         self.lib.NVSDK_NGX_Parameter_SetI(p, b"PerfQualityValue", PERFORMANCE)
         self.lib.NVSDK_NGX_Parameter_SetI(p, b"RTXValue", 0)
         self.lib.NVSDK_NGX_Parameter_SetI(p, b"DLSS.Feature.Create.Flags", FLAG_AUTO_EXPOSURE)
+        self._reserve_scratch()
         rc = self.lib.NVSDK_NGX_CUDA_CreateFeature(
             FEATURE_SUPER_SAMPLING, p, self._ctypes.byref(self.handle))
         if rc != SUCCESS:
-            raise RuntimeError(f"DLSS feature failed (NGX 0x{rc:08x})")
+            where = self._feature_dll.name if self._feature_dll else "nvngx_dlss.dll not found"
+            raise RuntimeError(f"DLSS feature failed (NGX 0x{rc:08x}, {where})")
         self._src = (w, h)
+
+    def _reserve_scratch(self) -> None:
+        """CreateFeature refuses to run until the scratch buffer it asks for is attached."""
+        lib = self.lib
+        try:
+            size_of = lib.NVSDK_NGX_CUDA_GetScratchBufferSize
+        except AttributeError:
+            return
+        c = self._ctypes
+        size_of.argtypes = [c.c_int, c.c_void_p, c.POINTER(c.c_size_t)]
+        size_of.restype = c.c_uint
+        need = c.c_size_t(0)
+        rc = size_of(FEATURE_SUPER_SAMPLING, self.params, c.byref(need))
+        if rc != SUCCESS or not need.value:
+            return
+        import torch
+        if self._scratch is None or self._scratch.numel() < need.value:
+            self._scratch = torch.empty(need.value, dtype=torch.uint8, device="cuda")
+        lib.NVSDK_NGX_Parameter_SetVoidPointer(self.params, b"Scratch", c.c_void_p(self._scratch.data_ptr()))
+        lib.NVSDK_NGX_Parameter_SetUI(self.params, b"Scratch.SizeInBytes", int(need.value))
 
     def upscale(self, bgr) -> "object":
         """BGR uint8 CUDA tensor (or a CPU array) at the stream size -> 3840x2160 RGB on CUDA.
@@ -259,8 +294,6 @@ class DlssScaler:
         rc = self._eval(self.handle, p, None)
         if rc != SUCCESS:
             raise RuntimeError(f"DLSS evaluate failed (NGX 0x{rc:08x})")
-        # RGB, row 0 at the top. The display copies this into the GL texture and
-        # turns it upright there, so it is not flipped into BGR and back.
         return out
 
 
