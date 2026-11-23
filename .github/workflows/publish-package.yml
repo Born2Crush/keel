@@ -2,8 +2,6 @@ name: Publish installer
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 permissions:
   contents: write
@@ -35,17 +33,17 @@ jobs:
         run: python installer/patch_stream_join.py
 
       - name: Build Keel-Setup.exe
-        run: python installer/build.py --app-setup --version 0.3.60
+        run: python installer/build.py --app-setup --version 0.3.61
 
       - name: Publish the installer
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.3.60
-          name: Keel 0.3.60
+          tag_name: v0.3.61
+          name: Keel 0.3.61
           make_latest: true
           files: installer/dist/Keel-Setup.exe
           body: |
             Double-click Keel-Setup.exe.
             It installs Keel as an app: a window, a Start menu shortcut, and an entry in Windows Settings under Apps.
-            The window uses the purple Keel wordmark. 4K output uses RTX Video Super Resolution. Where the picture is moving, an in-between frame keeps the game's own pixels instead of a warped blend. Slow motion still fills in. Your settings stay.
+            The window uses the purple Keel wordmark. 4K output uses RTX Video Super Resolution. The per-pixel swap that flashed the picture is gone. Fast motion shows the game's own frame instead of a smeared blend. Slow motion still fills in. Your settings stay.
             Uninstall is in the Keel window on the Help page, and in Settings, Apps.
