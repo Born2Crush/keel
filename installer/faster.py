@@ -20,7 +20,7 @@ def patch_rate(text: str) -> str:
     )
     text = text.replace(
         '@"Software\\\\Chiaki\\\\" + app + @"\\\\settings"',
-        '@"Software\\Chiaki\\\\" + app + @"\\settings"',
+        '@"Software\\Chiaki\\" + app + @"\\settings"',
     )
     return text
 
@@ -157,6 +157,7 @@ class RhythmLock:
     if old not in text:
         raise SystemExit("VSR patch could not find the rhythm lock")
     return text.replace(old, new, 1)
+
 
 
 def main() -> None:
