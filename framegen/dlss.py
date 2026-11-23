@@ -5,9 +5,10 @@ to draw 3840x2160. That scale is exactly 2x, which is DLSS Performance mode (pre
 NVIDIA's default for Performance). The stream has no engine motion vectors, so each frame is
 reset and upscaled on its own.
 
-The DLSS library is NVIDIA's (nvngx_dlss.dll), loaded from the driver or from KEEL_DLSS_DLL.
-Keel does not ship it and does not charge for it. NVIDIA's application id goes in
-KEEL_DLSS_PROJECT_ID; that id is from NVIDIA's DLSS SDK, not a Keel account.
+The CUDA entry points live in the driver's NGX runtime (_nvngx.dll). nvngx_dlss.dll is the
+feature library that runtime loads; the driver installs both. Keel does not ship either
+and does not charge for them. A custom engine's project id only has to look like a GUID
+(NVIDIA's DLSS programming guide). KEEL_DLSS_PROJECT_ID overrides Keel's.
 
 NVIDIA's own SDK timing, Performance mode, 4K output, preset M: about 2.1 ms a frame on an
 RTX 4080, and about 11 ms on an RTX 3060. Not measured inside Keel.
@@ -30,6 +31,8 @@ RGB8UI = 1  # NVSDK_NGX_Buffer_Format_RGB8UI
 API_VERSION = 0x15  # NVSDK_NGX_VERSION_API_MACRO in the public SDK header
 SUCCESS = 0x1
 ENGINE_CUSTOM = 0
+# NVIDIA's guide: for a custom engine the driver only checks that this looks like a GUID.
+PROJECT_ID = "7e1c4a90-2b6d-4f18-9c35-8a0d6e2b4f71"
 
 
 def uses_dlss(output_size: str, src_w: int, src_h: int) -> bool:
@@ -37,38 +40,76 @@ def uses_dlss(output_size: str, src_w: int, src_h: int) -> bool:
     return output_size == "2160p" and (src_w < UHD_W or src_h < UHD_H)
 
 
+def project_id() -> str:
+    """The GUID-like id NGX wants. The environment overrides Keel's own."""
+    return os.environ.get("KEEL_DLSS_PROJECT_ID") or PROJECT_ID
+
+
+def _first_file(candidates) -> Path | None:
+    for path in candidates:
+        if path is not None and Path(path).is_file():
+            return Path(path)
+    return None
+
+
+def find_ngx() -> Path | None:
+    """The driver's NGX runtime, which exports the CUDA DLSS calls.
+
+    The feature file nvngx_dlss.dll does not. The driver records the runtime folder in
+    HKLM\\...\\nvlddmkm\\NGXCore, value NGXPath.
+    """
+    candidates = []
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                r"System\CurrentControlSet\Services\nvlddmkm\NGXCore") as key:
+                folder, _ = winreg.QueryValueEx(key, "NGXPath")
+            candidates += [Path(folder) / "_nvngx.dll", Path(folder) / "nvngx.dll"]
+        except OSError:
+            pass
+    system = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    candidates += [system / "_nvngx.dll", system / "nvngx.dll"]
+    return _first_file(candidates)
+
+
 def find_dll() -> Path | None:
-    """nvngx_dlss.dll: KEEL_DLSS_DLL, else the usual NVIDIA driver locations."""
+    """nvngx_dlss.dll, so NGX can load the feature. KEEL_DLSS_DLL, else the driver copies."""
     env = os.environ.get("KEEL_DLSS_DLL")
     if env and Path(env).is_file():
         return Path(env)
-    roots = [
-        os.environ.get("ProgramFiles", r"C:\Program Files"),
-        os.environ.get("ProgramW6432", r"C:\Program Files"),
-    ]
+    roots = []
+    for key in ("ProgramFiles", "ProgramW6432", "ProgramData"):
+        value = os.environ.get(key)
+        if value:
+            roots.append(Path(value))
     tails = (
         r"NVIDIA Corporation\NVIDIA NGX\nvngx_dlss.dll",
         r"NVIDIA Corporation\NVIDIA App\nvngx_dlss.dll",
+        r"NVIDIA\NGX\models\nvngx_dlss.dll",
     )
-    for root in roots:
-        for tail in tails:
-            path = Path(root) / tail
-            if path.is_file():
-                return path
+    found = _first_file(root / tail for root in roots for tail in tails)
+    if found is not None:
+        return found
     system = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32" / "nvngx_dlss.dll"
-    return system if system.is_file() else None
+    if system.is_file():
+        return system
+    # The driver drops versioned copies a few folders down. Stop at the first one.
+    for root in roots:
+        base = root / "NVIDIA Corporation"
+        if not base.is_dir():
+            continue
+        for path in base.rglob("nvngx_dlss.dll"):
+            return path
+    return None
 
 
 def unavailable_reason() -> str | None:
     """None when DLSS can be started. Otherwise one sentence for the log and the menu."""
     if sys.platform != "win32":
         return "DLSS runs on Windows with an NVIDIA RTX card"
-    if find_dll() is None:
-        return ("nvngx_dlss.dll was not found. It comes with the NVIDIA driver; "
-                "set KEEL_DLSS_DLL to that file")
-    if not os.environ.get("KEEL_DLSS_PROJECT_ID"):
-        return ("set KEEL_DLSS_PROJECT_ID to the application id from NVIDIA's DLSS SDK "
-                "(free from NVIDIA; Keel has no account and no fee)")
+    if find_ngx() is None:
+        return "DLSS needs the NVIDIA driver runtime (_nvngx.dll). Update the NVIDIA driver."
     try:
         import torch
     except ImportError:
@@ -83,15 +124,19 @@ def unavailable_reason() -> str | None:
 class DlssScaler:
     """1080p RGB in, 3840x2160 RGB out, through nvngx_dlss.dll. One feature for the process."""
 
-    def __init__(self, dll: Path, project_id: str) -> None:
+    def __init__(self, ngx: Path, feature: Path | None, project: str) -> None:
         import ctypes
         self._ctypes = ctypes
-        self.lib = ctypes.CDLL(str(dll))
+        self._kept = []  # wide strings the feature-path struct points at
+        if feature is not None and hasattr(os, "add_dll_directory"):
+            os.add_dll_directory(str(feature.parent))
+        self.lib = ctypes.CDLL(str(ngx))
         self._bind()
         folder = Path(tempfile.gettempdir()) / "keel-ngx"
         folder.mkdir(parents=True, exist_ok=True)
-        rc = self.lib.NVSDK_NGX_CUDA_Init_with_ProjectID(
-            project_id.encode(), ENGINE_CUSTOM, b"keel", str(folder), None, API_VERSION)
+        info = self._feature_info(feature)
+        feature_info = None if info is None else ctypes.cast(ctypes.byref(info), ctypes.c_void_p)
+        rc = self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), feature_info, API_VERSION)
         if rc != SUCCESS:
             raise RuntimeError(f"DLSS init failed (NGX 0x{rc:08x})")
         params = ctypes.c_void_p()
@@ -103,12 +148,45 @@ class DlssScaler:
         self._src = (0, 0)
         self._zeros = None
 
+    def _sym(self, *names: str):
+        """The driver's export drops the 'with_' the C header uses."""
+        for name in names:
+            try:
+                return getattr(self.lib, name)
+            except AttributeError:
+                continue
+        raise AttributeError(names[0])
+
+    def _feature_info(self, feature: Path | None):
+        """Tell NGX where nvngx_dlss.dll is, besides the application folder."""
+        if feature is None:
+            return None
+        c = self._ctypes
+        path = c.c_wchar_p(str(feature.parent))
+        slots = (c.c_wchar_p * 1)(path)
+
+        class PathList(c.Structure):
+            _fields_ = [("Path", c.POINTER(c.c_wchar_p)), ("Length", c.c_uint)]
+
+        class Logging(c.Structure):
+            _fields_ = [("LoggingCallback", c.c_void_p), ("MinimumLoggingLevel", c.c_int),
+                        ("DisableOtherLoggingSinks", c.c_bool)]
+
+        class Common(c.Structure):
+            _fields_ = [("PathListInfo", PathList), ("InternalData", c.c_void_p), ("LoggingInfo", Logging)]
+
+        info = Common()
+        info.PathListInfo.Path = c.cast(slots, c.POINTER(c.c_wchar_p))
+        info.PathListInfo.Length = 1
+        self._kept += [path, slots, info]
+        return info
+
     def _bind(self) -> None:
         c, lib = self._ctypes, self.lib
         void, u32, i32 = c.c_void_p, c.c_uint, c.c_int
-        lib.NVSDK_NGX_CUDA_Init_with_ProjectID.argtypes = [
-            c.c_char_p, i32, c.c_char_p, c.c_wchar_p, void, i32]
-        lib.NVSDK_NGX_CUDA_Init_with_ProjectID.restype = u32
+        self._init = self._sym("NVSDK_NGX_CUDA_Init_with_ProjectID", "NVSDK_NGX_CUDA_Init_ProjectID")
+        self._init.argtypes = [c.c_char_p, i32, c.c_char_p, c.c_wchar_p, void, i32]
+        self._init.restype = u32
         lib.NVSDK_NGX_CUDA_GetCapabilityParameters.argtypes = [c.POINTER(void)]
         lib.NVSDK_NGX_CUDA_GetCapabilityParameters.restype = u32
         lib.NVSDK_NGX_Parameter_SetUI.argtypes = [void, c.c_char_p, u32]
@@ -121,8 +199,9 @@ class DlssScaler:
         lib.NVSDK_NGX_Parameter_SetVoidPointer.restype = u32
         lib.NVSDK_NGX_CUDA_CreateFeature.argtypes = [i32, void, c.POINTER(void)]
         lib.NVSDK_NGX_CUDA_CreateFeature.restype = u32
-        lib.NVSDK_NGX_CUDA_EvaluateFeature_C.argtypes = [void, void, void]
-        lib.NVSDK_NGX_CUDA_EvaluateFeature_C.restype = u32
+        self._eval = self._sym("NVSDK_NGX_CUDA_EvaluateFeature_C", "NVSDK_NGX_CUDA_EvaluateFeature")
+        self._eval.argtypes = [void, void, void]
+        self._eval.restype = u32
 
     def _feature(self, w: int, h: int) -> None:
         if self._src == (w, h):
@@ -175,7 +254,7 @@ class DlssScaler:
         self.lib.NVSDK_NGX_Parameter_SetF(p, b"MV.Scale.X", 1.0)
         self.lib.NVSDK_NGX_Parameter_SetF(p, b"MV.Scale.Y", 1.0)
         self.lib.NVSDK_NGX_Parameter_SetI(p, b"Reset", 1)  # no engine motion vectors: don't accumulate
-        rc = self.lib.NVSDK_NGX_CUDA_EvaluateFeature_C(self.handle, p, None)
+        rc = self._eval(self.handle, p, None)
         if rc != SUCCESS:
             raise RuntimeError(f"DLSS evaluate failed (NGX 0x{rc:08x})")
         # RGB, row 0 at the top. The display copies this into the GL texture and
@@ -196,7 +275,9 @@ def session() -> tuple[DlssScaler | None, str | None]:
         _session = (None, why)
         return _session
     try:
-        scaler = DlssScaler(find_dll(), os.environ["KEEL_DLSS_PROJECT_ID"])
+        import torch
+        torch.cuda.init()  # NGX CUDA calls use the current context
+        scaler = DlssScaler(find_ngx(), find_dll(), project_id())
     except (AttributeError, OSError, RuntimeError) as e:
         _session = (None, str(e)[:200])
         return _session
