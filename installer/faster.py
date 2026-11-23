@@ -176,9 +176,9 @@ def patch_sharp(text: str) -> str:
     put(
         "        cuts = CutDetector(self.cut_threshold)\n",
         "        cuts = CutDetector(self.cut_threshold)\n"
-        "        # A blended frame is the smear, and the upscaler repaints a soft picture into grain.\n"
-        "        # Every slot shows the decoded frame, fitted to the window. That is the picture chiaki-ng shows.\n"
-        "        sharp_motion = True\n"
+        "        # Repeating one frame made the counter read 120 while the picture changed at the game's rate.\n"
+        "        # The in-between frames are drawn again, with the same fit as the stream. The upscaler stays off.\n"
+        "        sharp_motion = False\n"
         "        last_shown = None  # the real frame last drawn, which an in-between slot shows again\n",
         "speed patch could not find the cut detector",
     )
@@ -292,20 +292,6 @@ def patch_sharp(text: str) -> str:
         "                    slot = 1 - slot\n"
         "                    it.prepare(slot)  # (in_u8 holds this tick's frame)\n",
         "speed patch could not find the frame prepare",
-    )
-    put(
-        "                        pl = timeline.place(phi)\n"
-        "                        gen = pl.b is not None\n"
-        "                        if pl.b is None:\n"
-        "                            frame = pl.a.frame\n"
-        "                        else:\n"
-        "                            slot = self._timed_pair(pl.a, pl.b, slot, in_slot)\n"
-        "                            frame = self._generated(it.interpolate(slot, pl.t), gpu_out)\n",
-        "                        pl = timeline.place(phi)\n"
-        "                        # The real frame at this moment. A blend here is the same smear.\n"
-        "                        gen = False\n"
-        "                        frame = pl.a.frame\n",
-        "speed patch could not find the timed blend",
     )
     put(
         "        gpu_out = bool(getattr(sink, \"gpu\", False))\n",
