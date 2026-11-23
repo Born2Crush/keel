@@ -65,10 +65,49 @@ def patch_io(text: str) -> str:
     return _motion(text)
 
 
+def _motion_draw(text: str) -> str:
+    """In-between frames are sharpened and drawn at the window size.
+
+    A 4K image of a blend, fitted afterwards, is a second blur and a lot of pixels. Crisp RCAS
+    (no denoise) puts the edges back. The game's own frames still go through RTX VSR at 4K.
+    """
+    if "straight to the window" not in text:
+        old = (
+            "        pano = self._panorama_on(fw, fh)\n"
+            "        if offscreen:  # 4K output into its own image; fitted to the window after the upscaler and the look\n"
+        )
+        new = (
+            "        pano = self._panorama_on(fw, fh)\n"
+            "        # An in-between frame is not run through VSR. Drawing it at 4K and then fitting softens it\n"
+            "        # again and fills the card with pixels nobody sees. It goes straight to the window.\n"
+            "        if offscreen and self._generated_frame and self.mode == \"vsr\" and self.fsr is not None and not pano:\n"
+            "            offscreen = False\n"
+            "        if offscreen:  # 4K output into its own image; fitted to the window after the upscaler and the look\n"
+        )
+        if old not in text:
+            raise SystemExit("VSR patch could not find the 4K draw")
+        text = text.replace(old, new, 1)
+    if "crisp=" not in text:
+        old_look = "self.fsr.draw(self.tex, self.w, self.h, fbo, 0, 0, pw, ph)"
+        new_look = (
+            "self.fsr.draw(self.tex, self.w, self.h, fbo, 0, 0, pw, ph,\n"
+            "                              crisp=self._generated_frame and mode == \"vsr\")"
+        )
+        old_win = "self.fsr.draw(self.tex, self.w, self.h, target, px, py, pw, ph)"
+        new_win = (
+            "self.fsr.draw(self.tex, self.w, self.h, target, px, py, pw, ph,\n"
+            "                          crisp=self._generated_frame and mode == \"vsr\")"
+        )
+        if old_look not in text or old_win not in text:
+            raise SystemExit("VSR patch could not find the FSR draw")
+        text = text.replace(old_look, new_look, 1).replace(old_win, new_win, 1)
+    return text
+
+
 def _motion(text: str) -> str:
     """In-between frames are scaled spatially. VSR on a blend is the smear while the camera moves."""
     if "def _spatial_scale(" in text:
-        return text
+        return _motion_draw(text)
     old = '''    def _name(self, mode: str) -> str:'''
     new = '''    def set_generated(self, generated: bool) -> None:
         """The pipeline says when this present is an in-between frame rather than the game's own."""
@@ -94,7 +133,10 @@ def _motion(text: str) -> str:
     )
     if 'upscale and mode == "fsr"' not in text:
         raise SystemExit("VSR patch could not find the spatial upscale")
-    text = text.replace('upscale and mode == "fsr"', "upscale and self._spatial_scale(mode)")
+    text = text.replace(
+        'upscale and mode == "fsr"',
+        "(upscale or self._generated_frame) and self._spatial_scale(mode)",
+    )
     old_multi = '''    def write(self, frame, text: str | None = None):
         cmd = None
         for s in self.sinks:
@@ -115,7 +157,7 @@ def _motion(text: str) -> str:
 '''
     if old_multi not in text:
         raise SystemExit("VSR patch could not find the combined sink")
-    return text.replace(old_multi, new_multi, 1)
+    return _motion_draw(text.replace(old_multi, new_multi, 1))
 
 
 def patch_auto(text: str) -> str:
@@ -202,10 +244,34 @@ def patch_vsr(text: str) -> str:
     return text.replace(old, new, 1)
 
 
+def _play_wait(text: str) -> str:
+    """Don't stall the draw on the interpolator. The window copies the frame on the same stream."""
+    old = '''    def _generated(self, frame: torch.Tensor, gpu_out: bool):
+        """A generated frame for the sink, waited for (a sync point, so timings are real)."""
+        if gpu_out:
+            torch.cuda.current_stream().synchronize()
+            return frame
+'''
+    new = '''    def _generated(self, frame: torch.Tensor, gpu_out: bool):
+        """A generated frame for the sink.
+
+        The GPU sink copies this tensor on the same stream, which keeps the copy behind the interpolator.
+        Waiting here held the draw back, so the picture reached the screen later.
+        """
+        if gpu_out:
+            return frame
+'''
+    if old not in text:
+        if "Waiting here held the draw back" in text:
+            return text
+        raise SystemExit("VSR patch could not find the frame wait")
+    return text.replace(old, new, 1)
+
+
 def patch_pipeline(text: str) -> str:
     """Tell the window which presents are in-between frames, so VSR is not run on a blend."""
     if "generated_out" in text:
-        return text
+        return _play_wait(text)
     old = '''            def present(frame, text: str):
                 # Frame pacer: each present is due one gap after the previous one was *due*, so sleep overshoot and
                 # present time don't accumulate; when late it goes straight away and the schedule restarts from now.
@@ -295,7 +361,99 @@ def patch_pipeline(text: str) -> str:
     text = text.replace("cmd = present(out, ov_text) or early_cmd", "cmd = present(out, ov_text, generated_out) or early_cmd", 1)
     if "generated_out" not in text:
         raise SystemExit("VSR patch did not mark in-between frames")
-    return text
+    return _play_wait(text)
+
+
+def patch_replay(text: str) -> str:
+    """YUV for instant replay leaves the play stream, so it does not sit in front of the next frame."""
+    if "off the play stream" not in text:
+        old = (
+            "Frames are turned into YUV on the graphics card, on\n"
+            "the stream the rest of the pipeline uses, copied to memory on a side stream, "
+            "and encoded on a thread of their own;"
+        )
+        new = (
+            "Frames are turned into YUV on the graphics card, off the play stream, "
+            "and encoded on a thread of their own;"
+        )
+        if old not in text:
+            raise SystemExit("VSR patch could not find the replay note")
+        text = text.replace(old, new, 1)
+    if '"snaps"' in text:
+        return text
+    old = '''    def _make_pool(self, name: str, w: int, h: int) -> None:
+        """Pinned buffers for frames on their way from the graphics card to the encoder."""
+        torch = self._torch
+        bufs = [torch.empty(h * w * 3 // 2, dtype=torch.uint8, pin_memory=True) for _ in range(POOL[name])]
+        self._pools[name] = {"size": (w, h), "bufs": bufs, "free": list(range(len(bufs)))}
+        self._building.discard(name)
+
+    def _gpu_i420(self, name: str, x):
+        torch = self._torch
+        h, w = x.shape[0] & ~1, x.shape[1] & ~1
+        pool = self._pools.get(name)
+        if pool is None or pool["size"] != (w, h):  # made on the encoder's thread; skip frames till then
+            if name not in self._building:
+                self._building.add(name)
+                self._q.put(("pool", name, w, h))
+            if not (self._block and self._wait(lambda: name not in self._building)):
+                return None
+            pool = self._pools[name]
+        if not pool["free"]:
+            return None
+        k = pool["free"].pop()
+        out = self._yuv(x[:h, :w, :3])
+        ready = torch.cuda.Event()
+        ready.record()
+        with torch.cuda.stream(self._side):  # the copy to memory doesn't hold up the pipeline's next frame
+            self._side.wait_event(ready)
+            pool["bufs"][k].copy_(out, non_blocking=True)
+            done = torch.cuda.Event()
+            done.record(self._side)
+        out.record_stream(self._side)
+'''
+    new = '''    def _make_pool(self, name: str, w: int, h: int) -> None:
+        """Pinned buffers for frames on their way from the graphics card to the encoder.
+        snaps: a GPU copy of each in-flight frame, so the YUV conversion can leave the play stream."""
+        torch = self._torch
+        n = POOL[name]
+        bufs = [torch.empty(h * w * 3 // 2, dtype=torch.uint8, pin_memory=True) for _ in range(n)]
+        snaps = [torch.empty((h, w, 3), dtype=torch.uint8, device="cuda") for _ in range(n)]
+        self._pools[name] = {"size": (w, h), "bufs": bufs, "snaps": snaps, "free": list(range(n))}
+        self._building.discard(name)
+
+    def _gpu_i420(self, name: str, x):
+        torch = self._torch
+        h, w = x.shape[0] & ~1, x.shape[1] & ~1
+        pool = self._pools.get(name)
+        if pool is None or pool["size"] != (w, h):  # made on the encoder's thread; skip frames till then
+            if name not in self._building:
+                self._building.add(name)
+                self._q.put(("pool", name, w, h))
+            if not (self._block and self._wait(lambda: name not in self._building)):
+                return None
+            pool = self._pools[name]
+        if not pool["free"]:
+            return None
+        k = pool["free"].pop()
+        # The copy stays on the play stream, ahead of the next frame that reuses this tensor.
+        # YUV runs on the side stream, so it does not sit in front of the next in-between frame.
+        snap = pool["snaps"][k]
+        snap.copy_(x[:h, :w, :3])
+        ready = torch.cuda.Event()
+        ready.record()
+        with torch.cuda.stream(self._side):
+            self._side.wait_event(ready)
+            out = self._yuv(snap)
+            pool["bufs"][k].copy_(out, non_blocking=True)
+            done = torch.cuda.Event()
+            done.record(self._side)
+        out.record_stream(self._side)
+        snap.record_stream(self._side)
+'''
+    if old not in text:
+        raise SystemExit("VSR patch could not find the replay conversion")
+    return text.replace(old, new, 1)
 
 
 def main() -> None:
@@ -311,6 +469,8 @@ def main() -> None:
     vsr.write_text(patch_vsr(vsr.read_text(encoding="utf-8")), encoding="utf-8")
     pipe = ROOT / "framegen" / "pipeline.py"
     pipe.write_text(patch_pipeline(pipe.read_text(encoding="utf-8")), encoding="utf-8")
+    replay = ROOT / "framegen" / "replay.py"
+    replay.write_text(patch_replay(replay.read_text(encoding="utf-8")), encoding="utf-8")
     print("RTX Video Super Resolution is the upscaler")
 
 
