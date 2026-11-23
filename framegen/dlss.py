@@ -19,10 +19,6 @@ ENGINE_CUSTOM = 0
 PRESET_K = 11
 PRESET_L = 12
 PRESET_M = 13
-SET_VOID = 0
-SET_I = 3
-SET_UI = 4
-SET_F = 6
 PROJECT_ID = "7e1c4a90-2b6d-4f18-9c35-8a0d6e2b4f71"
 
 def uses_dlss(output_size, src_w, src_h, scaler=None):
@@ -133,11 +129,8 @@ class DlssScaler:
             rc = self._init(project.encode(), ENGINE_CUSTOM, b"keel", str(folder), None, API_VERSION)
         if ngx_failed(rc):
             raise RuntimeError("DLSS init " + ngx_why(rc))
-        params = ctypes.c_void_p()
-        rc = self.lib.NVSDK_NGX_CUDA_GetCapabilityParameters(ctypes.byref(params))
-        if ngx_failed(rc) or not params.value:
-            raise RuntimeError("DLSS parameters " + ngx_why(rc))
-        self.params = params
+        self._bag = {}
+        self.params = self._parameter_block()
         self.handle = ctypes.c_void_p()
         self._src = (0, 0)
         self._zeros = None
@@ -178,30 +171,127 @@ class DlssScaler:
         self._init = self._sym("NVSDK_NGX_CUDA_Init_with_ProjectID", "NVSDK_NGX_CUDA_Init_ProjectID")
         self._init.argtypes = [c.c_char_p, i32, c.c_char_p, c.c_wchar_p, void, i32]
         self._init.restype = u32
-        lib.NVSDK_NGX_CUDA_GetCapabilityParameters.argtypes = [c.POINTER(void)]
-        lib.NVSDK_NGX_CUDA_GetCapabilityParameters.restype = u32
         lib.NVSDK_NGX_CUDA_CreateFeature.argtypes = [i32, void, c.POINTER(void)]
         lib.NVSDK_NGX_CUDA_CreateFeature.restype = u32
         self._eval = self._sym("NVSDK_NGX_CUDA_EvaluateFeature_C", "NVSDK_NGX_CUDA_EvaluateFeature")
         self._eval.argtypes = [void, void, void]
         self._eval.restype = u32
 
-    def _set(self, slot, name, value, typ):
+    def _remember(self, name, value):
+        if not name:
+            return
+        key = name.decode("utf-8", "replace") if isinstance(name, (bytes, bytearray)) else str(name)
+        self._bag[key] = value
+
+    def _recall(self, name):
+        if not name:
+            return None
+        key = name.decode("utf-8", "replace") if isinstance(name, (bytes, bytearray)) else str(name)
+        return self._bag.get(key)
+
+    def _parameter_block(self):
         c = self._ctypes
-        table = c.cast(c.cast(self.params, c.POINTER(c.c_void_p))[0], c.POINTER(c.c_void_p))
-        c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, typ)(table[slot])(self.params, name, value)
+        miss = FAIL | 1
+
+        def put_p(_this, name, value):
+            self._remember(name, 0 if not value else int(value))
+
+        def put_i(_this, name, value):
+            self._remember(name, int(value))
+
+        def put_u(_this, name, value):
+            self._remember(name, int(value))
+
+        def put_d(_this, name, value):
+            self._remember(name, float(value))
+
+        def put_f(_this, name, value):
+            self._remember(name, float(value))
+
+        def put_ull(_this, name, value):
+            self._remember(name, int(value))
+
+        def give_num(name, out, cast):
+            if not out:
+                return miss
+            got = self._recall(name)
+            if got is None:
+                return miss
+            out[0] = cast(got)
+            return SUCCESS
+
+        def give_p(name, out):
+            if not out:
+                return miss
+            got = self._recall(name)
+            if got is None:
+                return miss
+            out[0] = c.c_void_p(int(got) if got else 0)
+            return SUCCESS
+
+        def get_p(_this, name, out):
+            return give_p(name, out)
+
+        def get_i(_this, name, out):
+            return give_num(name, out, int)
+
+        def get_u(_this, name, out):
+            return give_num(name, out, int)
+
+        def get_d(_this, name, out):
+            return give_num(name, out, float)
+
+        def get_f(_this, name, out):
+            return give_num(name, out, float)
+
+        def get_ull(_this, name, out):
+            return give_num(name, out, int)
+
+        def reset(_this):
+            self._bag.clear()
+
+        kinds = (
+            (c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, c.c_void_p), put_p),
+            (c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, c.c_void_p), put_p),
+            (c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, c.c_void_p), put_p),
+            (c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, c.c_int), put_i),
+            (c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, c.c_uint), put_u),
+            (c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, c.c_double), put_d),
+            (c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, c.c_float), put_f),
+            (c.CFUNCTYPE(None, c.c_void_p, c.c_char_p, c.c_ulonglong), put_ull),
+            (c.CFUNCTYPE(c.c_uint, c.c_void_p, c.c_char_p, c.POINTER(c.c_void_p)), get_p),
+            (c.CFUNCTYPE(c.c_uint, c.c_void_p, c.c_char_p, c.POINTER(c.c_void_p)), get_p),
+            (c.CFUNCTYPE(c.c_uint, c.c_void_p, c.c_char_p, c.POINTER(c.c_void_p)), get_p),
+            (c.CFUNCTYPE(c.c_uint, c.c_void_p, c.c_char_p, c.POINTER(c.c_int)), get_i),
+            (c.CFUNCTYPE(c.c_uint, c.c_void_p, c.c_char_p, c.POINTER(c.c_uint)), get_u),
+            (c.CFUNCTYPE(c.c_uint, c.c_void_p, c.c_char_p, c.POINTER(c.c_double)), get_d),
+            (c.CFUNCTYPE(c.c_uint, c.c_void_p, c.c_char_p, c.POINTER(c.c_float)), get_f),
+            (c.CFUNCTYPE(c.c_uint, c.c_void_p, c.c_char_p, c.POINTER(c.c_ulonglong)), get_ull),
+            (c.CFUNCTYPE(None, c.c_void_p), reset),
+        )
+        self._cbs = [proto(fn) for proto, fn in kinds]
+        table = (c.c_void_p * len(self._cbs))(*[c.cast(cb, c.c_void_p) for cb in self._cbs])
+
+        class Block(c.Structure):
+            _fields_ = [("vtbl", c.c_void_p)]
+
+        block = Block(vtbl=c.cast(table, c.c_void_p))
+        self._table = table
+        self._block = block
+        return c.c_void_p(c.addressof(block))
 
     def _set_ui(self, name, value):
-        self._set(SET_UI, name, int(value), self._ctypes.c_uint)
+        self._remember(name, int(value))
 
     def _set_i(self, name, value):
-        self._set(SET_I, name, int(value), self._ctypes.c_int)
+        self._remember(name, int(value))
 
     def _set_f(self, name, value):
-        self._set(SET_F, name, float(value), self._ctypes.c_float)
+        self._remember(name, float(value))
 
     def _set_ptr(self, name, value):
-        self._set(SET_VOID, name, value, self._ctypes.c_void_p)
+        raw = value.value if hasattr(value, "value") else value
+        self._remember(name, 0 if not raw else int(raw))
 
     def _feature(self, w, h):
         if self._src == (w, h):
