@@ -24,15 +24,18 @@ HELPERS = '''
         nvcuda.cuCtxSetCurrent.argtypes = [c.c_void_p]
         nvcuda.cuCtxSetCurrent.restype = c.c_int
         current = c.c_void_p()
-        if nvcuda.cuCtxGetCurrent(c.byref(current)) != 0 or not current.value:
-            held = c.c_void_p()
-            if nvcuda.cuDevicePrimaryCtxRetain(c.byref(held), 0) != 0 or not held.value:
-                return 0
-            nvcuda.cuCtxSetCurrent(held)
-            current = held
-        self._cuda_ctx = c.c_void_p(current.value)
-        nvcuda.cuCtxSetCurrent(self._cuda_ctx)
-        return int(current.value)
+        got = nvcuda.cuCtxGetCurrent(c.byref(current))
+        ctx = current.value if got == 0 else 0
+        if ctx and nvcuda.cuCtxSetCurrent(c.c_void_p(ctx)) == 0:
+            self._cuda_ctx = c.c_void_p(ctx)
+            return int(ctx)
+        held = c.c_void_p()
+        if nvcuda.cuDevicePrimaryCtxRetain(c.byref(held), 0) != 0 or not held.value:
+            return 0
+        if nvcuda.cuCtxSetCurrent(held) != 0:
+            return 0
+        self._cuda_ctx = c.c_void_p(held.value)
+        return int(held.value)
 
     def _bind_cuda_context(self):
         ctx = self._cuda_now()
