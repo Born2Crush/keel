@@ -90,6 +90,32 @@ METHODS = '''
         self._tex_alive.extend((arr, made, res, texdesc))
         return arr, made
 
+    def _array_surf(self, width, height):
+        c = self._ctypes
+        rt = self._runtime()
+        class Channel(c.Structure):
+            _fields_ = [("x", c.c_int), ("y", c.c_int), ("z", c.c_int), ("w", c.c_int), ("f", c.c_int)]
+        ch = Channel(8, 8, 8, 8, 1)
+        rt.cudaMallocArray.argtypes = [c.POINTER(c.c_void_p), c.POINTER(Channel), c.c_size_t, c.c_size_t, c.c_uint]
+        rt.cudaMallocArray.restype = c.c_int
+        arr = c.c_void_p()
+        rc = rt.cudaMallocArray(c.byref(arr), c.byref(ch), int(width), int(height), 2)
+        if rc != 0 or not arr.value:
+            raise RuntimeError("DLSS rt %s" % rc)
+        res = (c.c_ubyte * 256)()
+        c.c_int.from_buffer(res, 0).value = 0
+        c.c_void_p.from_buffer(res, 8).value = arr.value
+        rt.cudaCreateSurfaceObject.argtypes = [c.POINTER(c.c_ulonglong), c.c_void_p]
+        rt.cudaCreateSurfaceObject.restype = c.c_int
+        surf = c.c_ulonglong(0)
+        rc = rt.cudaCreateSurfaceObject(c.byref(surf), res)
+        if rc != 0 or not surf.value:
+            raise RuntimeError("DLSS surf %s" % rc)
+        if not hasattr(self, "_tex_alive"):
+            self._tex_alive = []
+        self._tex_alive.extend((arr, surf, res))
+        return arr, surf
+
     def _to_array(self, array, tensor):
         c = self._ctypes
         rt = self._cudart
@@ -122,7 +148,7 @@ METHODS = '''
             self._tex_alive = []
             self._rgba, self._out4, self._zeros, self._depth = rgba, out4, zeros, depth
             self._color_array, self._color_tex = self._array_tex(w, h, 4, 1, 0)
-            self._out_array, self._out_tex = self._array_tex(3840, 2160, 4, 1, 2)
+            self._out_array, self._out_tex = self._array_surf(3840, 2160)
             self._motion_array, self._motion_tex = self._array_tex(w, h, 2, 2, 0)
             self._depth_array, self._depth_tex = self._array_tex(w, h, 1, 2, 0)
             self._to_array(self._motion_array, self._zeros)
@@ -167,7 +193,7 @@ def patch(text: str) -> str:
         text = text.replace(OLD_BUFFERS, "", 1)
     if "def _pictures(self, rgb, h, w):" not in text:
         text = text.replace("\n_session = None\n", METHODS + "\n_session = None\n", 1)
-    if "cudaMallocArray" not in text or "cudaCreateTextureObject" not in text or 'b"Color.Format", 4' not in text:
+    if "cudaCreateTextureObject" not in text or "cudaCreateSurfaceObject" not in text or 'b"Color.Format", 4' not in text:
         raise SystemExit("DLSS texture patch did not apply")
     return text
 
