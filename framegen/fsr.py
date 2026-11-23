@@ -62,7 +62,15 @@ def _source(defines: str, body: str) -> str:
 
 
 class FsrScaler:
-    """FSR 1 upscaling of a GL texture into a rectangle of a framebuffer. Needs a current GL 4.5 context."""
+    """FSR 1 upscaling of a GL texture into a rectangle of a framebuffer. Needs a current GL 4.5 context.
+
+    CRISP is for an in-between frame while RTX VSR is the upscaler. Those frames are blends, and the
+    stored-video model smears them, so they are scaled here instead. 0.2 sits near the sharp end of
+    RCAS (0 is the maximum, and it digs compression out of a stream). Denoise is off for that pass:
+    it softens the edges the blend already lost.
+    """
+
+    CRISP = 0.2
 
     def __init__(self, GL, sharpness: float = 0.5, denoise: bool = True, hdr: bool = False) -> None:
         """hdr: the picture is HDR10 (PQ values, framegen/hdr.py), so EASU's output is kept in half floats rather
@@ -71,10 +79,13 @@ class FsrScaler:
         rcas_defs = "#define FSR_RCAS_F 1\n" + ("#define FSR_RCAS_DENOISE 1\n" if denoise else "")
         self.easu = self._program(_source("#define FSR_EASU_F 1\n", _EASU))
         self.rcas = self._program(_source(rcas_defs, _RCAS))
+        self.rcas_crisp = self._program(_source("#define FSR_RCAS_F 1\n", _RCAS))
         self.u_in = GL.glGetUniformLocation(self.easu, "in_size")
         self.u_out = GL.glGetUniformLocation(self.easu, "out_size")
         self.u_origin = GL.glGetUniformLocation(self.rcas, "origin")
         self.u_sharp = GL.glGetUniformLocation(self.rcas, "sharpness")
+        self.u_origin_crisp = GL.glGetUniformLocation(self.rcas_crisp, "origin")
+        self.u_sharp_crisp = GL.glGetUniformLocation(self.rcas_crisp, "sharpness")
         self.vao = GL.glGenVertexArrays(1)
         self.mid_tex = self.mid_fbo = None
         self.mid_size = (0, 0)
@@ -109,9 +120,13 @@ class FsrScaler:
         GL.glFramebufferTexture2D(GL.GL_FRAMEBUFFER, GL.GL_COLOR_ATTACHMENT0, GL.GL_TEXTURE_2D, self.mid_tex, 0)
         self.mid_size = (w, h)
 
-    def draw(self, src_tex: int, sw: int, sh: int, dst_fbo: int, x0: int, y0: int, dw: int, dh: int) -> None:
+    def draw(self, src_tex: int, sw: int, sh: int, dst_fbo: int, x0: int, y0: int, dw: int, dh: int,
+             crisp: bool = False) -> None:
         """Upscale src_tex (sw x sh, row 0 = image top) into dst_fbo's rectangle at (x0, y0) of size dw x dh,
-        upright on screen. Leaves dst_fbo bound as the framebuffer."""
+        upright on screen. Leaves dst_fbo bound as the framebuffer.
+
+        crisp: the in-between-frame pass (no denoise, sharpness CRISP) so a blend stays edged after it is enlarged.
+        """
         GL = self.GL
         self._mid(dw, dh)
         GL.glBindVertexArray(self.vao)
@@ -127,9 +142,9 @@ class FsrScaler:
 
         GL.glBindFramebuffer(GL.GL_FRAMEBUFFER, dst_fbo)
         GL.glViewport(x0, y0, dw, dh)
-        GL.glUseProgram(self.rcas)
-        GL.glUniform2i(self.u_origin, x0, y0)
-        GL.glUniform1f(self.u_sharp, self.sharpness)
+        GL.glUseProgram(self.rcas_crisp if crisp else self.rcas)
+        GL.glUniform2i(self.u_origin_crisp if crisp else self.u_origin, x0, y0)
+        GL.glUniform1f(self.u_sharp_crisp if crisp else self.u_sharp, self.CRISP if crisp else self.sharpness)
         GL.glBindTexture(GL.GL_TEXTURE_2D, self.mid_tex)
         GL.glDrawArrays(GL.GL_TRIANGLES, 0, 3)
 
@@ -143,6 +158,7 @@ class FsrScaler:
             GL.glDeleteTextures([self.mid_tex])
         GL.glDeleteProgram(self.easu)
         GL.glDeleteProgram(self.rcas)
+        GL.glDeleteProgram(self.rcas_crisp)
         GL.glDeleteVertexArrays(1, [self.vao])
 
 
