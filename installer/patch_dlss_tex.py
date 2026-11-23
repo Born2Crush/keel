@@ -50,41 +50,55 @@ METHODS = '''
         self._tex_alive.append(made)
         return made
 
-    def _output_surface(self, width, height):
+    def _runtime(self):
         import torch
         from .glcuda import _cudart
         torch.cuda.current_device()
-        c = self._ctypes
         rt = getattr(self, "_cudart", None)
         if rt is None:
             rt = _cudart()
             self._cudart = rt
+        return rt
+
+    def _array_tex(self, width, height, channels, kind, flags):
+        c = self._ctypes
+        rt = self._runtime()
         class Channel(c.Structure):
             _fields_ = [("x", c.c_int), ("y", c.c_int), ("z", c.c_int), ("w", c.c_int), ("f", c.c_int)]
+        bits = 8 if kind == 1 else 32
+        ch = Channel(*([bits if i < channels else 0 for i in range(4)] + [kind]))
         rt.cudaMallocArray.argtypes = [c.POINTER(c.c_void_p), c.POINTER(Channel), c.c_size_t, c.c_size_t, c.c_uint]
         rt.cudaMallocArray.restype = c.c_int
-        rgba = Channel(8, 8, 8, 8, 1)
         arr = c.c_void_p()
-        rc = rt.cudaMallocArray(c.byref(arr), c.byref(rgba), width, height, 2)
+        rc = rt.cudaMallocArray(c.byref(arr), c.byref(ch), int(width), int(height), int(flags))
         if rc != 0 or not arr.value:
             raise RuntimeError("DLSS rt %s" % rc)
-        buf = (c.c_ubyte * 256)()
-        c.c_int.from_buffer(buf, 0).value = 0
-        c.c_void_p.from_buffer(buf, 8).value = arr.value
-        rt.cudaCreateSurfaceObject.argtypes = [c.POINTER(c.c_ulonglong), c.c_void_p]
-        rt.cudaCreateSurfaceObject.restype = c.c_int
-        surf = c.c_ulonglong(0)
-        rc = rt.cudaCreateSurfaceObject(c.byref(surf), buf)
-        if rc != 0 or not surf.value:
-            raise RuntimeError("DLSS surf %s" % rc)
+        res = (c.c_ubyte * 256)()
+        c.c_int.from_buffer(res, 0).value = 0
+        c.c_void_p.from_buffer(res, 8).value = arr.value
+        texdesc = (c.c_ubyte * 256)()
+        for i in range(3):
+            c.c_int.from_buffer(texdesc, 4 * i).value = 1
+        rt.cudaCreateTextureObject.argtypes = [c.POINTER(c.c_ulonglong), c.c_void_p, c.c_void_p, c.c_void_p]
+        rt.cudaCreateTextureObject.restype = c.c_int
+        made = c.c_ulonglong(0)
+        rc = rt.cudaCreateTextureObject(c.byref(made), res, texdesc, None)
+        if rc != 0 or not made.value:
+            raise RuntimeError("DLSS tex %s" % rc)
         if not hasattr(self, "_tex_alive"):
             self._tex_alive = []
-        self._tex_alive.append(arr)
-        self._tex_alive.append(surf)
-        self._tex_alive.append(buf)
-        self._out_array = arr
-        self._out_res = buf
-        return surf
+        self._tex_alive.extend((arr, made, res, texdesc))
+        return arr, made
+
+    def _to_array(self, array, tensor):
+        c = self._ctypes
+        rt = self._cudart
+        row = int(tensor.shape[1]) * int(tensor.shape[2]) * int(tensor.element_size())
+        rt.cudaMemcpy2DToArray.argtypes = [c.c_void_p, c.c_size_t, c.c_size_t, c.c_void_p, c.c_size_t, c.c_size_t, c.c_size_t, c.c_int]
+        rt.cudaMemcpy2DToArray.restype = c.c_int
+        rc = rt.cudaMemcpy2DToArray(array, 0, 0, c.c_void_p(int(tensor.data_ptr())), row, row, int(tensor.shape[0]), 3)
+        if rc != 0:
+            raise RuntimeError("DLSS copy %s" % rc)
 
     def _read_output(self):
         c = self._ctypes
@@ -106,14 +120,16 @@ METHODS = '''
             zeros = torch.zeros((h, w, 2), dtype=torch.float32, device="cuda")
             depth = torch.ones((h, w, 1), dtype=torch.float32, device="cuda")
             self._tex_alive = []
-            color = self._texture(rgba, 4, 1, True)
-            out_tex = self._output_surface(3840, 2160)
-            motion = self._texture(zeros, 2, 32, False)
-            depth_tex = self._texture(depth, 1, 32, False)
             self._rgba, self._out4, self._zeros, self._depth = rgba, out4, zeros, depth
-            self._color_tex, self._out_tex, self._motion_tex, self._depth_tex = color, out_tex, motion, depth_tex
+            self._color_array, self._color_tex = self._array_tex(w, h, 4, 1, 0)
+            self._out_array, self._out_tex = self._array_tex(3840, 2160, 4, 1, 2)
+            self._motion_array, self._motion_tex = self._array_tex(w, h, 2, 2, 0)
+            self._depth_array, self._depth_tex = self._array_tex(w, h, 1, 2, 0)
+            self._to_array(self._motion_array, self._zeros)
+            self._to_array(self._depth_array, self._depth)
         self._rgba[..., :3] = rgb
         self._rgba[..., 3] = 255
+        self._to_array(self._color_array, self._rgba)
 '''
 
 OLD_BUFFERS = '''        out = torch.empty((UHD_H, UHD_W, 3), dtype=torch.uint8, device="cuda")
@@ -151,7 +167,7 @@ def patch(text: str) -> str:
         text = text.replace(OLD_BUFFERS, "", 1)
     if "def _pictures(self, rgb, h, w):" not in text:
         text = text.replace("\n_session = None\n", METHODS + "\n_session = None\n", 1)
-    if "cudaMallocArray" not in text or "cudaCreateSurfaceObject" not in text or 'b"Color.Format", 4' not in text:
+    if "cudaMallocArray" not in text or "cudaCreateTextureObject" not in text or 'b"Color.Format", 4' not in text:
         raise SystemExit("DLSS texture patch did not apply")
     return text
 
