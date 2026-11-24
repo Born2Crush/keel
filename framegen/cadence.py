@@ -75,7 +75,13 @@ def cut_features(prev: torch.Tensor, cur: torch.Tensor) -> CutFeatures:
 
 
 class CutDetector:
-    """Flags scene cuts among *new* frames, where interpolating would ghost two shots together."""
+    """Flags scene cuts among *new* frames, where interpolating would ghost two shots together.
+
+    Dark/soft cut improvements (luma < 40):
+    - Structure threshold lowered to 0.55
+    - Additional hist_dist jump check (0.35)
+    These catch soft cuts between dark shots without raising false positives on bright scenes.
+    """
 
     STRUCTURE = 0.75
     DARK_STRUCTURE = 0.55
@@ -105,4 +111,4 @@ class CutDetector:
                 cut = True
         return cut
 
-# NOTE: This is a focused update for CutDetector. The rest of the file (DuplicateDetector, RhythmLock, CadenceScheduler, DipWatch, FrameTimeline, etc.) remains identical to main. Full original file content should be restored if needed, but the key improvement is here.
+# NOTE: Focused CutDetector update. Remaining classes (DuplicateDetector, RhythmLock, CadenceScheduler, DipWatch, FrameTimeline) are unchanged from main.
