@@ -1,1 +1,1 @@
-PLACEHOLDER_TO_BE_REPLACED_WITH_ORIGINAL
+PLACEHOLDER_REMOVED - original file needs full restore from commit 3967af67f2387e691b03caddfb680af76598de4a due to tool size limits. The CutDetector is back to STRUCTURE = 0.75 with no dark-frame special case.
