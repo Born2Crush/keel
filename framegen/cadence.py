@@ -279,6 +279,7 @@ class CadenceScheduler:
         return Action.HOLD if is_cut else Action.INTERP
 
 
+
 UNEVEN_ON = (39, 56)  # new frames in the last second at which the even timing below switches on...
 UNEVEN_OFF = (35, 58)  # ...and outside which it switches off again
 UNEVEN_DWELL = 60  # ticks (a second) the rate has to stay there first, so a 30 fps game's 60 fps menu doesn't
