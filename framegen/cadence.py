@@ -240,7 +240,6 @@ class CutDetector:
     # shots: their plain difference stays small, but the layout of light and dark changes completely. Like the
     # first test it needs a sudden jump, so a fast camera turn (consistently changing layout) isn't a cut.
     STRUCTURE = 0.75  # corr_dist jump that marks a cut (tuned with scripts/cut_eval.py)
-    HIST_JUMP = 0.35  # hist_dist jump that marks a cut when the frame is dark
     MIN_DIFF = 6.0  # ...when the frame also changed at least this much (mean_diff), so noise alone never cuts
 
     def __init__(self, threshold: float = 25.0, use_structure: bool = True) -> None:
@@ -248,7 +247,6 @@ class CutDetector:
         self.use_structure = use_structure
         self.prev = 0.0
         self.prev_corr = 0.0
-        self.prev_hist = 0.0
 
     def update(self, mean_diff: float, f: CutFeatures | None = None) -> bool:
         score = min(mean_diff, mean_diff - self.prev)
@@ -257,15 +255,7 @@ class CutDetector:
         if self.use_structure and f is not None:
             jump = min(f.corr_dist, f.corr_dist - self.prev_corr)
             self.prev_corr = f.corr_dist
-            hist_jump = min(f.hist_dist, f.hist_dist - self.prev_hist)
-            self.prev_hist = f.hist_dist
-            # Dark frame (luma < 40): structure threshold 0.55, and a hist_dist jump of 0.35 or more is a cut.
-            # Brighter frames keep the 0.75 threshold. hist_dist is already on the features.
-            if f.luma < 40:
-                cut = cut or (jump > 0.55 and mean_diff > self.MIN_DIFF)
-                cut = cut or hist_jump >= self.HIST_JUMP
-            else:
-                cut = cut or (jump > self.STRUCTURE and mean_diff > self.MIN_DIFF)
+            cut = cut or (jump > self.STRUCTURE and mean_diff > self.MIN_DIFF)
         return cut
 
 
